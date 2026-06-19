@@ -1,0 +1,669 @@
+HEROVERSE KIDS — FRONTEND IMPLEMENTATION SPEC
+==============================================
+Read this entire file before writing any code.
+
+PROJECT
+-------
+HeroVerse Kids is an AI-powered personalized storybook platform where children (age 4–12) become
+the hero of their own illustrated, narrated comic story. Parents upload a photo, pick a theme,
+and receive a personalized PDF with audio narration.
+
+Repo: https://github.com/vatharsh/HeroKidsUniverse.git
+Work only inside: apps/web/src/
+
+
+TECH STACK
+----------
+- Next.js 16 (App Router) — read node_modules/next/dist/docs/ before writing any Next.js code
+- TypeScript (strict mode)
+- Tailwind CSS v4 — config lives in globals.css @theme block. There is NO tailwind.config.js.
+- lucide-react for icons
+- clsx + tailwind-merge (cn() utility already exists at src/lib/utils.ts)
+- Do NOT install any new packages. Only use what is already installed.
+
+
+DESIGN SYSTEM (already set up in globals.css — use these exact class names)
+----------------------------------------------------------------------------
+Colors (use as bg-X or text-X):
+  brand         → #7C3AED  (purple — primary CTA color)
+  brand-dark    → #5B21B6  (hover state)
+  brand-light   → #A78BFA
+  brand-50      → #F5F3FF
+  gold          → #F59E0B  (magic highlights, stars)
+  gold-light    → #FDE68A
+  space         → #0B0520  (dark hero backgrounds)
+  space-mid     → #1A0850
+  space-light   → #2D1070
+  cream         → #FDFAFF  (light section backgrounds)
+  ink           → #120B2E  (headings)
+  ink-mid       → #4B4468  (body text)
+  ink-muted     → #9489B4  (captions, placeholders)
+
+Utility classes (already defined in globals.css, use directly):
+  text-gradient-brand       → purple gradient text
+  text-gradient-gold        → gold gradient text
+  text-gradient-magic       → purple-to-gold gradient text
+  bg-space-gradient         → dark radial space background
+  bg-brand-gradient         → solid purple gradient background
+  shadow-brand              → purple glow box-shadow
+  shadow-card               → soft card box-shadow
+  shadow-gold               → gold glow box-shadow
+  animate-float             → gentle up-down float (4s loop)
+  animate-float-slow        → slower float (6s loop)
+  animate-sparkle           → scale + opacity pulse
+  animate-fade-in-up        → entrance slide-up animation
+  animate-twinkle           → opacity + scale pulse
+  animate-shimmer           → horizontal shimmer sweep
+
+Font classes (Tailwind v4 syntax for CSS variable fonts):
+  Headings (Nunito): font-[family-name:var(--font-display)]
+  Body (Inter):      font-[family-name:var(--font-body)]
+
+
+BRAND VOICE
+-----------
+- Warm, magical, premium — NOT cartoonish
+- Parents are the buyer, child is the star
+- Copy speaks to emotion: "magical memory", "become a hero"
+- Light cream bg for content sections, dark space bg for hero/accent sections
+- No dark mode needed
+
+
+FILES TO CREATE
+===============
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 1: src/components/shared/StarField.tsx
+─────────────────────────────────────────────────────────────────────────────
+Decorative background component — 60 twinkling white star dots.
+
+- Outer div: position absolute, inset-0, pointer-events-none, overflow-hidden
+- Pre-define an array of 60 star objects (do NOT use Math.random() at render time
+  — hardcode the values to avoid hydration mismatch):
+  Each object: { x: number, y: number, size: number, duration: number, delay: number }
+  x: 0–100 (percentage), y: 0–100, size: 1–3 (px), duration: 1.5–4 (s), delay: 0–3 (s)
+- Render each as a <div> with:
+    position absolute, left: x%, top: y%, width/height: size px
+    borderRadius 50%, backgroundColor white
+    animation: twinkle {duration}s ease-in-out infinite {delay}s (inline style)
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 2: src/components/layout/Navbar.tsx
+─────────────────────────────────────────────────────────────────────────────
+"use client" — needs scroll listener and mobile menu state.
+
+Fixed navbar. Transparent at top, becomes bg-space/90 + backdrop-blur-md +
+border-b border-white/10 once the user scrolls past 20px.
+
+Structure:
+<nav> fixed top-0 left-0 right-0 z-50 transition-all duration-300
+
+  <div> max-w-7xl mx-auto px-6 h-16 flex items-center justify-between
+
+    LEFT — Logo:
+      <a href="/">
+        <span> font-[family-name:var(--font-display)] font-black text-2xl
+          <span class="text-gradient-brand">HeroVerse</span>
+          <span class="text-gold ml-1">Kids</span>
+
+    CENTER — Nav links (hidden on mobile, flex gap-8 on md+):
+      <a href="#how-it-works"> How It Works
+      <a href="#themes"> Themes
+      <a href="#pricing"> Pricing
+      All links: text-white/70 hover:text-white text-sm font-medium transition
+
+    RIGHT — Actions:
+      <a href="/login"> Login  (text-white/80 hover:text-white text-sm font-medium px-4 py-2)
+      <a href="/create"> Create Story  (bg-brand hover:bg-brand-dark text-white text-sm
+                          font-semibold px-5 py-2 rounded-full shadow-brand transition
+                          hover:scale-105)
+      Mobile hamburger: md:hidden, lucide Menu icon (text-white w-6 h-6)
+
+    MOBILE MENU (toggle with useState):
+      Full-width panel below nav: bg-space/95 backdrop-blur border-b border-white/10
+      Stack the nav links + both buttons vertically with px-6 py-4 gap-4
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 3: src/components/layout/Footer.tsx
+─────────────────────────────────────────────────────────────────────────────
+<footer> bg-space text-white
+
+  <div> max-w-7xl mx-auto px-6 py-16
+
+    TOP ROW — flex justify-between items-center flex-wrap gap-6 pb-10 border-b border-white/10:
+      LEFT: Logo (same markup as Navbar logo)
+      RIGHT: links flex gap-6
+        <a href="/privacy">  Privacy
+        <a href="/terms">    Terms
+        <a href="/contact">  Contact
+        All: text-white/50 hover:text-white text-sm transition
+
+    BOTTOM ROW — flex justify-between items-center flex-wrap gap-4 pt-8 text-sm text-white/40:
+      LEFT: "Made with ✨ for magical childhoods"
+      RIGHT: "© 2025 HeroVerse Kids. All rights reserved."
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 4: src/components/home/HeroSection.tsx
+─────────────────────────────────────────────────────────────────────────────
+Full-viewport dark hero. Most important section.
+
+<section> relative min-h-screen bg-space-gradient flex items-center overflow-hidden
+
+  <StarField /> (absolute overlay, z-0)
+
+  <div> relative z-10 max-w-7xl mx-auto px-6 py-32 w-full
+    flex flex-col lg:flex-row items-center gap-16
+
+    LEFT COLUMN (flex-1 flex flex-col gap-7):
+
+      1. Badge (animate-fade-in-up):
+         <div> inline-flex items-center gap-2 bg-white/10 backdrop-blur
+               border border-gold/30 text-gold text-sm font-semibold
+               px-4 py-1.5 rounded-full w-fit
+         Text: "✨ Magical AI Storybooks · Ages 4–12"
+
+      2. H1 (font-[family-name:var(--font-display)] font-black text-5xl md:text-6xl
+             lg:text-7xl text-white leading-[1.1]):
+         Line 1: "Your Child,"
+         Line 2: <span class="text-gradient-magic"> "The Hero"
+         Line 3: "of Their Own Story"
+
+      3. P (text-white/70 text-lg md:text-xl leading-relaxed max-w-lg):
+         "Upload a photo, pick an adventure, and watch as AI creates a personalized
+          illustrated storybook — with narration and a print-ready PDF — in minutes."
+
+      4. CTA row (flex flex-wrap gap-4 items-center):
+         Primary <a href="/create">:
+           "Create Free Story →"
+           bg-brand hover:bg-brand-dark text-white font-bold px-8 py-4 rounded-full
+           shadow-brand text-lg transition-all hover:scale-105
+         Secondary <a href="#how-it-works">:
+           "See How It Works"
+           text-white/70 hover:text-gold font-medium text-lg
+           underline underline-offset-4 transition
+
+      5. Trust pills (flex flex-wrap gap-3):
+         3 pills, each: bg-white/5 border border-white/10 text-white/60
+                        text-sm px-4 py-1.5 rounded-full
+         - "✓ Free demo — no card needed"
+         - "✓ Ready in under 5 minutes"
+         - "✓ Printable PDF included"
+
+    RIGHT COLUMN (lg:w-[420px] flex items-center justify-center relative):
+
+      Floating card (animate-float):
+        <div> relative bg-white/10 backdrop-blur-sm border border-white/20
+              rounded-3xl p-4 shadow-2xl w-72
+
+          Story page placeholder:
+            <div> bg-gradient-to-br from-brand to-brand-dark rounded-2xl
+                  aspect-[3/4] w-full flex flex-col items-center justify-center gap-3
+              <span> "📖" text-6xl
+              <span> "Your Child's Story" text-white font-[family-name:var(--font-display)]
+                      font-bold text-sm text-center
+
+          Page dots row (mt-3 flex items-center justify-center gap-2):
+            3 small circles: w-8 h-8 rounded-full bg-white/20
+            Label: "8 illustrated pages" text-white/50 text-xs mt-1 text-center
+
+      Floating sparkle accents (absolute, pointer-events-none):
+        3 sparkle characters "✦" placed at different positions around the card:
+          - top-0 right-8:   text-gold text-3xl animate-float opacity-70
+          - bottom-16 right-0: text-gold-light text-2xl animate-float-slow opacity-50
+          - top-1/2 -left-4: text-gold text-xl animate-float opacity-60
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 5: src/components/home/HowItWorks.tsx
+─────────────────────────────────────────────────────────────────────────────
+<section id="how-it-works"> py-24 bg-cream
+
+  <div> max-w-7xl mx-auto px-6
+
+    HEADER (text-center mb-16):
+      Overline: "THE MAGIC PROCESS"
+        text-brand text-xs font-bold tracking-widest uppercase mb-3
+      H2: "Three Steps to Your Child's Story"
+        font-[family-name:var(--font-display)] font-black text-ink text-4xl md:text-5xl mb-4
+      Subtitle: "Simple enough for anyone. Magical enough to remember forever."
+        text-ink-mid text-lg
+
+    CARDS (grid grid-cols-1 md:grid-cols-3 gap-8):
+
+      Each card:
+        <div> relative bg-white rounded-2xl p-8 shadow-card text-center
+
+        Step badge (absolute -top-3 -left-3):
+          bg-brand text-white text-xs font-bold w-7 h-7 rounded-full
+          flex items-center justify-center
+
+        Icon circle (w-16 h-16 rounded-full bg-brand-50 flex items-center
+                     justify-center mx-auto mb-6):
+          Emoji: text-3xl
+
+        H3: font-[family-name:var(--font-display)] font-bold text-ink text-xl mb-3
+        P: text-ink-mid text-base leading-relaxed
+
+      STEP 1: badge "1", emoji 📸
+        title: "Upload a Photo"
+        body: "Add your child's photo. Our AI uses it to create a character that
+               looks just like them — ready for any adventure."
+
+      STEP 2: badge "2", emoji 🎭
+        title: "Pick an Adventure"
+        body: "Choose from 6 magical themes: space, superhero, jungle, ocean,
+               mystery, or birthday."
+
+      STEP 3: badge "3", emoji 📖
+        title: "Get Your Storybook"
+        body: "Receive a full illustrated comic with audio narration and a
+               print-ready PDF — in minutes."
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 6: src/components/home/ThemeShowcase.tsx
+─────────────────────────────────────────────────────────────────────────────
+<section id="themes"> py-24 bg-space-gradient
+
+  <div> max-w-7xl mx-auto px-6
+
+    HEADER (text-center mb-16):
+      H2: "Choose Your Adventure"
+        font-[family-name:var(--font-display)] font-black text-white text-4xl md:text-5xl mb-4
+      Subtitle: "Six magical worlds waiting for your little hero"
+        text-white/60 text-lg
+
+    GRID (grid grid-cols-2 md:grid-cols-3 gap-5):
+
+      Each card:
+        <div> group relative rounded-2xl overflow-hidden cursor-pointer
+              transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-gold/50
+
+        Inner div (aspect-[4/3] flex flex-col justify-between p-6 bg-gradient-to-br {from} {to}):
+          TOP: emoji span (text-5xl leading-none)
+          BOTTOM:
+            Theme name: text-white font-[family-name:var(--font-display)] font-bold text-xl
+            Arrow: "Explore →"  text-white/0 group-hover:text-gold/80 transition-all text-sm
+
+      6 THEMES:
+        1. emoji 🚀  name "Space Adventure"      gradient from-indigo-950 to-purple-900
+        2. emoji ⚡  name "Superhero Mission"    gradient from-red-950 to-orange-900
+        3. emoji 🌿  name "Jungle Quest"         gradient from-green-950 to-emerald-800
+        4. emoji 🌊  name "Underwater Adventure" gradient from-blue-950 to-cyan-900
+        5. emoji 🔍  name "Detective Mystery"    gradient from-gray-900 to-slate-800
+        6. emoji 🎂  name "Birthday Adventure"   gradient from-pink-950 to-rose-900
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 7: src/components/home/PricingSection.tsx
+─────────────────────────────────────────────────────────────────────────────
+<section id="pricing"> py-24 bg-cream
+
+  <div> max-w-7xl mx-auto px-6
+
+    HEADER (text-center mb-12):
+      H2: "Simple, Honest Pricing"
+        font-[family-name:var(--font-display)] font-black text-ink text-4xl md:text-5xl mb-4
+      Sub: "Start free. Pay only for the stories you love."
+        text-ink-mid text-lg mb-6
+      Free pill:
+        inline-flex items-center gap-2 bg-brand-50 text-brand border border-brand/20
+        text-sm font-medium px-4 py-2 rounded-full
+        Text: "✨ Try one sample page free — no account needed"
+
+    CARDS (grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto):
+
+      Each card base structure:
+        <div> relative bg-white rounded-3xl p-8 shadow-card flex flex-col
+
+      POPULAR card (Family Pack) additionally gets:
+        ring-2 ring-brand md:scale-105 md:z-10
+
+        Popular badge (absolute -top-4 left-1/2 -translate-x-1/2):
+          bg-brand text-white text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap
+          Text: "⭐ Most Popular"
+
+      Inside each card:
+        Credit label: text-brand text-sm font-bold uppercase tracking-wider mb-2
+        Price row:
+          <span> ₹  (text-3xl font-black text-ink)
+          <span> [amount]  (font-[family-name:var(--font-display)] font-black text-ink text-5xl)
+        Price sublabel: text-ink-muted text-sm mt-1 mb-6
+        Divider: border-t border-ink/10 mb-6
+        Feature list (flex flex-col gap-3 mb-8 flex-1):
+          Each item: flex items-start gap-3
+            lucide Check icon: w-4 h-4 text-brand flex-shrink-0 mt-0.5
+            <span> text-ink-mid text-sm
+        CTA button (w-full py-3.5 rounded-full font-bold text-base transition-all):
+          Popular: bg-brand hover:bg-brand-dark text-white shadow-brand hover:scale-[1.02]
+          Others:  bg-brand-50 hover:bg-brand text-brand hover:text-white border border-brand/20
+
+      PACK 1 — Single Story:
+        label: "1 Credit"    price: "149"    sublabel: "per story"
+        features: ["1 personalized storybook", "Comic-style illustrations",
+                   "Audio narration included", "Print-ready PDF", "Download forever"]
+        cta: "Buy Single Story"    popular: false
+
+      PACK 2 — Family Pack:
+        label: "5 Credits"   price: "499"    sublabel: "for 5 stories — ₹99 each"
+        features: ["5 personalized storybooks", "All 6 adventure themes",
+                   "Comic-style illustrations", "Audio narration", "Print-ready PDFs",
+                   "Share with family", "Priority generation"]
+        cta: "Get Family Pack"    popular: true
+
+      PACK 3 — Birthday Pack:
+        label: "10 Credits"  price: "999"    sublabel: "for 10 stories — ₹99 each"
+        features: ["10 personalized storybooks", "All 6 adventure themes",
+                   "Comic-style illustrations", "Audio narration", "Print-ready PDFs",
+                   "Perfect as a birthday gift", "Priority generation",
+                   "Digital gift card included"]
+        cta: "Get Birthday Pack"  popular: false
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 8: src/components/home/CTABanner.tsx
+─────────────────────────────────────────────────────────────────────────────
+<section> relative overflow-hidden bg-brand-gradient py-24
+
+  Decorative blobs (absolute, pointer-events-none, z-0):
+    - top-0 left-1/4: w-96 h-96 bg-white/5 rounded-full blur-3xl
+    - bottom-0 right-1/4: w-96 h-96 bg-black/10 rounded-full blur-3xl
+
+  Content (relative z-10 max-w-3xl mx-auto px-6 text-center):
+    H2: "Every Child Deserves to Be a Hero"
+      font-[family-name:var(--font-display)] font-black text-white text-4xl md:text-5xl mb-4
+    P: "Join parents creating magical memories their children will treasure forever."
+      text-white/70 text-lg mb-8
+    <a href="/create">:
+      "Create Your Hero's Story →"
+      bg-white text-brand hover:bg-gold hover:text-white font-bold
+      px-10 py-4 rounded-full text-lg transition-all hover:scale-105 shadow-lg
+      inline-block
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 9: src/app/page.tsx — Homepage (replaces current default)
+─────────────────────────────────────────────────────────────────────────────
+Server component — no "use client".
+
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
+import HeroSection from "@/components/home/HeroSection";
+import HowItWorks from "@/components/home/HowItWorks";
+import ThemeShowcase from "@/components/home/ThemeShowcase";
+import PricingSection from "@/components/home/PricingSection";
+import CTABanner from "@/components/home/CTABanner";
+
+export default function HomePage() {
+  return (
+    <>
+      <Navbar />
+      <main>
+        <HeroSection />
+        <HowItWorks />
+        <ThemeShowcase />
+        <PricingSection />
+        <CTABanner />
+      </main>
+      <Footer />
+    </>
+  );
+}
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 10: src/app/(auth)/login/page.tsx
+─────────────────────────────────────────────────────────────────────────────
+Server component. Centered card layout.
+
+Outer: min-h-screen bg-cream flex flex-col items-center justify-center px-4 py-16 relative
+
+Back link (absolute top-6 left-6):
+  <a href="/"> "← Back to Home"  text-ink-muted hover:text-brand text-sm transition
+
+Card: bg-white rounded-3xl shadow-card w-full max-w-md p-10
+
+  Logo (same as Navbar, text-center mb-8)
+
+  H1: "Welcome back"
+    font-[family-name:var(--font-display)] font-black text-ink text-3xl text-center mb-2
+  Sub: "Sign in to continue creating stories"
+    text-ink-muted text-sm text-center mb-8
+
+  Form (flex flex-col gap-5):
+
+    Email field:
+      <label> "Email address"  text-ink-mid text-sm font-medium block mb-1.5
+      <input type="email" placeholder="you@example.com">
+        w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink
+        placeholder:text-ink-muted focus:outline-none focus:ring-2
+        focus:ring-brand/40 focus:border-brand transition
+
+    Password field (same, type="password", label "Password"):
+      Below input: <a href="/forgot-password"> "Forgot password?"
+        text-brand text-xs hover:underline block text-right mt-1
+
+    Submit:
+      <button type="submit">
+        "Sign In →"
+        w-full bg-brand hover:bg-brand-dark text-white font-bold py-3.5
+        rounded-full transition-all hover:scale-[1.02] shadow-brand
+
+  Divider: <div> flex items-center gap-3 my-2
+    <div> flex-1 h-px bg-ink/10
+    <span> "or"  text-ink-muted text-xs
+    <div> flex-1 h-px bg-ink/10
+
+  Register link (text-center text-sm text-ink-mid mt-2):
+    "Don't have an account? "
+    <a href="/register"> "Create one free"  text-brand font-semibold hover:underline
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 11: src/app/(auth)/register/page.tsx
+─────────────────────────────────────────────────────────────────────────────
+Same card layout as login.
+
+H1: "Join HeroVerse Kids"
+Sub: "Start creating magical stories for your child today"
+
+Form fields (same input styling as login):
+  - "Your name"  (text, placeholder "e.g. Priya Sharma")
+  - "Email address"
+  - "Password"   (helper text below input: "At least 8 characters" text-ink-muted text-xs mt-1)
+  - "Referral code" (text, optional, placeholder "Have a referral code?",
+                     helper text: "Enter a friend's code to get bonus credits" text-xs)
+
+Submit: "Create Free Account →" (same styling as login submit)
+
+Footer link (text-center text-sm text-ink-mid mt-6):
+  "Already have an account? " <a href="/login"> "Sign in"  text-brand font-semibold
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 12: src/app/create/page.tsx — Hero Creation (3-step flow)
+─────────────────────────────────────────────────────────────────────────────
+"use client" — uses useState for step and form data.
+
+State:
+  currentStep: 0 | 1 | 2  (default 0)
+  heroName: string
+  heroAge: string
+  heroGender: 'boy' | 'girl' | 'other' | ''
+  selectedTheme: string
+  photoPreview: string | null
+
+Layout: min-h-screen bg-cream
+  <Navbar />
+  <main> max-w-lg mx-auto px-6 pt-28 pb-16
+
+    STEP INDICATOR (flex items-center justify-center gap-0 mb-12):
+      3 step circles connected by lines.
+      Each step:
+        Circle: w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold
+          completed (step < currentStep): bg-brand text-white (show lucide Check icon)
+          active (step === currentStep): bg-brand text-white ring-4 ring-brand/20
+          upcoming (step > currentStep): bg-ink/10 text-ink-muted
+        Label below circle: text-xs text-ink-muted mt-1 (hidden on mobile, shown on sm+)
+          Step 0: "Your Hero"
+          Step 1: "Adventure"
+          Step 2: "Generate"
+      Between circles: <div> flex-1 h-0.5 bg-ink/10 mx-1 max-w-[60px]
+        (completed line: bg-brand)
+
+    ── STEP 0 — Create Your Hero ──────────────────────────────────────────
+
+    H2: "Who is the hero?"
+      font-[family-name:var(--font-display)] font-black text-ink text-3xl mb-2
+    Sub: "Tell us about your child so we can make them the star."
+      text-ink-muted mb-8
+
+    Photo upload (flex flex-col items-center mb-8):
+      Hidden <input type="file" accept="image/*" id="photo-upload">
+      Upload target <label for="photo-upload"> (shows photoPreview if set, else placeholder):
+        w-32 h-32 rounded-full overflow-hidden cursor-pointer
+        border-2 border-dashed border-brand/40 hover:border-brand
+        bg-brand-50 transition flex flex-col items-center justify-center
+        If no preview: "📸" (text-4xl) + "Upload Photo" (text-brand text-xs font-medium mt-1)
+        If preview: <img src={photoPreview}> w-full h-full object-cover
+      Helper: "Helps us create a character that looks like your child (optional)"
+               text-ink-muted text-xs text-center mt-3 max-w-[200px]
+
+    Form (flex flex-col gap-5):
+      Hero Name: label + input (same input styling as auth forms)
+        placeholder "What's your child's name?"
+      Age: label + <select> (same styling)
+        Options: "Select age" (disabled) + 4 through 12
+      Gender: label "They are a..."
+        3 toggle buttons side by side (flex gap-3):
+          Each: flex-1 py-2.5 rounded-xl border text-sm font-semibold transition cursor-pointer
+            unselected: border-ink/15 bg-cream text-ink-mid hover:border-brand/40
+            selected: border-brand bg-brand text-white
+          Options: "Boy" / "Girl" / "Non-binary"
+
+    Next button (w-full mt-4):
+      "Choose Adventure →"
+      disabled if heroName is empty
+      bg-brand disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold
+      py-3.5 rounded-full transition-all hover:scale-[1.02] shadow-brand
+
+    ── STEP 1 — Pick Adventure ────────────────────────────────────────────
+
+    H2: "Choose their adventure"
+    Sub: "What world will your hero explore?"
+
+    Same 6 theme cards as ThemeShowcase component but:
+      - grid grid-cols-2 gap-4 (narrower layout)
+      - aspect-[1/1] instead of [4/3]
+      - Selecting a card sets selectedTheme
+      - Selected: ring-2 ring-brand scale-105
+      - Click to toggle selection
+
+    Navigation row (flex gap-4 mt-8):
+      Back: ghost button "← Back"  text-ink-muted hover:text-ink px-6 py-3 rounded-full
+      Next: "Review Story →"  same primary style, disabled if no theme selected
+
+    ── STEP 2 — Review & Generate ─────────────────────────────────────────
+
+    H2: "Ready to create magic?"
+    Sub: "Here's what we'll create for {heroName}."
+
+    Summary card (bg-brand-50 border border-brand/20 rounded-2xl p-6 text-center mb-8):
+      Photo preview (if set): w-16 h-16 rounded-full overflow-hidden mx-auto mb-4
+        else: w-16 h-16 rounded-full bg-brand/10 flex items-center justify-center mx-auto mb-4
+        "🦸" text-3xl
+      Hero name: font-[family-name:var(--font-display)] font-black text-ink text-xl
+      Age + gender: text-ink-muted text-sm mt-1  "Age {heroAge} · {heroGender}"
+      Theme pill: inline-block mt-3 bg-brand text-white text-sm font-semibold
+                  px-4 py-1 rounded-full  "{selectedThemeEmoji} {selectedThemeName}"
+      Credit notice: flex items-center justify-center gap-1.5 mt-4 text-ink-muted text-sm
+        lucide CreditCard icon w-4 h-4 + "1 credit will be used"
+
+    Generate button (w-full):
+      "✨ Generate My Story"
+      bg-brand hover:bg-brand-dark text-white font-bold py-4 rounded-full text-lg
+      shadow-brand transition-all hover:scale-[1.02]
+
+    Fine print: "Story generation takes 2–4 minutes."
+      text-ink-muted text-xs text-center mt-4
+
+    Back button: "← Go Back"  text-ink-muted text-sm text-center block mt-4 hover:text-ink
+
+
+─────────────────────────────────────────────────────────────────────────────
+FILE 13: src/app/dashboard/page.tsx — Story Library
+─────────────────────────────────────────────────────────────────────────────
+"use client" for now (will fetch real data later — use empty array as placeholder).
+
+Layout: min-h-screen bg-cream flex flex-col
+
+<Navbar />
+
+Header section (bg-space-gradient py-20 text-center):
+  H1: "Your Story Library"
+    font-[family-name:var(--font-display)] font-black text-white text-4xl md:text-5xl mb-3
+  Sub: "Every story, forever yours"
+    text-white/60 text-lg
+
+Content (flex-1 max-w-7xl mx-auto px-6 py-12 w-full):
+
+  EMPTY STATE (show when stories array is empty):
+    Centered column: flex flex-col items-center justify-center py-20 text-center
+    "📚" text-8xl mb-6
+    H3: "No stories yet"
+      font-[family-name:var(--font-display)] font-bold text-ink text-2xl mb-3
+    P: "Create your first personalized story and it will appear here."
+      text-ink-muted mb-8 max-w-sm
+    <a href="/create"> "Create First Story →"
+      bg-brand text-white font-bold px-8 py-3.5 rounded-full shadow-brand
+      hover:bg-brand-dark transition-all hover:scale-105
+
+  STORIES GRID (grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6):
+    (Show 3 placeholder cards when array has content — or toggle via a demo boolean)
+
+    Each story card (bg-white rounded-2xl shadow-card overflow-hidden):
+      Top image area (aspect-video bg-gradient-to-br from-brand-100 to-brand
+                      flex items-center justify-center):
+        "📖" text-5xl
+      Body (p-5):
+        Title: font-[family-name:var(--font-display)] font-bold text-ink mb-2
+          "Arjun's Space Adventure"
+        Theme badge: inline-block bg-brand-50 text-brand text-xs font-semibold
+                     px-2.5 py-0.5 rounded-full mb-4 "🚀 Space Adventure"
+        Action row (flex gap-3 flex-wrap):
+          "📥 Download PDF" — text-ink-muted hover:text-brand text-sm font-medium
+                              flex items-center gap-1.5 transition
+          "▶ Play Story" — text-ink-muted hover:text-brand text-sm font-medium
+                           flex items-center gap-1.5 transition
+
+<Footer />
+
+
+IMPLEMENTATION RULES
+====================
+1. Read node_modules/next/dist/docs/ before writing any Next.js-specific code.
+
+2. "use client" only where needed: Navbar (scroll + mobile menu), create/page.tsx
+   (multi-step form), dashboard/page.tsx. Everything else is a server component.
+
+3. No placeholder images. Use colored divs, emoji, or gradients for all visuals.
+
+4. No new package installs. Packages available: next, react, react-dom, typescript,
+   tailwindcss, lucide-react, clsx, tailwind-merge.
+
+5. Use <a> tags for all links (not next/link) — routing wired up later.
+
+6. Tailwind v4 font variable syntax: font-[family-name:var(--font-display)]
+
+7. For the StarField component: hardcode the 60 star position objects as a const
+   array (not Math.random() at runtime) to prevent React hydration errors.
+
+8. Keep all copy exactly as written — the brand voice is carefully crafted.
+
+9. Mobile-first responsive design. Key breakpoints: md (768px), lg (1024px).
+
+10. After implementing, run: cd apps/web && npm run build
+    Fix any TypeScript or build errors before considering the task complete.
