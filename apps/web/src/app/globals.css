@@ -1,26 +1,170 @@
 @import "tailwindcss";
 
+/* ─── HeroVerse Kids Design System ─────────────────────────────────── */
+
+@theme {
+  /* Brand — Purple */
+  --color-brand:        #7C3AED;
+  --color-brand-dark:   #5B21B6;
+  --color-brand-light:  #A78BFA;
+  --color-brand-50:     #F5F3FF;
+  --color-brand-100:    #EDE9FE;
+
+  /* Gold — magic, stars, highlights */
+  --color-gold:         #F59E0B;
+  --color-gold-light:   #FDE68A;
+  --color-gold-dark:    #D97706;
+
+  /* Space — hero section backgrounds */
+  --color-space:        #0B0520;
+  --color-space-mid:    #1A0850;
+  --color-space-light:  #2D1070;
+
+  /* Surface */
+  --color-cream:        #FDFAFF;
+  --color-surface:      #FFFFFF;
+
+  /* Ink — text */
+  --color-ink:          #120B2E;
+  --color-ink-mid:      #4B4468;
+  --color-ink-muted:    #9489B4;
+
+  /* Status */
+  --color-success:      #10B981;
+  --color-error:        #EF4444;
+
+  /* Theme cards */
+  --color-theme-space-from:    #1e1b4b;
+  --color-theme-space-to:      #4c1d95;
+  --color-theme-hero-from:     #7f1d1d;
+  --color-theme-hero-to:       #9a3412;
+  --color-theme-jungle-from:   #14532d;
+  --color-theme-jungle-to:     #065f46;
+  --color-theme-ocean-from:    #1e3a5f;
+  --color-theme-ocean-to:      #164e63;
+  --color-theme-detective-from:#1f2937;
+  --color-theme-detective-to:  #111827;
+  --color-theme-birthday-from: #831843;
+  --color-theme-birthday-to:   #9f1239;
+
+  /* Typography */
+  --font-display: "Nunito", "Inter", sans-serif;
+  --font-body:    "Inter", sans-serif;
+
+  /* Radius */
+  --radius-sm:   0.5rem;
+  --radius-md:   1rem;
+  --radius-lg:   1.5rem;
+  --radius-xl:   2rem;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-brand: 0 8px 32px -4px rgb(124 58 237 / 0.35);
+  --shadow-card:  0 4px 24px -2px rgb(18 11 46 / 0.08);
+  --shadow-gold:  0 4px 20px -2px rgb(245 158 11 / 0.40);
+}
+
+/* ─── Base ──────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #FDFAFF;
+  --foreground: #120B2E;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────── */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-12px); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+  50%       { opacity: 1; transform: scale(1) rotate(180deg); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1.2); }
+}
+
+/* ─── Utility Classes ────────────────────────────────────────────────── */
+
+.animate-float      { animation: float 4s ease-in-out infinite; }
+.animate-float-slow { animation: float 6s ease-in-out infinite; }
+.animate-sparkle    { animation: sparkle 2s ease-in-out infinite; }
+.animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+.animate-shimmer    { animation: shimmer 3s linear infinite; }
+.animate-twinkle    { animation: twinkle 2s ease-in-out infinite; }
+
+.text-gradient-brand {
+  background: linear-gradient(135deg, #A78BFA 0%, #7C3AED 50%, #5B21B6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #FDE68A 0%, #F59E0B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-magic {
+  background: linear-gradient(135deg, #A78BFA 0%, #F59E0B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bg-space-gradient {
+  background: radial-gradient(ellipse at 60% 0%, #2D1070 0%, #1A0850 40%, #0B0520 100%);
+}
+
+.bg-brand-gradient {
+  background: linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%);
+}
+
+.shadow-brand { box-shadow: var(--shadow-brand); }
+.shadow-card  { box-shadow: var(--shadow-card); }
+.shadow-gold  { box-shadow: var(--shadow-gold); }
+
+/* Star field dots — used in StarField component */
+.star {
+  position: absolute;
+  border-radius: 50%;
+  background: white;
+  animation: twinkle var(--duration, 2s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
 }
