@@ -535,7 +535,7 @@ function Page4() {
       {/* Trophy */}
       <g transform="translate(50,200)">
         <rect x="-15" y="-10" width="30" height="35" rx="4" fill="#FFD700" stroke="#111" strokeWidth="2" />
-        <path d="M-15 0 Q-28 -5 -25 -20 Q-20 -30 -15 -20" fill="#FFD700" stroke="#111" strokeWidth="2" fill-rule="evenodd" />
+        <path d="M-15 0 Q-28 -5 -25 -20 Q-20 -30 -15 -20" fill="#FFD700" stroke="#111" strokeWidth="2" fillRule="evenodd" />
         <path d="M15 0 Q28 -5 25 -20 Q20 -30 15 -20"  fill="#FFD700" stroke="#111" strokeWidth="2" />
         <rect x="-10" y="25" width="20" height="8" rx="2" fill="#B45309" stroke="#111" strokeWidth="1.5" />
         <path d="M0 -5 L1.5 1 L7 1 L2.5 4.5 L4 10 L0 6.5 L-4 10 L-2.5 4.5 L-7 1 L-1.5 1Z"
