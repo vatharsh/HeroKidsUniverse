@@ -4,60 +4,80 @@ interface LogoMarkProps {
 
 export function LogoMark({ size = 40 }: LogoMarkProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      {/* Deep space background */}
-      <rect width="40" height="40" rx="11" fill="#3B1A8A" />
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      {/* Deep-space background */}
+      <rect width="48" height="48" rx="12" fill="#1E0B5C" />
 
-      {/* Distant star dots — universe */}
-      <circle cx="7"  cy="7"  r="1"   fill="#F59E0B" fillOpacity="0.9" />
-      <circle cx="33" cy="6"  r="0.8" fill="white"   fillOpacity="0.55" />
-      <circle cx="30" cy="12" r="0.7" fill="#F59E0B" fillOpacity="0.6" />
-      <circle cx="5"  cy="16" r="0.7" fill="white"   fillOpacity="0.4" />
-      <circle cx="35" cy="19" r="0.8" fill="white"   fillOpacity="0.35" />
+      {/* Subtle radial glow behind hero */}
+      <circle cx="24" cy="20" r="15" fill="#5B21B6" fillOpacity="0.4" />
 
-      {/* Open storybook — "Story" element ────────────────────────────── */}
-      {/* Left page (slightly dimmer — verso) */}
-      <path
-        d="M5 35 L5 23 Q12.5 19 20 21 L20 36 Q12.5 33 5 35Z"
-        fill="white" fillOpacity="0.82"
-      />
-      {/* Right page (recto) */}
-      <path
-        d="M35 35 L35 23 Q27.5 19 20 21 L20 36 Q27.5 33 35 35Z"
-        fill="white" fillOpacity="0.95"
-      />
-      {/* Spine */}
-      <line x1="20" y1="21" x2="20" y2="36"
-        stroke="#3B1A8A" strokeWidth="1.2" strokeOpacity="0.35" />
-      {/* Tiny "text lines" on right page */}
-      <line x1="23" y1="25.5" x2="32" y2="26" stroke="#3B1A8A" strokeWidth="0.65" strokeOpacity="0.2" />
-      <line x1="23" y1="28.5" x2="32" y2="29" stroke="#3B1A8A" strokeWidth="0.65" strokeOpacity="0.2" />
+      {/* ── Superhero-kid silhouette (bold, high-contrast gold) ───── */}
 
-      {/* Superhero kid — "Hero + Kid" element ──────────────────────────*/}
-      {/* Cape (gold, renders behind body) */}
+      {/* Cape — broad wings behind body */}
       <path
-        d="M18 18 Q11 23 13.5 28 Q16.5 24 20 23 Q23.5 24 26.5 28 Q29 23 22 18Z"
-        fill="#F59E0B" fillOpacity="0.92"
+        d="M16 23 Q7 34 10 43 L20 37 Z"
+        fill="#F59E0B"
+        stroke="#111"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
       />
-      {/* Body */}
-      <rect x="18.5" y="17" width="3" height="5" rx="1.5"
-        fill="white" fillOpacity="0.96" />
+      <path
+        d="M32 23 Q41 34 38 43 L28 37 Z"
+        fill="#F59E0B"
+        stroke="#111"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+
+      {/* Body / suit */}
+      <path
+        d="M17 22 L31 22 L29 37 L19 37 Z"
+        fill="#7C3AED"
+        stroke="#111"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+
+      {/* Chest star */}
+      <path
+        d="M24 25.5 L25.1 28.4 L28 28.4 L25.8 30.2 L26.6 33.1 L24 31.4 L21.4 33.1 L22.2 30.2 L20 28.4 L22.9 28.4Z"
+        fill="#FFE236"
+        stroke="#111"
+        strokeWidth="0.8"
+      />
+
       {/* Head */}
-      <circle cx="20" cy="13.5" r="3.5" fill="white" fillOpacity="0.97" />
-      {/* Eye glint */}
-      <circle cx="18.8" cy="13" r="0.7" fill="#3B1A8A" fillOpacity="0.6" />
-      <circle cx="21.2" cy="13" r="0.7" fill="#3B1A8A" fillOpacity="0.6" />
-      {/* Tiny star on chest */}
+      <circle cx="24" cy="14" r="7" fill="#FBBF24" stroke="#111" strokeWidth="1.5" />
+
+      {/* Eyes */}
+      <ellipse cx="21.5" cy="13" rx="1.4" ry="1.6" fill="#111" />
+      <ellipse cx="26.5" cy="13" rx="1.4" ry="1.6" fill="#111" />
+      {/* Eye gleam */}
+      <circle cx="22.2" cy="12.2" r="0.5" fill="white" />
+      <circle cx="27.2" cy="12.2" r="0.5" fill="white" />
+      {/* Smile */}
+      <path d="M21 16 Q24 18.5 27 16" stroke="#111" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+
+      {/* Mask / eye-strip */}
       <path
-        d="M20 19 L20.3 20 L21.2 20 L20.5 20.5 L20.8 21.4 L20 20.9 L19.2 21.4 L19.5 20.5 L18.8 20 L19.7 20Z"
-        fill="#F59E0B" fillOpacity="0.85"
+        d="M17 12 Q24 9.5 31 12 Q31 15.5 24 15.5 Q17 15.5 17 12Z"
+        fill="#5B21B6"
+        fillOpacity="0.45"
       />
 
-      {/* 4-point sparkle star above head — "Universe / magic" ─────────*/}
+      {/* ── 4-point sparkle star above head ─────────────────────── */}
       <path
-        d="M20 4.5 L20.7 6.5 L22.5 6.5 L21.1 7.7 L21.6 9.5 L20 8.4 L18.4 9.5 L18.9 7.7 L17.5 6.5 L19.3 6.5Z"
-        fill="#F59E0B" fillOpacity="0.95"
+        d="M24 3 L25 6 L28 6 L25.5 8 L26.5 11 L24 9.2 L21.5 11 L22.5 8 L20 6 L23 6Z"
+        fill="#FFE236"
+        stroke="#F59E0B"
+        strokeWidth="0.5"
       />
+
+      {/* Distant star dots */}
+      <circle cx="6"  cy="8"  r="1.2" fill="#FFE236" fillOpacity="0.85" />
+      <circle cx="42" cy="7"  r="0.9" fill="white"   fillOpacity="0.5" />
+      <circle cx="40" cy="16" r="1"   fill="#FFE236"  fillOpacity="0.55" />
+      <circle cx="5"  cy="20" r="0.8" fill="white"   fillOpacity="0.4" />
     </svg>
   );
 }
@@ -69,10 +89,22 @@ interface LogoProps {
 export default function Logo({ className = "" }: LogoProps) {
   return (
     <a href="/" aria-label="HeroVerse Kids home" className={`flex items-center gap-2.5 ${className}`}>
-      <LogoMark size={36} />
-      <span className="font-[family-name:var(--font-display)] font-black text-2xl leading-none">
-        <span className="text-gradient-brand">HeroVerse</span>
-        <span className="text-gold ml-1">Kids</span>
+      <LogoMark size={40} />
+      <span className="leading-none">
+        <span
+          className="block font-[family-name:var(--font-comic)] text-[22px] tracking-wide leading-none"
+          style={{
+            background: "linear-gradient(135deg, #C4B5FD 0%, #A78BFA 40%, #7C3AED 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          HEROVERSE
+        </span>
+        <span className="block font-[family-name:var(--font-comic)] text-[14px] tracking-[0.15em] leading-none text-gold">
+          KIDS
+        </span>
       </span>
     </a>
   );

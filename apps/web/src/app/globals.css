@@ -191,3 +191,55 @@ body {
   animation: twinkle var(--duration, 2s) ease-in-out infinite;
   animation-delay: var(--delay, 0s);
 }
+
+/* ── Comic book utilities ────────────────────────────────────────────── */
+
+/* Classic halftone Ben-Day dot overlay */
+.comic-halftone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(0,0,0,0.13) 1.2px, transparent 1.2px);
+  background-size: 5px 5px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Speed-line radial burst — used in action panels */
+.comic-speed-lines {
+  background-image: repeating-conic-gradient(
+    rgba(255,255,255,0.06) 0deg,
+    rgba(255,255,255,0.06) 1deg,
+    transparent 1deg,
+    transparent 7deg
+  );
+}
+
+/* Bold panel border */
+.comic-panel {
+  border: 3px solid #111;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Yellow narrative caption box */
+.comic-caption {
+  font-family: var(--font-comic), sans-serif;
+  letter-spacing: 0.03em;
+  background: #FFE236;
+  border: 2px solid #111;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #111;
+  text-transform: uppercase;
+}
+
+/* Action word burst background */
+.action-burst {
+  position: relative;
+  font-family: var(--font-comic), sans-serif;
+  letter-spacing: 0.05em;
+  -webkit-text-stroke: 1.5px #111;
+  text-shadow: 2px 2px 0 #111, -1px -1px 0 #111;
+}

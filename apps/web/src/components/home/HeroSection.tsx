@@ -62,12 +62,12 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* Right — animated storybook */}
-        <div className="lg:w-[420px] flex items-center justify-center relative">
-          {/* Sparkle accents */}
-          <span className="absolute -top-6 right-4 text-gold text-3xl animate-float opacity-70 pointer-events-none select-none">✦</span>
-          <span className="absolute bottom-12 -right-4 text-gold-light text-2xl animate-float-slow opacity-50 pointer-events-none select-none">✦</span>
-          <span className="absolute top-1/3 -left-6 text-gold text-xl animate-float opacity-60 pointer-events-none select-none">✦</span>
+        {/* Right — comic book preview */}
+        <div className="lg:w-[420px] flex items-center justify-center relative py-12">
+          {/* Decorative sparkle accents */}
+          <span className="absolute -top-2 right-8 text-gold text-2xl animate-float opacity-60 pointer-events-none select-none">✦</span>
+          <span className="absolute bottom-8 -right-2 text-gold-light text-xl animate-float-slow opacity-45 pointer-events-none select-none">✦</span>
+          <span className="absolute top-1/3 -left-8 text-gold text-lg animate-float opacity-50 pointer-events-none select-none">✦</span>
 
           <StoryBook />
         </div>

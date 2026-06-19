@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Nunito } from "next/font/google";
+import { Bangers, Inter, Nunito } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -12,6 +12,14 @@ const nunito = Nunito({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["400", "600", "700", "800", "900"],
+  display: "swap",
+});
+
+/* Bangers — the DC/Marvel-style comic font */
+const bangers = Bangers({
+  variable: "--font-comic",
+  subsets: ["latin"],
+  weight: "400",
   display: "swap",
 });
 
@@ -34,7 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${nunito.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${nunito.variable} ${bangers.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-cream text-ink">{children}</body>
     </html>
   );
