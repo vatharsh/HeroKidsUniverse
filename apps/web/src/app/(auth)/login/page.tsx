@@ -1,3 +1,5 @@
+import Logo from "@/components/shared/Logo";
+
 export default function LoginPage() {
   return (
     <main className="min-h-screen bg-cream flex flex-col items-center justify-center px-4 py-16 relative">
@@ -9,13 +11,18 @@ export default function LoginPage() {
       </a>
 
       <div className="bg-white rounded-3xl shadow-card w-full max-w-md p-10">
-        <div className="text-center mb-8">
-          <a href="/" aria-label="HeroVerse Kids home">
-            <span className="font-[family-name:var(--font-display)] font-black text-2xl">
-              <span className="text-gradient-brand">HeroVerse</span>
-              <span className="text-gold ml-1">Kids</span>
-            </span>
-          </a>
+        {/* Logo */}
+        <div className="flex justify-center mb-8">
+          <Logo />
+        </div>
+
+        {/* Parent check banner */}
+        <div className="bg-gold-light/30 border border-gold/30 rounded-2xl p-4 text-center mb-6">
+          <p className="text-xl mb-1">👋 Are you a parent?</p>
+          <p className="text-ink-mid text-sm">
+            Only parents &amp; guardians have accounts here.
+            Kids just get to be the <strong className="text-brand">hero</strong>! 🦸
+          </p>
         </div>
 
         <h1 className="font-[family-name:var(--font-display)] font-black text-ink text-3xl text-center mb-2">

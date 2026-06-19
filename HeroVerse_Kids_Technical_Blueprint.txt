@@ -1,0 +1,109 @@
+HEROVERSE KIDS - TECHNICAL IMPLEMENTATION DOCUMENT
+Version: 1.0
+Status: MVP Development Blueprint
+
+PHASE 0 - FOUNDATION & PROJECT SETUP
+Goal: Create base architecture.
+Frontend: Next.js, TypeScript, Tailwind, ShadCN
+Backend: NestJS, PostgreSQL, Redis, BullMQ
+Storage: Cloudflare R2
+Auth: JWT, Email/Password
+
+PHASE 1 - USER & HERO MANAGEMENT
+Features:
+- Registration/Login
+- Hero Creation
+- Photo Upload
+- Cloud Storage Integration
+
+PHASE 2 - STORY GENERATION ENGINE
+AI:
+- GPT-4.1
+- Gemini 2.5 Flash (fallback)
+Themes:
+- Space Adventure
+- Superhero Mission
+- Jungle Quest
+- Underwater Adventure
+- Detective Mystery
+- Birthday Adventure
+
+PHASE 3 - CHARACTER CONSISTENCY SYSTEM
+Most Important Component.
+Generate character sheet and persistent character prompt.
+Reuse in every image generation request.
+
+PHASE 4 - IMAGE GENERATION PIPELINE
+Provider:
+- OpenAI Images
+Future:
+- Runway
+- Flux
+Output:
+- 1 Cover
+- 8 Story Pages
+
+PHASE 5 - AUDIO NARRATION
+Provider:
+- ElevenLabs
+Fallback:
+- OpenAI TTS
+
+PHASE 6 - PDF GENERATION
+Output:
+- Cover
+- Story Pages
+- Ending Page
+- Print Ready PDF
+
+PHASE 7 - PAYMENTS
+Gateway:
+- Razorpay
+Products:
+- Single Story
+- Family Pack
+- Birthday Pack
+
+PHASE 8 - CREDIT SYSTEM
+1 Credit = 1 Full Story
+Track usage and margins.
+
+PHASE 9 - INFLUENCER SYSTEM
+Referral Codes
+Commission Tracking
+Payout Tracking
+Bronze 15%
+Silver 20%
+Gold 25%
+
+PHASE 10 - STORY LIBRARY
+View Stories
+Download PDFs
+Play Narration
+
+PHASE 11 - ANALYTICS
+Track:
+Users
+Stories
+Revenue
+Referrals
+Credit Usage
+
+PHASE 12 - FUTURE ROADMAP
+12A - Story Universe
+12B - Hardcover Books
+12C - Animated Stories
+
+HARDCOVER ROADMAP
+Softcover: ₹999-1499
+Hardcover: ₹1499-2499
+Premium Gift Edition: ₹2499-3999
+
+MVP SUCCESS
+100 Users
+10 Paying Parents
+1000 Users / 250 Paying Customers
+
+CORE PRINCIPLE
+HeroVerse Kids is not an AI company.
+HeroVerse Kids is a magical childhood memory company powered by AI.

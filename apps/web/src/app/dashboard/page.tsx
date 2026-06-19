@@ -15,6 +15,21 @@ export default function DashboardPage() {
           Your Story Library
         </h1>
         <p className="text-white/60 text-lg">Every story, forever yours</p>
+        {/* Quick nav */}
+        <div className="flex justify-center gap-3 mt-8 flex-wrap">
+          {[
+            { href: "/create",     label: "✨ New Story" },
+            { href: "/characters", label: "👥 Manage Cast" },
+          ].map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="bg-white/10 hover:bg-white/20 border border-white/20 text-white text-sm font-semibold px-5 py-2 rounded-full transition"
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto px-6 py-12 w-full">

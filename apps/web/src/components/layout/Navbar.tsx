@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import Logo from "@/components/shared/Logo";
 
 const navLinks = [
   { href: "#how-it-works", label: "How It Works" },
@@ -32,12 +33,7 @@ export default function Navbar() {
       )}
     >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <a href="/" aria-label="HeroVerse Kids home">
-          <span className="font-[family-name:var(--font-display)] font-black text-2xl">
-            <span className="text-gradient-brand">HeroVerse</span>
-            <span className="text-gold ml-1">Kids</span>
-          </span>
-        </a>
+        <Logo />
 
         <div className="hidden md:flex items-center gap-8">
           {navLinks.map((link) => (

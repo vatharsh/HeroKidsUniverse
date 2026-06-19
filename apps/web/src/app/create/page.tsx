@@ -79,7 +79,17 @@ export default function CreatePage() {
               Tell us about your child so we can make them the star.
             </p>
 
-            <div className="flex flex-col items-center mb-8">
+            {/* Avatar privacy notice */}
+            <div className="bg-brand-50 border border-brand/20 rounded-2xl p-4 mb-6 text-sm">
+              <p className="font-semibold text-ink mb-1">🎨 How we use your child&apos;s photo</p>
+              <ul className="text-ink-mid space-y-1 text-xs leading-relaxed">
+                <li>✦ We create a unique illustrated <strong>avatar</strong> based on their features</li>
+                <li>✦ The <strong>original photo is never stored</strong> on our servers</li>
+                <li>✦ The avatar is used only in <strong>your</strong> stories</li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col items-center mb-6">
               <input
                 type="file"
                 accept="image/*"
@@ -105,10 +115,26 @@ export default function CreatePage() {
                   </>
                 )}
               </label>
-              <p className="text-ink-muted text-xs text-center mt-3 max-w-[200px]">
-                Helps us create a character that looks like your child (optional)
+              <p className="text-ink-muted text-xs text-center mt-2 max-w-[220px]">
+                Optional — helps generate a character that resembles your child
               </p>
             </div>
+
+            {/* Consent checkbox — shown only when photo is uploaded */}
+            {photoPreview && (
+              <label className="flex items-start gap-3 mb-4 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 w-4 h-4 rounded accent-brand flex-shrink-0"
+                  required
+                />
+                <span className="text-ink-mid text-xs leading-relaxed">
+                  I consent to this photo being temporarily processed by AI to create an
+                  illustrated avatar. I confirm I am the parent or legal guardian of the
+                  child in this photo.
+                </span>
+              </label>
+            )}
 
             <div className="flex flex-col gap-5">
               <div>

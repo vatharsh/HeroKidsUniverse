@@ -1,3 +1,5 @@
+import Logo from "@/components/shared/Logo";
+
 export default function RegisterPage() {
   return (
     <main className="min-h-screen bg-cream flex flex-col items-center justify-center px-4 py-16 relative">
@@ -9,13 +11,18 @@ export default function RegisterPage() {
       </a>
 
       <div className="bg-white rounded-3xl shadow-card w-full max-w-md p-10">
-        <div className="text-center mb-8">
-          <a href="/" aria-label="HeroVerse Kids home">
-            <span className="font-[family-name:var(--font-display)] font-black text-2xl">
-              <span className="text-gradient-brand">HeroVerse</span>
-              <span className="text-gold ml-1">Kids</span>
-            </span>
-          </a>
+        {/* Logo */}
+        <div className="flex justify-center mb-8">
+          <Logo />
+        </div>
+
+        {/* Parent-only fun banner */}
+        <div className="bg-brand-50 border border-brand/20 rounded-2xl p-4 text-center mb-6">
+          <p className="text-2xl mb-1">🦸 Hey there, superhero parent!</p>
+          <p className="text-ink-mid text-sm leading-relaxed">
+            This is a grown-ups zone. Kids get to be the <strong className="text-brand">heroes</strong> —
+            parents do the sign-up. 😄
+          </p>
         </div>
 
         <h1 className="font-[family-name:var(--font-display)] font-black text-ink text-3xl text-center mb-2">
@@ -28,7 +35,7 @@ export default function RegisterPage() {
         <form className="flex flex-col gap-5">
           <div>
             <label className="text-ink-mid text-sm font-medium block mb-1.5" htmlFor="name">
-              Your name
+              Your name <span className="text-ink-muted font-normal">(parent / guardian)</span>
             </label>
             <input
               id="name"
@@ -64,7 +71,7 @@ export default function RegisterPage() {
 
           <div>
             <label className="text-ink-mid text-sm font-medium block mb-1.5" htmlFor="referral">
-              Referral code
+              Referral code <span className="text-ink-muted font-normal">(optional)</span>
             </label>
             <input
               id="referral"
@@ -87,7 +94,7 @@ export default function RegisterPage() {
 
         <p className="text-center text-sm text-ink-mid mt-6">
           Already have an account?{" "}
-          <a href="/login" className="text-brand font-semibold">
+          <a href="/login" className="text-brand font-semibold hover:underline">
             Sign in
           </a>
         </p>
