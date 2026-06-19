@@ -89,7 +89,7 @@ export default function CreatePage() {
               </ul>
             </div>
 
-            <div className="flex flex-col items-center mb-6">
+            <div className="mb-6">
               <input
                 type="file"
                 accept="image/*"
@@ -102,21 +102,33 @@ export default function CreatePage() {
                   }
                 }}
               />
-              <label
-                htmlFor="photo-upload"
-                className="w-32 h-32 rounded-full overflow-hidden cursor-pointer border-2 border-dashed border-brand/40 hover:border-brand bg-brand-50 transition flex flex-col items-center justify-center"
-              >
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Uploaded hero preview" className="w-full h-full object-cover" />
-                ) : (
-                  <>
-                    <span className="text-4xl">📸</span>
-                    <span className="text-brand text-xs font-medium mt-1">Upload Photo</span>
-                  </>
-                )}
-              </label>
-              <p className="text-ink-muted text-xs text-center mt-2 max-w-[220px]">
-                Optional — helps generate a character that resembles your child
+              {photoPreview ? (
+                <div className="relative w-full rounded-2xl overflow-hidden bg-ink/5 border border-ink/10">
+                  <img
+                    src={photoPreview}
+                    alt="Uploaded hero preview"
+                    className="w-full max-h-72 object-contain"
+                  />
+                  {/* Replace button */}
+                  <label
+                    htmlFor="photo-upload"
+                    className="absolute bottom-3 right-3 bg-white/90 backdrop-blur text-ink text-xs font-semibold px-3 py-1.5 rounded-full cursor-pointer hover:bg-white border border-ink/10 shadow-sm transition"
+                  >
+                    Replace photo
+                  </label>
+                </div>
+              ) : (
+                <label
+                  htmlFor="photo-upload"
+                  className="flex flex-col items-center justify-center w-full h-44 rounded-2xl border-2 border-dashed border-brand/40 hover:border-brand bg-brand-50 transition cursor-pointer"
+                >
+                  <span className="text-5xl mb-2">📸</span>
+                  <span className="text-brand text-sm font-semibold">Upload Child&apos;s Photo</span>
+                  <span className="text-ink-muted text-xs mt-1">Optional · JPG, PNG, HEIC</span>
+                </label>
+              )}
+              <p className="text-ink-muted text-xs mt-2">
+                Optional — helps create a character that looks like your child
               </p>
             </div>
 

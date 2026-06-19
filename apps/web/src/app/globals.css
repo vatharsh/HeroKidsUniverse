@@ -118,8 +118,20 @@ body {
   50%       { opacity: 1;   transform: scale(1.2); }
 }
 
+@keyframes pageFlip {
+  0%   { opacity: 0; transform: perspective(900px) rotateY(22deg) scale(0.96); }
+  100% { opacity: 1; transform: perspective(900px) rotateY(0deg)  scale(1); }
+}
+
+@keyframes pageFlipBack {
+  0%   { opacity: 0; transform: perspective(900px) rotateY(-22deg) scale(0.96); }
+  100% { opacity: 1; transform: perspective(900px) rotateY(0deg)   scale(1); }
+}
+
 /* ─── Utility Classes ────────────────────────────────────────────────── */
 
+.animate-page-flip      { animation: pageFlip     0.45s ease-out forwards; }
+.animate-page-flip-back { animation: pageFlipBack 0.45s ease-out forwards; }
 .animate-float      { animation: float 4s ease-in-out infinite; }
 .animate-float-slow { animation: float 6s ease-in-out infinite; }
 .animate-sparkle    { animation: sparkle 2s ease-in-out infinite; }
