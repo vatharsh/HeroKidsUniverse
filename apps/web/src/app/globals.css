@@ -118,20 +118,31 @@ body {
   50%       { opacity: 1;   transform: scale(1.2); }
 }
 
-@keyframes pageFlip {
-  0%   { opacity: 0; transform: perspective(900px) rotateY(22deg) scale(0.96); }
-  100% { opacity: 1; transform: perspective(900px) rotateY(0deg)  scale(1); }
+/* Book page flip — exit (page folds away) */
+@keyframes bookExitFwd {
+  from { opacity: 1; transform: perspective(1200px) rotateY(0deg); }
+  to   { opacity: 0; transform: perspective(1200px) rotateY(-75deg) scaleX(0.88); }
 }
-
-@keyframes pageFlipBack {
-  0%   { opacity: 0; transform: perspective(900px) rotateY(-22deg) scale(0.96); }
-  100% { opacity: 1; transform: perspective(900px) rotateY(0deg)   scale(1); }
+@keyframes bookExitBack {
+  from { opacity: 1; transform: perspective(1200px) rotateY(0deg); }
+  to   { opacity: 0; transform: perspective(1200px) rotateY(75deg) scaleX(0.88); }
+}
+/* Book page flip — enter (page unfolds in) */
+@keyframes bookEnterFwd {
+  from { opacity: 0; transform: perspective(1200px) rotateY(38deg) scaleX(0.92); }
+  to   { opacity: 1; transform: perspective(1200px) rotateY(0deg)  scaleX(1); }
+}
+@keyframes bookEnterBack {
+  from { opacity: 0; transform: perspective(1200px) rotateY(-38deg) scaleX(0.92); }
+  to   { opacity: 1; transform: perspective(1200px) rotateY(0deg)   scaleX(1); }
 }
 
 /* ─── Utility Classes ────────────────────────────────────────────────── */
 
-.animate-page-flip      { animation: pageFlip     0.45s ease-out forwards; }
-.animate-page-flip-back { animation: pageFlipBack 0.45s ease-out forwards; }
+.book-exit-fwd  { animation: bookExitFwd  0.34s ease-in  forwards; transform-origin: left center; }
+.book-exit-back { animation: bookExitBack 0.34s ease-in  forwards; transform-origin: right center; }
+.book-enter-fwd { animation: bookEnterFwd 0.34s ease-out forwards; transform-origin: left center; }
+.book-enter-back{ animation: bookEnterBack 0.34s ease-out forwards; transform-origin: right center; }
 .animate-float      { animation: float 4s ease-in-out infinite; }
 .animate-float-slow { animation: float 6s ease-in-out infinite; }
 .animate-sparkle    { animation: sparkle 2s ease-in-out infinite; }
