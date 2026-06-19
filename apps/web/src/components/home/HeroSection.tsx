@@ -6,7 +6,7 @@ export default function HeroSection() {
     <section className="relative min-h-screen bg-space-gradient flex items-center overflow-hidden">
       <StarField />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-32 w-full flex flex-col lg:flex-row items-center gap-16">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 pt-44 pb-24 w-full flex flex-col lg:flex-row items-center gap-16">
         {/* Left — text */}
         <div className="flex-1 flex flex-col gap-7">
           {/* Badge */}

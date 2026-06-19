@@ -41,7 +41,7 @@ export default function CreatePage() {
   return (
     <div className="min-h-screen bg-cream">
       <Navbar />
-      <main className="max-w-lg mx-auto px-6 pt-28 pb-16">
+      <main className="max-w-lg mx-auto px-6 pt-44 pb-16">
         <div className="flex items-start justify-center gap-0 mb-12">
           {steps.map((step, index) => (
             <div key={step} className="flex items-start">

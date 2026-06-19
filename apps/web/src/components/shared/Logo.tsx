@@ -8,7 +8,7 @@ interface LogoProps {
   animated?: boolean;
 }
 
-export function LogoMark({ size = 52, animated = true }: { size?: number; animated?: boolean }) {
+export function LogoMark({ size = 132, animated = true }: { size?: number; animated?: boolean }) {
   return (
     <Image
       src={logoSrc}
@@ -22,7 +22,7 @@ export function LogoMark({ size = 52, animated = true }: { size?: number; animat
   );
 }
 
-export default function Logo({ className = "", iconSize = 44, animated = true }: LogoProps) {
+export default function Logo({ className = "", iconSize = 132, animated = true }: LogoProps) {
   return (
     <a
       href="/"

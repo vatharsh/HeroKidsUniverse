@@ -37,7 +37,7 @@ export default function Navbar() {
         showSolid && "bg-space/95 backdrop-blur-md border-b border-white/10",
       )}
     >
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 h-36 flex items-center justify-between">
         <Logo />
 
         {/* Desktop links — only anchor links on homepage */}
