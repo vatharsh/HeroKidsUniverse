@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const faqs = [
   {
     q: "How old does my child need to be?",
-    a: "HeroVerse Kids is designed for children aged 4 to 12. The stories, illustrations, and narration are all tailored to be age-appropriate and engaging for this range.",
+    a: "Hero Kids Universe is designed for children aged 4 to 12. The stories, illustrations, and narration are all tailored to be age-appropriate and engaging for this range.",
   },
   {
     q: "How long does it take to generate a story?",

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ─── HeroVerse Kids Design System ─────────────────────────────────── */
+/* ─── Hero Kids Universe Design System ─────────────────────────────── */
 
 @theme {
   /* Brand — Purple */
@@ -48,8 +48,8 @@
   --color-theme-birthday-to:   #9f1239;
 
   /* Typography */
-  --font-display: "Nunito", "Inter", sans-serif;
-  --font-body:    "Inter", sans-serif;
+  --font-display: "Boogaloo", "Nunito", sans-serif;
+  --font-body:    "Nunito", sans-serif;
 
   /* Radius */
   --radius-sm:   0.5rem;
@@ -139,11 +139,11 @@ body {
 
 /* Logo hero fly — combine translateY + slight nose-tilt rotate */
 @keyframes logoHeroFly {
-  0%   { transform: translateY(0px)   rotate(-2deg); }
-  25%  { transform: translateY(-5px)  rotate(-0.5deg); }
-  50%  { transform: translateY(-8px)  rotate(1.5deg); }
-  75%  { transform: translateY(-4px)  rotate(0.5deg); }
-  100% { transform: translateY(0px)   rotate(-2deg); }
+  0%   { transform: perspective(700px) translateY(0px) rotateX(7deg) rotateY(-10deg) rotateZ(-2deg); }
+  25%  { transform: perspective(700px) translateY(-4px) rotateX(9deg) rotateY(-6deg) rotateZ(-0.5deg); }
+  50%  { transform: perspective(700px) translateY(-7px) rotateX(6deg) rotateY(7deg) rotateZ(1.5deg); }
+  75%  { transform: perspective(700px) translateY(-3px) rotateX(8deg) rotateY(2deg) rotateZ(0.5deg); }
+  100% { transform: perspective(700px) translateY(0px) rotateX(7deg) rotateY(-10deg) rotateZ(-2deg); }
 }
 
 /* Pulsing purple + gold energy glow around the badge */
@@ -166,6 +166,21 @@ body {
     logoHeroFly   3.8s ease-in-out infinite,
     logoGlowPulse 2.4s ease-in-out infinite;
   will-change: transform, filter;
+}
+
+.logo-3d {
+  transform-style: preserve-3d;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.logo-3d:hover {
+  transform: perspective(700px) rotateX(4deg) rotateY(-14deg) translateY(-2px) scale(1.03);
+  box-shadow:
+    inset 0 2px 12px rgba(255,255,255,0.22),
+    inset 0 -12px 26px rgba(11,5,32,0.66),
+    0 22px 44px rgba(0,0,0,0.42),
+    0 0 34px rgba(245,158,11,0.28),
+    0 0 34px rgba(124,58,237,0.48);
 }
 
 .logo-streak {
@@ -208,6 +223,14 @@ body {
 
 .bg-space-gradient {
   background: radial-gradient(ellipse at 60% 0%, #2D1070 0%, #1A0850 40%, #0B0520 100%);
+}
+
+/* For compact page headers where content is left-aligned — gradient center at top-left */
+.bg-page-header {
+  background:
+    radial-gradient(ellipse 140% 280% at 0% 0%, #3D1580 0%, #2D1070 30%, transparent 65%),
+    radial-gradient(ellipse at 80% 0%, #1A0850 0%, #0B0520 60%),
+    #0B0520;
 }
 
 .bg-brand-gradient {

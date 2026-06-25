@@ -1,0 +1,15 @@
+import { Body, Controller, Post } from '@nestjs/common';
+
+import { Public } from '../auth/decorators/public.decorator';
+import { InfluencersService } from './influencers.service';
+
+@Controller('influencers')
+export class InfluencerPublicController {
+  constructor(private readonly influencersService: InfluencersService) {}
+
+  @Public()
+  @Post('coupon/validate')
+  validateCoupon(@Body() body: { code: string }) {
+    return this.influencersService.validateCoupon(body.code);
+  }
+}

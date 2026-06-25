@@ -1,3 +1,7 @@
+"use client";
+
+import { useAuth } from "@/contexts/AuthContext";
+
 /* ── SVG illustrations for each theme ─────────────────────────────── */
 
 function SpaceArt() {
@@ -163,52 +167,57 @@ function BirthdayArt() {
 
 /* ── Theme data ────────────────────────────────────────────────────── */
 const themes = [
-  { emoji: "🚀", name: "Space Adventure",      gradient: "from-indigo-950 to-purple-900",  Art: SpaceArt },
-  { emoji: "⚡", name: "Superhero Mission",    gradient: "from-red-950 to-orange-900",      Art: SuperheroArt },
-  { emoji: "🌿", name: "Jungle Quest",         gradient: "from-green-950 to-emerald-800",   Art: JungleArt },
-  { emoji: "🌊", name: "Underwater Adventure", gradient: "from-blue-950 to-cyan-900",        Art: OceanArt },
-  { emoji: "🔍", name: "Detective Mystery",    gradient: "from-gray-900 to-slate-800",       Art: DetectiveArt },
-  { emoji: "🎂", name: "Birthday Adventure",   gradient: "from-pink-950 to-rose-900",        Art: BirthdayArt },
+  { slug: "space-adventure",      emoji: "🚀", name: "Space Adventure",      gradient: "from-indigo-950 to-purple-900",  Art: SpaceArt },
+  { slug: "superhero-mission",    emoji: "⚡", name: "Superhero Mission",    gradient: "from-red-950 to-orange-900",      Art: SuperheroArt },
+  { slug: "jungle-quest",         emoji: "🌿", name: "Jungle Quest",         gradient: "from-green-950 to-emerald-800",   Art: JungleArt },
+  { slug: "underwater-adventure", emoji: "🌊", name: "Underwater Adventure", gradient: "from-blue-950 to-cyan-900",        Art: OceanArt },
+  { slug: "detective-mystery",    emoji: "🔍", name: "Detective Mystery",    gradient: "from-gray-900 to-slate-800",       Art: DetectiveArt },
+  { slug: "birthday-adventure",   emoji: "🎂", name: "Birthday Adventure",   gradient: "from-pink-950 to-rose-900",        Art: BirthdayArt },
 ];
 
 /* ── Section ───────────────────────────────────────────────────────── */
 export default function ThemeShowcase() {
+  const { user } = useAuth();
+
   return (
     <section id="themes" className="py-24 bg-space-gradient">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
+          <p className="text-gold text-xs font-bold tracking-widest uppercase mb-3">6 WORLDS TO EXPLORE</p>
           <h2 className="font-[family-name:var(--font-display)] font-black text-white text-4xl md:text-5xl mb-4">
-            Choose Your Adventure
+            Every universe needs a world
           </h2>
-          <p className="text-white/60 text-lg">Six magical worlds waiting for your little hero</p>
+          <p className="text-white/60 text-lg">Your hero picks a new world each episode — adventures never repeat.</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
-          {themes.map(({ emoji, name, gradient, Art }) => (
-            <div
+          {themes.map(({ slug, emoji, name, gradient, Art }) => (
+            <a
               key={name}
-              className="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-gold/50"
+              href={user ? `/create?theme=${slug}` : "/register"}
+              className="group relative rounded-2xl overflow-hidden transition-all duration-300 hover:scale-105 hover:ring-2 hover:ring-gold/50"
             >
               <div className={`relative aspect-[4/3] bg-gradient-to-br ${gradient} overflow-hidden`}>
-                {/* SVG illustration */}
                 <Art />
-
-                {/* Content overlay */}
                 <div className="absolute inset-0 flex flex-col justify-between p-5">
                   <span className="text-5xl leading-none drop-shadow-lg">{emoji}</span>
                   <div>
                     <h3 className="text-white font-[family-name:var(--font-display)] font-bold text-xl drop-shadow">
                       {name}
                     </h3>
-                    <p className="text-white/0 group-hover:text-gold/90 transition-all duration-200 text-sm font-medium">
-                      Explore →
+                    <p className="text-gold/0 group-hover:text-gold/90 transition-all duration-200 text-sm font-medium">
+                      Start here →
                     </p>
                   </div>
                 </div>
               </div>
-            </div>
+            </a>
           ))}
         </div>
+
+        <p className="text-center text-white/40 text-sm mt-8">
+          Each world is unlocked from episode 1 · No restrictions
+        </p>
       </div>
     </section>
   );
