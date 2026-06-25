@@ -2,7 +2,7 @@
 
 import {
   BookOpen, ChevronRight, Clock, Globe, Loader2, Package, Plus, RefreshCw, ShoppingCart, Target,
-  Trash2, Users, Zap, AlertCircle, Share2,
+  Trash2, Users, X, Zap, AlertCircle, Share2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -204,17 +204,26 @@ function InProgressSection({ jobs, stories }: { jobs: GenerationJob[]; stories: 
 }
 
 function FailedJobsBanner({ jobs }: { jobs: GenerationJob[] }) {
+  const [dismissed, setDismissed] = useState(false);
   const failedUnread = jobs.filter((j) => j.status === "failed");
-  if (failedUnread.length === 0) return null;
+  if (failedUnread.length === 0 || dismissed) return null;
   return (
     <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
       <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-      <div>
+      <div className="flex-1">
         <p className="text-red-700 font-semibold text-sm">
           {failedUnread.length} story generation{failedUnread.length > 1 ? "s" : ""} failed
         </p>
         <p className="text-red-600 text-xs mt-0.5">Credits have been automatically refunded. <a href="/create" className="underline font-semibold">Try again →</a></p>
       </div>
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        className="text-red-400 hover:text-red-600 transition flex-shrink-0 p-0.5"
+        aria-label="Dismiss"
+      >
+        <X className="w-4 h-4" />
+      </button>
     </div>
   );
 }
