@@ -310,8 +310,20 @@ export default function StoryReaderPage() {
           )}
 
           <p className="text-white/30 text-xs text-center">
-            This takes 1–2 minutes · The universe remembers everything ✨
+            Illustrations generate in parallel — usually ready in under a minute ✨
           </p>
+
+          <div className="text-center">
+            <a
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-white/40 hover:text-white/80 text-sm transition"
+            >
+              ← Back to Dashboard
+            </a>
+            <p className="text-white/20 text-xs mt-1">
+              Generation continues in the background · check progress on your dashboard
+            </p>
+          </div>
         </div>
       </div>
     );

@@ -270,58 +270,79 @@ export class GenerationService {
     const imageModel = this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1';
     const costPerImage = await this.getNumberSetting('OPENAI_IMAGE_COST_PER_IMAGE', Number(SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value));
 
-    // Track first page's uploaded image URL as a style anchor for subsequent pages
-    let styleReferenceUrl: string | undefined;
+    // Separate pages that get illustrations from those that don't (beyond maxImages cap)
+    const illustratedPages = generated.pages.slice(0, maxImages);
+    const remainingPages   = generated.pages.slice(maxImages);
 
-    for (const page of generated.pages) {
-      let imageUrl: string | undefined;
+    // Track settled count for live progress updates
+    let settled = 0;
 
-      if (pages.length < maxImages) {
+    type PageResult = { page: (typeof illustratedPages)[0]; imageOutput: import('../ai/interfaces/image-generation.provider').ImageGenerationOutput | null; error?: string };
+
+    // Generate all illustrations in parallel — reduces wall time from N×T to ~T
+    const generationResults: PageResult[] = await Promise.all(
+      illustratedPages.map(async (page): Promise<PageResult> => {
         try {
-          const image = await this.imageProvider.generateImage({
+          const imageOutput = await this.imageProvider.generateImage({
             sceneDescription: page.sceneDescription,
             heroName,
             heroAge,
             supportingCharacters,
             heroAvatarUrl: hero.avatarUrl ?? undefined,
             characterAvatarUrls: characterAvatarUrls.length > 0 ? characterAvatarUrls : undefined,
-            styleReferenceUrl: pages.length > 0 ? styleReferenceUrl : undefined,
             style: 'professional full-color comic book illustration, dynamic action, expressive child hero, polished cover-quality art',
           });
-
-          imageUrl = image.imageBase64
-            ? await this.uploadService.uploadGeneratedImage(story.userId, story.id, page.pageNumber, image.imageBase64)
-            : image.imageUrl || undefined;
-
-          // First page becomes the visual style anchor for all subsequent pages
-          if (pages.length === 0 && imageUrl) {
-            styleReferenceUrl = imageUrl;
-          }
-
-          totalCostUsd += costPerImage;
-          await this.aiUsageLogsRepo.save(
-            this.aiUsageLogsRepo.create({
-              userId: story.userId,
-              storyId: story.id,
-              universeId: story.universeId ?? null,
-              provider: 'openai',
-              model: imageModel,
-              operation: AiOperation.ImageGeneration,
-              imagesGenerated: 1,
-              estimatedCostUsd: costPerImage,
-            }),
-          );
+          settled++;
+          if (onPageDone) await onPageDone(settled, illustratedPages.length).catch(() => {});
+          return { page, imageOutput };
         } catch (err) {
-          this.logger.warn(
-            `Image gen failed for story ${story.id}, page ${page.pageNumber}: ${
-              err instanceof Error ? err.message : 'Unknown'
-            }`,
-          );
+          settled++;
+          if (onPageDone) await onPageDone(settled, illustratedPages.length).catch(() => {});
+          return { page, imageOutput: null, error: err instanceof Error ? err.message : 'Unknown' };
         }
+      }),
+    );
+
+    // Upload results sequentially (upload is fast; generation was the bottleneck)
+    for (const { page, imageOutput, error } of generationResults) {
+      if (!imageOutput) {
+        this.logger.warn(`Image gen failed for story ${story.id}, page ${page.pageNumber}: ${error ?? 'Unknown'}`);
+        pages.push({ pageNumber: page.pageNumber, text: page.text, imageUrl: undefined, audioUrl: undefined });
+        continue;
       }
 
+      let imageUrl: string | undefined;
+      try {
+        imageUrl = imageOutput.imageBase64
+          ? await this.uploadService.uploadGeneratedImage(story.userId, story.id, page.pageNumber, imageOutput.imageBase64)
+          : imageOutput.imageUrl || undefined;
+
+        totalCostUsd += costPerImage;
+        await this.aiUsageLogsRepo.save(
+          this.aiUsageLogsRepo.create({
+            userId: story.userId,
+            storyId: story.id,
+            universeId: story.universeId ?? null,
+            provider: 'openai',
+            model: imageModel,
+            operation: AiOperation.ImageGeneration,
+            imagesGenerated: 1,
+            estimatedCostUsd: costPerImage,
+          }),
+        );
+      } catch (uploadErr) {
+        this.logger.warn(
+          `Image upload failed for story ${story.id}, page ${page.pageNumber}: ${
+            uploadErr instanceof Error ? uploadErr.message : 'Unknown'
+          }`,
+        );
+      }
       pages.push({ pageNumber: page.pageNumber, text: page.text, imageUrl, audioUrl: undefined });
-      if (onPageDone) await onPageDone(pages.length, total).catch(() => {});
+    }
+
+    // Pages beyond maxImages get no illustration
+    for (const page of remainingPages) {
+      pages.push({ pageNumber: page.pageNumber, text: page.text, imageUrl: undefined, audioUrl: undefined });
     }
 
     return { pages, totalCostUsd };
