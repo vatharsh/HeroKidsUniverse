@@ -40,13 +40,13 @@ const STORY_MODES = [
     value: "standalone",
     emoji: "📖",
     label: "Standalone Story",
-    description: "A one-off tale, no continuity needed.",
+    description: "A one-off tale saved independently — not added to any universe.",
   },
   {
     value: "freeform",
     emoji: "✏️",
     label: "Write My Own",
-    description: "No theme — just describe what you want and let the AI run with it.",
+    description: "Describe exactly what you want. Saved independently, not tied to any universe.",
   },
 ];
 
@@ -361,6 +361,8 @@ function CreatePageInner() {
       }
 
       const isFreeform = storyMode === "freeform";
+      // Standalone and freeform stories are always independent — never attached to a universe
+      const isIndependent = storyMode === "standalone" || isFreeform;
       const storyRes = await fetch(`${BASE}/stories`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
@@ -370,7 +372,7 @@ function CreatePageInner() {
           storyMode: isFreeform ? "standalone" : storyMode,
           storyContext: storyContext.trim() || undefined,
           characterIds: selectedCharIds.length > 0 ? selectedCharIds : undefined,
-          ...(preselectedUniverseId ? { universeId: preselectedUniverseId } : {}),
+          ...(!isIndependent && preselectedUniverseId ? { universeId: preselectedUniverseId } : {}),
           ...(companionType ? { companionType, companionName: companionName.trim() || undefined, companionPetId: companionPetId ?? undefined } : {}),
         }),
       });
@@ -538,7 +540,13 @@ function CreatePageInner() {
         {/* ── Story Mode ──────────────────────────────────────────────────── */}
         {stepType === "mode" && (
           <section>
-            {preselectedUniverseId && (
+            {preselectedUniverseId && (storyMode === "standalone" || storyMode === "freeform") && (
+              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <span className="text-amber-600 text-sm">📖</span>
+                <span className="text-amber-700 text-xs font-semibold">This story will be saved independently — not added to any universe</span>
+              </div>
+            )}
+            {preselectedUniverseId && storyMode !== "standalone" && storyMode !== "freeform" && (
               <div className="mb-4 bg-brand/8 border border-brand/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
                 <span className="text-brand text-sm">🌌</span>
                 <span className="text-ink-mid text-xs font-semibold">Episode will be added to the selected universe</span>
