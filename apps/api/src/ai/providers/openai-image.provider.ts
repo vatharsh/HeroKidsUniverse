@@ -68,11 +68,13 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
       }
     }
 
-    const response = await this.client.images.generate({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const response = await (this.client.images.generate as any)({
       model: this.model,
       prompt,
       n: 1,
       size: '1024x1024',
+      quality: 'medium',
     });
 
     return this.fromImageResponse(response);

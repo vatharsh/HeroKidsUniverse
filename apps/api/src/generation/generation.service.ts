@@ -288,8 +288,9 @@ export class GenerationService {
             heroName,
             heroAge,
             supportingCharacters,
-            heroAvatarUrl: hero.avatarUrl ?? undefined,
-            characterAvatarUrls: characterAvatarUrls.length > 0 ? characterAvatarUrls : undefined,
+            // No avatar references for story pages — character appearance is embedded
+            // in each sceneDescription by Gemini. images.generate is faster and cheaper
+            // than images.edit with multiple reference uploads.
             style: 'professional full-color comic book illustration, dynamic action, expressive child hero, polished cover-quality art',
           });
           settled++;

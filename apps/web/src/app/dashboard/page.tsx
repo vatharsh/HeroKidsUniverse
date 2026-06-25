@@ -203,22 +203,37 @@ function InProgressSection({ jobs, stories }: { jobs: GenerationJob[]; stories: 
   );
 }
 
+const DISMISSED_KEY = "hvu_dismissed_failed_jobs";
+
 function FailedJobsBanner({ jobs }: { jobs: GenerationJob[] }) {
-  const [dismissed, setDismissed] = useState(false);
-  const failedUnread = jobs.filter((j) => j.status === "failed");
-  if (failedUnread.length === 0 || dismissed) return null;
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(DISMISSED_KEY);
+      return new Set(stored ? (JSON.parse(stored) as string[]) : []);
+    } catch { return new Set(); }
+  });
+
+  const visibleFailures = jobs.filter((j) => j.status === "failed" && !dismissedIds.has(j.id));
+  if (visibleFailures.length === 0) return null;
+
+  function dismiss() {
+    const next = new Set([...dismissedIds, ...visibleFailures.map((j) => j.id)]);
+    setDismissedIds(next);
+    try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+  }
+
   return (
     <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
       <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
       <div className="flex-1">
         <p className="text-red-700 font-semibold text-sm">
-          {failedUnread.length} story generation{failedUnread.length > 1 ? "s" : ""} failed
+          {visibleFailures.length} story generation{visibleFailures.length > 1 ? "s" : ""} failed
         </p>
         <p className="text-red-600 text-xs mt-0.5">Credits have been automatically refunded. <a href="/create" className="underline font-semibold">Try again →</a></p>
       </div>
       <button
         type="button"
-        onClick={() => setDismissed(true)}
+        onClick={dismiss}
         className="text-red-400 hover:text-red-600 transition flex-shrink-0 p-0.5"
         aria-label="Dismiss"
       >

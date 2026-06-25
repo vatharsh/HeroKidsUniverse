@@ -42,7 +42,7 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   ENABLE_UNIVERSE_MEMORY:         { value: 'true', type: 'boolean', description: 'Persist and reuse universe memory' },
   ENABLE_VIDEO_EXPORT:            { value: 'true', type: 'boolean', description: 'Show video export controls for stories' },
   FREE_SIGNUP_CREDITS:            { value: '3',   type: 'number',  description: 'Credits awarded automatically on signup' },
-  MAX_IMAGES_PER_STORY_DEV:       { value: '3',   type: 'number',  description: 'Maximum generated images per story in development' },
+  MAX_IMAGES_PER_STORY_DEV:       { value: '10',  type: 'number',  description: 'Maximum generated images per story in development' },
   MAX_IMAGES_PER_STORY_PROD:      { value: '10',  type: 'number',  description: 'Maximum generated images per story in production' },
   PREMIUM_PLAN_PAGES:             { value: '10',  type: 'number',  description: 'Default number of pages for the Premium plan' },
   STANDARD_PLAN_PAGES:            { value: '8',   type: 'number',  description: 'Default number of pages for the Standard plan' },
