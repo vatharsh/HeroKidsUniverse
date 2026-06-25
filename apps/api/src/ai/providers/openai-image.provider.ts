@@ -23,48 +23,57 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
   }
 
   async generateImage(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
-    const castLine = input.supportingCharacters?.length
-      ? `Supporting characters in this scene: ${input.supportingCharacters.join(', ')} — their faces, skin tone, hair, clothing, and age must be IDENTICAL to the reference images provided.`
-      : '';
-
-    const prompt = [
-      input.style ?? 'professional full-color comic book illustration, dynamic panels, crisp ink lines',
-      `Main hero: ${input.heroName}, age ${input.heroAge} — face, skin tone, hair colour and style, clothing MUST match the reference image exactly. Do not alter the hero's appearance in any way.`,
-      castLine,
-      input.sceneDescription,
-      'CHARACTER CONSISTENCY IS MANDATORY: every character must look identical to how they appear in the reference images — same face, same hair, same skin tone, same clothing across every page.',
-      'Child-safe, joyful, cinematic, no text overlaid on the image.',
-    ].filter(Boolean).join('\n');
-
-    // Reference order: hero avatar, character avatars, then style reference (first page)
-    const refs = [
-      ...(input.heroAvatarUrl           ? [{ url: input.heroAvatarUrl, name: 'hero.png' }]              : []),
+    // Resolve reference images before building the prompt so we know what's available
+    const refSpecs = [
+      ...(input.heroAvatarUrl         ? [{ url: input.heroAvatarUrl,    name: 'hero.png' }]          : []),
       ...(input.characterAvatarUrls ?? []).map((url, i) => ({ url, name: `char-${i}.png` })),
-      ...(input.styleReferenceUrl        ? [{ url: input.styleReferenceUrl, name: 'style_ref.png' }]    : []),
     ];
 
-    if (refs.length > 0) {
-      const files = (
-        await Promise.all(refs.map(r => this.urlToFile(r.url, r.name)))
-      ).filter((f): f is Awaited<ReturnType<typeof toFile>> => f !== null);
+    const files = refSpecs.length > 0
+      ? (await Promise.all(refSpecs.map(r => this.urlToFile(r.url, r.name))))
+          .filter((f): f is Awaited<ReturnType<typeof toFile>> => f !== null)
+      : [];
 
-      if (files.length > 0) {
-        try {
-          const edited = await this.client.images.edit({
-            model: this.model,
-            image: files,
-            prompt,
-            n: 1,
-            size: '1024x1024',
-          });
-          return this.fromImageResponse(edited);
-        } catch (err) {
-          this.logger.warn(
-            `images.edit failed (${refs.length} refs), falling back to generate: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-        }
+    const hasRef = files.length > 0;
+
+    const castLine = input.supportingCharacters?.length
+      ? `Supporting characters in this scene: ${input.supportingCharacters.join(', ')} — match their appearance exactly as described.`
+      : '';
+
+    const heroIdentityLine = hasRef
+      ? `The main character is ${input.heroName} (age ${input.heroAge}). ` +
+        `USE THE REFERENCE PORTRAIT to match their exact face shape, skin tone, hair colour, hair style, and age — ` +
+        `they must be instantly recognisable as the same real person in the scene.`
+      : `Main character: ${input.heroName}, age ${input.heroAge}.`;
+
+    const prompt = [
+      input.style ??
+        'photorealistic children\'s storybook scene — lifelike characters with natural skin tones, warm cinematic lighting, vibrant real-world setting. NOT a cartoon, NOT an illustration.',
+      heroIdentityLine,
+      castLine,
+      input.sceneDescription,
+      'The scene must look photorealistic and cinematic — real facial expressions, natural lighting, genuine emotions.',
+      'Child-safe, warm and joyful atmosphere, no text or watermarks in the image.',
+    ].filter(Boolean).join('\n');
+
+    if (hasRef) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const edited = await (this.client.images.edit as any)({
+          model: this.model,
+          image: files,
+          prompt,
+          n: 1,
+          size: '1024x1024',
+          quality: 'medium',
+        });
+        return this.fromImageResponse(edited);
+      } catch (err) {
+        this.logger.warn(
+          `images.edit failed (${files.length} refs), falling back to generate: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
       }
     }
 

@@ -288,10 +288,8 @@ export class GenerationService {
             heroName,
             heroAge,
             supportingCharacters,
-            // No avatar references for story pages — character appearance is embedded
-            // in each sceneDescription by Gemini. images.generate is faster and cheaper
-            // than images.edit with multiple reference uploads.
-            style: 'professional full-color comic book illustration, dynamic action, expressive child hero, polished cover-quality art',
+            heroAvatarUrl: hero.avatarUrl ?? undefined,
+            style: 'photorealistic children\'s storybook scene — lifelike characters, warm cinematic lighting, natural skin tones, vibrant real-world setting. NOT a cartoon, NOT an illustration, NOT anime.',
           });
           settled++;
           if (onPageDone) await onPageDone(settled, illustratedPages.length).catch(() => {});
