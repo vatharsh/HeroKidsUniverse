@@ -289,7 +289,7 @@ export class GenerationService {
             heroAge,
             supportingCharacters,
             heroAvatarUrl: hero.avatarUrl ?? undefined,
-            style: 'photorealistic children\'s storybook scene — lifelike characters, warm cinematic lighting, natural skin tones, vibrant real-world setting. NOT a cartoon, NOT an illustration, NOT anime.',
+            style: 'vibrant full-color children\'s storybook illustration, warm Pixar-style cartoon art, expressive characters, rich colorful backgrounds',
           });
           settled++;
           if (onPageDone) await onPageDone(settled, illustratedPages.length).catch(() => {});

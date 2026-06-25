@@ -42,18 +42,17 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
 
     const heroIdentityLine = hasRef
       ? `The main character is ${input.heroName} (age ${input.heroAge}). ` +
-        `USE THE REFERENCE PORTRAIT to match their exact face shape, skin tone, hair colour, hair style, and age — ` +
-        `they must be instantly recognisable as the same real person in the scene.`
+        `Draw them as a cartoon character but PRESERVE these exact features from the reference portrait: ` +
+        `face shape, skin tone, hair colour, hair style, hair length, eye shape, and any distinctive features (glasses, dimples, etc). ` +
+        `A parent looking at this cartoon must immediately recognise their own child.`
       : `Main character: ${input.heroName}, age ${input.heroAge}.`;
 
     const prompt = [
-      input.style ??
-        'photorealistic children\'s storybook scene — lifelike characters with natural skin tones, warm cinematic lighting, vibrant real-world setting. NOT a cartoon, NOT an illustration.',
+      input.style ?? 'vibrant full-color children\'s storybook illustration, warm Pixar-style cartoon art, expressive characters, rich colorful backgrounds',
       heroIdentityLine,
       castLine,
       input.sceneDescription,
-      'The scene must look photorealistic and cinematic — real facial expressions, natural lighting, genuine emotions.',
-      'Child-safe, warm and joyful atmosphere, no text or watermarks in the image.',
+      'Child-safe, joyful and adventurous atmosphere, no text or watermarks in the image.',
     ].filter(Boolean).join('\n');
 
     if (hasRef) {
