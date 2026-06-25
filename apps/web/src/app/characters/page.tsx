@@ -403,13 +403,17 @@ function HeroEditModal({
                 <span className="text-[11px] text-ink-muted leading-relaxed text-center max-w-xs">
                   🔒 Photo is <strong>never saved</strong> — only the illustrated avatar is kept
                 </span>
-                {avatarStats.heroGenerationsUsed >= avatarStats.heroGenerationsMax ? (
-                  <span className="text-[11px] text-amber-600 font-semibold">
-                    ({avatarStats.heroGenerationsMax} hero generation limit reached · choose a preset above)
+                {avatarStats.heroGenerationsUsed < avatarStats.heroGenerationsMax ? (
+                  <span className="text-[11px] text-brand font-medium">
+                    {avatarStats.heroGenerationsMax - avatarStats.heroGenerationsUsed} of {avatarStats.heroGenerationsMax} free hero generations remaining
+                  </span>
+                ) : avatarStats.avatarRefreshTokens > 0 ? (
+                  <span className="text-[11px] text-brand font-medium">
+                    Free generations used · {avatarStats.avatarRefreshTokens} Avatar Refresh{avatarStats.avatarRefreshTokens !== 1 ? "es" : ""} remaining · uses 1
                   </span>
                 ) : (
-                  <span className="text-[11px] text-brand font-medium">
-                    {avatarStats.heroGenerationsMax - avatarStats.heroGenerationsUsed} of {avatarStats.heroGenerationsMax} hero avatar generations remaining
+                  <span className="text-[11px] text-amber-600 font-semibold">
+                    No generations left · buy Avatar Refreshes from Dashboard
                   </span>
                 )}
               </button>
@@ -464,8 +468,16 @@ function HeroEditModal({
           photoFile={generateTarget.file}
           photoPreview={generateTarget.preview}
           generateType="hero"
-          generationsUsed={avatarStats.heroGenerationsUsed}
-          maxGenerations={avatarStats.heroGenerationsMax}
+          generationsUsed={
+            avatarStats.heroGenerationsUsed < avatarStats.heroGenerationsMax
+              ? avatarStats.heroGenerationsUsed           // within free quota: show X of 2
+              : 0                                         // over free quota: show refresh tokens
+          }
+          maxGenerations={
+            avatarStats.heroGenerationsUsed < avatarStats.heroGenerationsMax
+              ? avatarStats.heroGenerationsMax            // within free quota: cap is 2
+              : avatarStats.avatarRefreshTokens           // over free quota: cap is refresh tokens
+          }
           onSuccess={handleGenerateSuccess}
           onCancel={() => setGenerateTarget(null)}
         />

@@ -61,11 +61,18 @@ export class AvatarsService {
   ): Promise<{ avatarUrl: string }> {
     const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
 
-    if (type === 'hero' && user.heroAvatarGenerationsUsed >= HERO_AVATAR_MAX) {
-      throw new BadRequestException('Hero avatar generation limit reached');
-    }
-    if (type === 'character' && user.avatarRefreshTokens < 1) {
-      throw new BadRequestException('You have no Avatar Refreshes remaining. Buy an Avatar Refresh pack to try another look.');
+    // Hero gets HERO_AVATAR_MAX free generations; after that it costs a refresh token like characters
+    const heroFreeRemaining = type === 'hero'
+      ? Math.max(0, HERO_AVATAR_MAX - user.heroAvatarGenerationsUsed)
+      : 0;
+    const needsRefreshToken = type === 'character' || heroFreeRemaining === 0;
+
+    if (needsRefreshToken && user.avatarRefreshTokens < 1) {
+      throw new BadRequestException(
+        type === 'hero'
+          ? `Your ${HERO_AVATAR_MAX} free hero avatar generations have been used. Buy an Avatar Refresh pack to generate more.`
+          : 'You have no Avatar Refreshes remaining. Buy an Avatar Refresh pack to try another look.',
+      );
     }
 
     const output = await this.imageProvider.generateAvatar({
@@ -85,13 +92,16 @@ export class AvatarsService {
       throw new BadRequestException('Avatar generation failed. Please try again.');
     }
 
-    // Save record and increment counter only after successful upload
+    // Save record and update counters only after successful upload
     await this.avatarRepo.save(
       this.avatarRepo.create({ userId, avatarUrl, type }),
     );
 
     if (type === 'hero') {
       await this.userRepo.increment({ id: userId }, 'heroAvatarGenerationsUsed', 1);
+      if (needsRefreshToken) {
+        await this.consumeAvatarRefresh(userId);
+      }
     } else {
       await this.consumeAvatarRefresh(userId);
       await this.userRepo.increment({ id: userId }, 'characterAvatarGenerationsUsed', 1);
