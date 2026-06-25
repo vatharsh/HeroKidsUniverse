@@ -310,7 +310,7 @@ function CreatePageInner() {
     switch (stepType) {
       case "hero":       return !!heroName.trim() && !!heroDob && !!heroGender && (!photoFile || consented);
       case "mode":       return !!storyMode;
-      case "theme":      return !!selectedTheme;
+      case "theme":      return true;
       case "characters": return true;
       case "companion":  return true;
       case "context":    return true;
@@ -610,7 +610,10 @@ function CreatePageInner() {
         {/* ── Theme ───────────────────────────────────────────────────────── */}
         {stepType === "theme" && (
           <section>
-            <p className="text-ink-muted text-sm mb-6">What world will your hero explore?</p>
+            <p className="text-ink-muted text-sm mb-6">
+              What world will your hero explore?{" "}
+              <span className="text-ink-muted/60 text-xs">Optional — skip if you have your own story in mind.</span>
+            </p>
             <div className="grid grid-cols-2 gap-4">
               {THEMES.map((theme) => (
                 <button key={theme.value} type="button"
@@ -1044,13 +1047,15 @@ function CreatePageInner() {
                 "flex-1 bg-brand disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all shadow-brand",
                 canAdvance() && "hover:scale-[1.02]",
               )}>
-              {stepType === "context"
-                ? storyContext.trim() ? "Use this hint →" : "Skip →"
-                : stepType === "characters"
-                  ? selectedCharIds.length > 0
-                    ? `Continue with ${selectedCharIds.length + 1} characters →`
-                    : "Continue solo →"
-                  : "Continue →"}
+              {stepType === "theme"
+                ? selectedTheme ? "Continue →" : "Skip — use my story context →"
+                : stepType === "context"
+                  ? storyContext.trim() ? "Use this hint →" : "Skip →"
+                  : stepType === "characters"
+                    ? selectedCharIds.length > 0
+                      ? `Continue with ${selectedCharIds.length + 1} characters →`
+                      : "Continue solo →"
+                    : "Continue →"}
             </button>
           )}
         </div>
