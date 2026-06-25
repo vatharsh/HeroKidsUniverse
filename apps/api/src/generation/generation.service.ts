@@ -177,7 +177,7 @@ export class GenerationService {
 
       await this.storiesRepo.update(storyId, {
         status: StoryStatus.Completed,
-        title: generated.title,
+        title: generated.title || `${heroName}'s Adventure`,
         pages,
         coverImageUrl: pages[0]?.imageUrl ?? null,
         cliffhanger: generated.cliffhanger ?? null,
