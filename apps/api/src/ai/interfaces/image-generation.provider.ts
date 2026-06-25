@@ -8,6 +8,7 @@ export interface ImageGenerationInput {
   supportingCharacters?: string[]; // e.g. ["Vedant (sibling)", "Luna (friend)"]
   heroAvatarUrl?: string;          // used as reference image for visual consistency
   characterAvatarUrls?: string[];  // one per supporting character, same order
+  styleReferenceUrl?: string;      // first page's image — used to lock visual style across all pages
 }
 
 export interface ImageGenerationOutput {

@@ -119,6 +119,7 @@ export class GenerationService {
         pageCount,
         supportingCharacters: supportingCharLabels,
         universeContext,
+        storyContext: story.storyContext ?? undefined,
       });
 
       const storyCostUsd = await this.logStoryGeneration(storyId, userId, story.universeId ?? null, generated);
@@ -269,6 +270,9 @@ export class GenerationService {
     const imageModel = this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1';
     const costPerImage = await this.getNumberSetting('OPENAI_IMAGE_COST_PER_IMAGE', Number(SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value));
 
+    // Track first page's uploaded image URL as a style anchor for subsequent pages
+    let styleReferenceUrl: string | undefined;
+
     for (const page of generated.pages) {
       let imageUrl: string | undefined;
 
@@ -281,12 +285,18 @@ export class GenerationService {
             supportingCharacters,
             heroAvatarUrl: hero.avatarUrl ?? undefined,
             characterAvatarUrls: characterAvatarUrls.length > 0 ? characterAvatarUrls : undefined,
+            styleReferenceUrl: pages.length > 0 ? styleReferenceUrl : undefined,
             style: 'professional full-color comic book illustration, dynamic action, expressive child hero, polished cover-quality art',
           });
 
           imageUrl = image.imageBase64
             ? await this.uploadService.uploadGeneratedImage(story.userId, story.id, page.pageNumber, image.imageBase64)
             : image.imageUrl || undefined;
+
+          // First page becomes the visual style anchor for all subsequent pages
+          if (pages.length === 0 && imageUrl) {
+            styleReferenceUrl = imageUrl;
+          }
 
           totalCostUsd += costPerImage;
           await this.aiUsageLogsRepo.save(

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { toFile } from 'openai/uploads';
@@ -12,6 +12,7 @@ import {
 
 @Injectable()
 export class OpenAIImageProvider implements ImageGenerationProvider {
+  private readonly logger = new Logger(OpenAIImageProvider.name);
   private readonly client: OpenAI;
   private readonly model: string;
 
@@ -23,21 +24,23 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
 
   async generateImage(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     const castLine = input.supportingCharacters?.length
-      ? `Supporting characters in this scene: ${input.supportingCharacters.join(', ')} — maintain their exact appearance.`
+      ? `Supporting characters in this scene: ${input.supportingCharacters.join(', ')} — their faces, skin tone, hair, clothing, and age must be IDENTICAL to the reference images provided.`
       : '';
 
     const prompt = [
       input.style ?? 'professional full-color comic book illustration, dynamic panels, crisp ink lines',
-      `Main hero: ${input.heroName}, age ${input.heroAge} — keep this character's face and costume identical to the reference image throughout every panel.`,
+      `Main hero: ${input.heroName}, age ${input.heroAge} — face, skin tone, hair colour and style, clothing MUST match the reference image exactly. Do not alter the hero's appearance in any way.`,
       castLine,
       input.sceneDescription,
-      'Child-safe, joyful, cinematic, no text in the image.',
-    ].filter(Boolean).join(' ');
+      'CHARACTER CONSISTENCY IS MANDATORY: every character must look identical to how they appear in the reference images — same face, same hair, same skin tone, same clothing across every page.',
+      'Child-safe, joyful, cinematic, no text overlaid on the image.',
+    ].filter(Boolean).join('\n');
 
-    // Build reference image list: hero first, then characters
+    // Reference order: hero avatar, character avatars, then style reference (first page)
     const refs = [
-      ...(input.heroAvatarUrl        ? [{ url: input.heroAvatarUrl, name: 'hero.png' }]                                       : []),
+      ...(input.heroAvatarUrl           ? [{ url: input.heroAvatarUrl, name: 'hero.png' }]              : []),
       ...(input.characterAvatarUrls ?? []).map((url, i) => ({ url, name: `char-${i}.png` })),
+      ...(input.styleReferenceUrl        ? [{ url: input.styleReferenceUrl, name: 'style_ref.png' }]    : []),
     ];
 
     if (refs.length > 0) {
@@ -55,8 +58,12 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
             size: '1024x1024',
           });
           return this.fromImageResponse(edited);
-        } catch {
-          // Reference-based edit failed — fall through to plain generate
+        } catch (err) {
+          this.logger.warn(
+            `images.edit failed (${refs.length} refs), falling back to generate: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
         }
       }
     }
@@ -77,12 +84,12 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
 
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
+      const timer = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timer);
       if (!res.ok) return null;
       const ct = res.headers.get('content-type') ?? '';
-      if (ct.includes('svg')) return null; // DiceBear SVGs already caught above, belt-and-suspenders
+      if (ct.includes('svg')) return null;
       const buffer = Buffer.from(await res.arrayBuffer());
       return toFile(buffer, name, { type: 'image/png' });
     } catch {

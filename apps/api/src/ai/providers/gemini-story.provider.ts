@@ -67,22 +67,36 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
   private buildPrompt(input: StoryGenerationInput): string {
     const ctx = input.universeContext;
     const heroName = input.heroName;
+
+    // Determine the effective story context: top-level storyContext takes priority, then universe storyContext
+    const effectiveStoryContext = input.storyContext ?? ctx?.storyContext ?? null;
+    const hasCustomStory = !!effectiveStoryContext;
+
     const supportingCharacters = input.supportingCharacters?.length
       ? `Supporting characters in this episode: ${input.supportingCharacters.join(', ')}`
       : 'Supporting characters in this episode: none';
+
     const companionLine = ctx?.companion
-      ? `\nThe hero's loyal companion is ${ctx.companion.name} (a ${ctx.companion.type}), who accompanies them on this adventure and grows alongside the hero across every future episode.`
+      ? `\nThe hero's loyal companion is ${ctx.companion.name} (a ${ctx.companion.type}), who accompanies them on this adventure.`
       : '';
-    const cliffhangerLine = ctx?.lastCliffhanger
+
+    const cliffhangerLine = !hasCustomStory && ctx?.lastCliffhanger
       ? `\nLast Episode Cliffhanger (MUST pick up from this exact moment): "${ctx.lastCliffhanger}"\nLast Episode Title: "${ctx.lastStoryTitle ?? 'Previous Episode'}"`
       : '';
 
+    // Universe section: mandatory narrative anchor when no custom story; optional flavor when custom story is set
     const universeSection = ctx
-      ? `
+      ? (hasCustomStory
+          ? `
+UNIVERSE BACKGROUND (optional flavor — do NOT override the story above):
+Universe: ${ctx.universeName}${ctx.heroTitle ? `, hero title: ${ctx.heroTitle}` : ''}
+You MAY weave in a subtle nod to the universe, but the user's story takes complete precedence.
+${companionLine}
+`
+          : `
 UNIVERSE: ${ctx.universeName}
 Hero Title: ${ctx.heroTitle ?? heroName}
 Story Mode: ${ctx.storyMode}
-User Story Hint: ${ctx.storyContext ?? 'none'}
 ${cliffhangerLine}
 
 Universe Memory (what has already happened):
@@ -102,6 +116,26 @@ IMPORTANT CONTINUITY RULES:
 - If storyMode is "new_arc", introduce a fresh threat but keep universe consistent
 - The story may earn the hero a new power or item (you will declare this in extras)
 - The story may open a new quest (you will declare this in extras)
+`)
+      : '';
+
+    // Primary story directive when user has provided explicit context
+    const customStoryDirective = hasCustomStory
+      ? `
+══════════════════════════════════════════════════════
+MANDATORY STORY DIRECTIVE — YOU MUST FOLLOW THIS EXACTLY
+══════════════════════════════════════════════════════
+The user has provided a specific story to adapt. Adapt THIS story faithfully into a ${input.pageCount}-page children's storybook:
+
+"${effectiveStoryContext}"
+
+YOU MUST:
+- Keep the exact characters, setting, activities, and emotional journey from the story above
+- Preserve the real names as given (Siddhant, Vedant, Daadu, Daadi, etc.)
+- Follow the sequence of events described
+- Do NOT invent a different adventure or rename the story with universe titles
+- The title must reflect the actual story above, not a universe-generated title
+══════════════════════════════════════════════════════
 `
       : '';
 
@@ -111,38 +145,40 @@ IMPORTANT CONTINUITY RULES:
       `    { "pageNumber": ${i + 1}, "text": "...", "sceneDescription": "..." }`,
     ).join(',\n');
 
-    return `You are a creative children's storybook author for HeroKids Universe - a living world where children are heroes across many adventures.
+    const heroRef = hasCustomStory ? input.heroName : (ctx?.heroTitle ?? input.heroName);
 
+    return `You are a creative children's storybook author for HeroKids Universe.
+${customStoryDirective}
 Hero details:
 - Name: ${input.heroName}
 - Age: ${input.heroAge}
 - Gender: ${input.heroGender}
-- Adventure theme: ${input.themeDescription}
+${hasCustomStory ? '' : `- Adventure theme: ${input.themeDescription}`}
 ${supportingCharacters}
 ${universeSection}
 
-Write a ${n}-page illustrated comic story where ${ctx?.heroTitle ?? input.heroName} is the main hero.
+Write a ${n}-page illustrated storybook where ${heroRef} is the main character.
 
 Rules:
 - Each page: 2-3 short sentences (max 40 words per page) suitable for age ${input.heroAge}
 - Use simple, exciting language kids love
-- Include dialogue and action
-- Build to an exciting climax on page ${climaxPage}
-- Page ${n}: resolve happily BUT end with a soft cliffhanger sentence that hints at the next adventure
-- The hero always wins through kindness, courage, or cleverness - never violence
-- Naturally reference universe history if provided
+- Include dialogue and warm emotion
+- Build to a joyful climax on page ${climaxPage}
+- Page ${n}: resolve happily — end with a soft sentence hinting at the next adventure
+- The hero always succeeds through kindness, courage, or cleverness — never violence
+${hasCustomStory ? '- STAY TRUE to the user\'s story — do not drift into a different adventure' : '- Naturally reference universe history if provided'}
+
+CRITICAL SCENE DESCRIPTION RULE:
+Each sceneDescription must include a brief visual description of EVERY character who appears in that scene — their approximate age, skin tone, hair colour and style, and clothing. This is essential for the illustrator to draw each character consistently across all pages.
+Example: "Siddhant (8-year-old boy, warm brown skin, short black hair, red jacket) laughs with Vedant (6-year-old boy, brown skin, curly black hair, blue shirt) on the Ferris wheel."
 
 Respond with ONLY valid JSON (no markdown, no code fences):
 {
   "title": "Story title here",
-  "cliffhanger": "One sentence hinting at the next adventure, e.g. As Arjun held the Magic Stardust...",
-  "newPowers": ["Power Name 1"],
-  "newQuests": ["Quest title that was opened in this story"],
-  "newMemories": [
-    { "type": "power_earned", "title": "Earned Magic Stardust", "detail": "Found in the Crystal Cave" },
-    { "type": "villain_defeated", "title": "Defeated Shadow Bot", "detail": "Used teamwork and courage" },
-    { "type": "location_discovered", "title": "Moon Crystal Cave", "detail": "Hidden beneath the lunar surface" }
-  ],
+  "cliffhanger": "One sentence hinting at the next adventure",
+  "newPowers": [],
+  "newQuests": [],
+  "newMemories": [],
   "pages": [
 ${pageEntries}
   ]

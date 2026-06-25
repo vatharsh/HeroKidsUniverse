@@ -26,6 +26,8 @@ export interface StoryGenerationInput {
   pageCount: number;
   supportingCharacters?: string[];
   universeContext?: UniverseContext;
+  /** User-provided story context — when set, it OVERRIDES universe-driven story generation */
+  storyContext?: string;
 }
 
 export interface StoryGenerationOutput {
