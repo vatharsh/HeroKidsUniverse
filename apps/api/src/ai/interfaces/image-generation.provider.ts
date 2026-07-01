@@ -22,6 +22,7 @@ export interface ImageGenerationInput {
   characters?: Array<{ name: string; expression?: string; pose?: string }>;
   camera?: string;
   identityBoostMode?: boolean; // regeneration pass after a failed face consistency check
+  backgroundOnlyMode?: boolean; // generate scene/environment only — hero avatar will be overlaid by frontend
   heroCanonSummary?: string;
   heroNeverChangeRules?: string[];
   heroFaceMetrics?: string;
