@@ -10,6 +10,9 @@ import * as crypto from 'crypto';
 import type Razorpay from 'razorpay';
 import { DataSource, Repository } from 'typeorm';
 
+import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
+import { OrderStatusHistory } from '../merchandise/order-status-history.entity';
+import { CommerceOrderStatus, CommerceOrderType, Order } from '../merchandise/orders/order.entity';
 import { User } from '../users/user.entity';
 import { CreditPack, CreditPackType } from './credit-pack.entity';
 import { CreditTransaction, CreditTransactionReason } from './credit-transaction.entity';
@@ -39,6 +42,12 @@ export class CreditPacksService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(CreditTransaction)
     private readonly transactionsRepository: Repository<CreditTransaction>,
+    @InjectRepository(Order)
+    private readonly ordersRepository: Repository<Order>,
+    @InjectRepository(OrderStatusHistory)
+    private readonly statusHistoryRepository: Repository<OrderStatusHistory>,
+    @InjectRepository(PlatformSetting)
+    private readonly platformSettingsRepository: Repository<PlatformSetting>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -182,7 +191,7 @@ export class CreditPacksService {
     if (!pack) throw new NotFoundException('Credit pack not found');
     const { effectivePrice } = this.computeEffectivePrice(pack);
 
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const user = await manager.findOne(User, { where: { id: userId } });
       if (!user) throw new NotFoundException('User not found');
 
@@ -213,12 +222,11 @@ export class CreditPacksService {
         }),
       );
 
-      return {
-        newBalance: user.credits,
-        characterSlotsTotal: user.characterSlotsTotal,
-        avatarRefreshTokens: user.avatarRefreshTokens,
-      };
+      return { user, newBalance: user.credits, characterSlotsTotal: user.characterSlotsTotal, avatarRefreshTokens: user.avatarRefreshTokens };
     });
+
+    void this.createCreditOrder(userId, pack, effectivePrice, razorpayOrderId, razorpayPaymentId, result.user);
+    return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
   }
 
   async mockPurchase(
@@ -233,7 +241,7 @@ export class CreditPacksService {
     const mockPaymentId = `mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const mockOrderId = `mock_order_${Date.now()}`;
 
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const user = await manager.findOne(User, { where: { id: userId } });
       if (!user) throw new NotFoundException('User not found');
 
@@ -257,12 +265,62 @@ export class CreditPacksService {
         }),
       );
 
-      return {
-        newBalance: user.credits,
-        characterSlotsTotal: user.characterSlotsTotal,
-        avatarRefreshTokens: user.avatarRefreshTokens,
-      };
+      return { user, newBalance: user.credits, characterSlotsTotal: user.characterSlotsTotal, avatarRefreshTokens: user.avatarRefreshTokens };
     });
+
+    void this.createCreditOrder(userId, pack, effectivePrice, mockOrderId, `${paymentMethod}_${mockPaymentId}`, result.user);
+    return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
+  }
+
+  private async isSandboxMode(): Promise<boolean> {
+    const row = await this.platformSettingsRepository.findOne({ where: { key: 'SANDBOX_MODE' } });
+    if (row) return row.value === 'true' || row.value === '1';
+    return SETTING_DEFAULTS['SANDBOX_MODE']?.value === 'true';
+  }
+
+  private generateOrderNumber(): string {
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+    return `HKU-CP-${stamp}-${random}`;
+  }
+
+  private async createCreditOrder(
+    userId: string,
+    pack: CreditPack,
+    effectivePrice: number,
+    razorpayOrderId: string,
+    razorpayPaymentId: string,
+    user: User,
+  ): Promise<void> {
+    const isSandbox = await this.isSandboxMode();
+    const order = this.ordersRepository.create({
+      userId,
+      orderNumber: this.generateOrderNumber(),
+      orderType: CommerceOrderType.CreditPurchase,
+      status: CommerceOrderStatus.DigitalReady,
+      subtotalAmount: effectivePrice,
+      discountAmount: 0,
+      shippingAmount: 0,
+      taxAmount: 0,
+      totalAmount: effectivePrice,
+      currency: pack.currency ?? 'INR',
+      customerName: user.name ?? null,
+      customerEmail: user.email ?? null,
+      customerPhone: null,
+      paymentMethod: null,
+      adminNotes: `Credit pack: ${pack.name} | +${pack.credits + pack.bonusCredits} credits | Razorpay: ${razorpayPaymentId}`,
+      isSandbox,
+    });
+    const saved = await this.ordersRepository.save(order);
+    await this.statusHistoryRepository.save(
+      this.statusHistoryRepository.create({
+        orderId: saved.id,
+        oldStatus: null,
+        newStatus: CommerceOrderStatus.DigitalReady,
+        note: `Credit pack purchase: ${pack.name}`,
+        changedByUserId: userId,
+      }),
+    );
   }
 
   private validatePackInput(dto: CreditPackPayload) {

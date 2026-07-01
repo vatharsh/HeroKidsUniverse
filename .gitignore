@@ -36,3 +36,15 @@ coverage
 
 # Misc
 *.tsbuildinfo
+
+# Uploaded user files
+apps/api/uploads/
+
+# Sensitive / scratch files
+pswd.txt
+cmd
+codex-influencer-prompt.txt
+
+# Editor swap files
+*.swp
+*.swo

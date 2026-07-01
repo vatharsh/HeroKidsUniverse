@@ -55,6 +55,7 @@ export class CharactersService {
           dob: createCharacterDto.dob ?? null,
           photoUrl: null,
           avatarUrl: createCharacterDto.avatarUrl ?? null,
+          avatarDescription: null,
         }),
       );
 
@@ -72,9 +73,10 @@ export class CharactersService {
     });
 
     if (photo) {
-      await this.consumeAvatarRefresh(userId, character.id);
       character.photoUrl = await this.uploadService.uploadCharacterPhoto(userId, photo);
-      character.avatarUrl = await this.generateAvatar(userId, createCharacterDto.name, createCharacterDto.role, photo);
+      const result = await this.generateAvatar(userId, createCharacterDto.name, createCharacterDto.role, photo);
+      character.avatarUrl = result.avatarUrl;
+      character.avatarDescription = result.avatarDescription;
       character = await this.charactersRepository.save(character);
     }
 
@@ -130,7 +132,9 @@ export class CharactersService {
     if (photo) {
       await this.consumeAvatarRefresh(userId, character.id);
       character.photoUrl = await this.uploadService.uploadCharacterPhoto(userId, photo);
-      character.avatarUrl = await this.generateAvatar(userId, character.name, character.role, photo);
+      const result = await this.generateAvatar(userId, character.name, character.role, photo);
+      character.avatarUrl = result.avatarUrl;
+      character.avatarDescription = result.avatarDescription;
     } else if (updateCharacterDto.avatarUrl !== undefined) {
       character.avatarUrl = updateCharacterDto.avatarUrl;
     }
@@ -149,7 +153,9 @@ export class CharactersService {
 
     const avatarRefreshTokens = await this.consumeAvatarRefresh(userId, character.id);
     character.photoUrl = await this.uploadService.uploadCharacterPhoto(userId, photo);
-    character.avatarUrl = await this.generateAvatar(userId, character.name, character.role, photo, adjustmentHint);
+    const result = await this.generateAvatar(userId, character.name, character.role, photo, adjustmentHint);
+    character.avatarUrl = result.avatarUrl;
+    character.avatarDescription = result.avatarDescription;
     if (!character.avatarUrl) throw new BadRequestException('Avatar refresh failed. Please try again.');
     await this.charactersRepository.save(character);
 
@@ -167,28 +173,34 @@ export class CharactersService {
     role: string | undefined,
     photo: Express.Multer.File,
     adjustmentHint?: string,
-  ): Promise<string | null> {
+  ): Promise<{ avatarUrl: string | null; avatarDescription: string | null }> {
     try {
-      const avatar = await this.imageProvider.generateAvatar({
-        name,
-        role,
-        photoBuffer: photo.buffer,
-        photoMimeType: photo.mimetype,
-        adjustmentHint: adjustmentHint?.trim() || undefined,
-      });
+      const [avatar, avatarDescription] = await Promise.all([
+        this.imageProvider.generateAvatar({
+          name,
+          role,
+          photoBuffer: photo.buffer,
+          photoMimeType: photo.mimetype,
+          adjustmentHint: adjustmentHint?.trim() || undefined,
+        }),
+        this.imageProvider.describeCharacterAppearance(photo.buffer, photo.mimetype),
+      ]);
 
+      let avatarUrl: string | null = null;
       if (avatar.imageBase64) {
-        return this.uploadService.uploadCharacterAvatar(userId, avatar.imageBase64);
+        avatarUrl = await this.uploadService.uploadCharacterAvatar(userId, avatar.imageBase64);
+      } else {
+        avatarUrl = avatar.imageUrl || null;
       }
 
-      return avatar.imageUrl || null;
+      return { avatarUrl, avatarDescription };
     } catch (err) {
       this.logger.warn(
         `Avatar generation failed for character ${name}: ${
           err instanceof Error ? err.message : 'Unknown error'
         }`,
       );
-      return null;
+      return { avatarUrl: null, avatarDescription: null };
     }
   }
 

@@ -68,39 +68,25 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* Right — comic book preview */}
-        <div className="lg:w-[470px] flex items-center justify-center relative py-12">
+        {/* Right — storybook preview */}
+        <div className="lg:w-[500px] w-full flex items-center justify-center relative py-8 lg:py-12">
           {/* Floating stars */}
           {[
-            { top: "-2px", right: "32px", size: "text-2xl", delay: "0s", dur: "3s" },
-            { bottom: "32px", right: "-8px", size: "text-xl", delay: "1.2s", dur: "4s" },
-            { top: "33%", left: "-32px", size: "text-lg", delay: "0.6s", dur: "3.5s" },
+            { top: "18px", right: "42px", delay: "0s", dur: "3s" },
+            { bottom: "74px", right: "12px", delay: "1.2s", dur: "4s" },
+            { top: "38%", left: "-8px", delay: "0.6s", dur: "3.5s" },
             { top: "10%", left: "5%", size: "text-sm", delay: "1.8s", dur: "5s" },
           ].map((s, i) => (
             <span
               key={i}
-              className="absolute text-gold opacity-50 pointer-events-none select-none animate-float"
+              className="absolute text-gold opacity-50 pointer-events-none select-none animate-float text-xl"
               style={{ top: s.top, right: s.right, bottom: s.bottom, left: s.left, fontSize: undefined, animationDelay: s.delay, animationDuration: s.dur }}
             >
               ✦
             </span>
           ))}
 
-          {/* Label above */}
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-center z-20">
-            <span className="bg-gold/20 border border-gold/40 text-gold text-xs font-bold tracking-wider px-3 py-1 rounded-full backdrop-blur">
-              REAL STORY · ARJUN'S UNIVERSE
-            </span>
-          </div>
-
           <StoryBook />
-
-          {/* Label below */}
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-center z-20">
-            <span className="text-white/40 text-xs">
-              9 episodes and counting · Powers: Cosmic Flame, Star Shield
-            </span>
-          </div>
         </div>
       </div>
 

@@ -3,8 +3,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AiModule } from './ai/ai.module';
+import { AIQualityAssuranceModule } from './ai/ai-quality-assurance.module';
 import { AiUsageLog } from './ai/entities/ai-usage-log.entity';
+import { PromptRunSnapshot } from './ai/entities/prompt-run-snapshot.entity';
+import { PromptTemplateVersion } from './ai/entities/prompt-template-version.entity';
+import { PromptTemplate } from './ai/entities/prompt-template.entity';
+import { StoryQaRun } from './ai/entities/story-qa-run.entity';
+import { StoryQaPage } from './ai/entities/story-qa-page.entity';
 import { AdminModule } from './admin/admin.module';
+import { ReportsModule } from './reports/reports.module';
 import { StoryGenerationCost } from './ai/entities/story-generation-cost.entity';
 import { StoryGenerationLog } from './ai/entities/story-generation-log.entity';
 import { AppController } from './app.controller';
@@ -16,6 +23,8 @@ import { AvatarsModule } from './avatars/avatars.module';
 import { PlatformSetting } from './admin/platform-setting.entity';
 import { UserAvatar } from './avatars/entities/user-avatar.entity';
 import { CharactersModule } from './characters/characters.module';
+import { CharacterCanonModule } from './characters/character-canon.module';
+import { CharacterCanon } from './characters/entities/character-canon.entity';
 import { CharacterVisualProfile } from './characters/entities/character-visual-profile.entity';
 import { Character } from './characters/entities/character.entity';
 import { CompanionsModule } from './companions/companions.module';
@@ -27,6 +36,7 @@ import { CreditTransaction } from './credits/credit-transaction.entity';
 import { CreditsModule } from './credits/credits.module';
 import { GenerationJob } from './generation/generation-job.entity';
 import { InfluencersModule } from './influencers/influencers.module';
+import { CouponUsageRecord } from './influencers/coupon-usage-record.entity';
 import { InfluencerCommission } from './influencers/influencer-commission.entity';
 import { InfluencerCommissionRule } from './influencers/influencer-commission-rule.entity';
 import { InfluencerCouponCode } from './influencers/influencer-coupon-code.entity';
@@ -68,7 +78,10 @@ import { UniverseMemory } from './universes/universe-memory.entity';
 import { Universe } from './universes/universe.entity';
 import { UniversesModule } from './universes/universes.module';
 import { UploadModule } from './upload/upload.module';
+import { UserAddress } from './users/user-address.entity';
+import { UserNotificationPreferences } from './users/user-notification-preferences.entity';
 import { User } from './users/user.entity';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -82,6 +95,7 @@ import { User } from './users/user.entity';
           User,
           Hero,
           Character,
+          CharacterCanon,
           UniverseCompanion,
           Story,
           CreditPack,
@@ -92,8 +106,13 @@ import { User } from './users/user.entity';
           HeroPower,
           StoryArc,
           AiUsageLog,
+          PromptTemplate,
+          PromptTemplateVersion,
+          PromptRunSnapshot,
           StoryGenerationLog,
           StoryGenerationCost,
+          StoryQaRun,
+          StoryQaPage,
           PlatformSetting,
           UserAvatar,
           GenerationJob,
@@ -115,8 +134,11 @@ import { User } from './users/user.entity';
           OrderPaymentSummary,
           OrderPaymentDetail,
           Payment,
+          UserAddress,
+          UserNotificationPreferences,
           Influencer,
           InfluencerReferral,
+          CouponUsageRecord,
           InfluencerCouponCode,
           InfluencerCommissionRule,
           InfluencerCommission,
@@ -128,11 +150,15 @@ import { User } from './users/user.entity';
       }),
     }),
     AiModule,
+    AIQualityAssuranceModule,
     AdminModule,
+    UsersModule,
+    ReportsModule,
     AuthModule,
     AvatarsModule,
     HeroesModule,
     CharactersModule,
+    CharacterCanonModule,
     CompanionsModule,
     StoriesModule,
     CreditsModule,

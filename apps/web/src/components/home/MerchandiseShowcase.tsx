@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import ProductMockup from "@/components/shared/ProductMockup";
+import { useAuth } from "@/contexts/AuthContext";
 
 const DEMO_HERO = "Arjun";
 
@@ -55,6 +56,7 @@ const PRODUCTS = [
 ];
 
 export default function MerchandiseShowcase() {
+  const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   function scroll(dir: "left" | "right") {
@@ -132,7 +134,7 @@ export default function MerchandiseShowcase() {
                   </div>
                   <p className="text-ink-muted text-xs mb-4">{p.tagline}</p>
                   <a
-                    href="/register"
+                    href={user ? "/create" : "/register"}
                     className="block w-full text-center bg-brand/8 hover:bg-brand hover:text-white border border-brand/20 hover:border-brand text-brand text-sm font-semibold py-2.5 rounded-full transition-all"
                   >
                     Order for my hero →

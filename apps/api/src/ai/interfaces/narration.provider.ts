@@ -3,6 +3,7 @@ export const NARRATION_PROVIDER = 'NARRATION_PROVIDER';
 export interface NarrationInput {
   text: string;
   voice?: string;
+  speed?: number;
   language?: string;
   accent?: string;
   tone?: string;

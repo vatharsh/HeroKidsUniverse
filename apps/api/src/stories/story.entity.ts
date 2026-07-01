@@ -43,11 +43,134 @@ export enum VideoStatus {
   Failed      = 'failed',
 }
 
+export interface PageDialogue {
+  speaker: string;
+  text: string;
+  emotion?: string;
+  bubbleStyle?: string;
+  placementHint?: string;
+}
+
+export interface PageCharacter {
+  name: string;
+  expression?: string;
+  pose?: string;
+  expressionDetails?: { eyes?: string; mouth?: string; eyebrows?: string; gaze?: string; headTilt?: string };
+  facingDirection?: string;
+  gazeDirection?: string;
+  isSpeaking?: boolean;
+  reactionToScene?: string;
+}
+
+export interface PageCharacterDirection {
+  characterId?: string;
+  name: string;
+  role?: string;
+  visible?: boolean;
+  position?: 'left' | 'center' | 'right' | 'foreground' | 'background';
+  expression: string;
+  expressionDetails?: { eyes?: string; mouth?: string; eyebrows?: string; gaze?: string; headTilt?: string };
+  pose: string;
+  action?: string;
+  lookingAt?: string;
+  facingDirection?: string;
+  gazeDirection?: string;
+  mouthState?: 'speaking' | 'closed' | 'smiling' | 'surprised';
+  isSpeaking?: boolean;
+  reactionToScene?: string;
+  requiredVisibleFeatures?: string[];
+}
+
+export interface SpeechBubbleMetadata {
+  speakerCharacterId?: string;
+  speakerName: string;
+  text: string;
+  emotion?: string;
+  bubbleStyle?: string;
+  preferredPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  tailDirection?: 'down-left' | 'down-right' | 'up-left' | 'up-right';
+  avoidCovering?: string[];
+  maxWidthPercent?: number;
+  anchor?: 'mouth' | 'lower_face' | 'head' | 'upper_left' | 'upper_right';
+  anchorTarget?: 'mouth' | 'lower_face' | 'head';
+  anchorPoint?: { x: number; y: number };
+  bubbleRect?: { x: number; y: number; width: number; height: number };
+  layoutConfidence?: number;
+  placementHint?: string;
+  priority?: number;
+}
+
+export interface PageStoryStateUpdate {
+  newItems?: string[];
+  removedItems?: string[];
+  newPowers?: string[];
+  removedPowers?: string[];
+  newCompanions?: string[];
+  removedCompanions?: string[];
+  locationChange?: string;
+  costumeChange?: string;
+}
+
 export interface StoryPage {
   pageNumber: number;
   text: string;
+  narrationText?: string;
+  finalNarrationText?: string;
   imageUrl?: string;
   audioUrl?: string;
+  sceneDescription?: string;
+  dialogue?: PageDialogue[];
+  characters?: PageCharacter[];
+  camera?: string;
+  cropHint?: string;
+  sceneId?: string;
+  background?: string;
+  speechBubbles?: Array<{
+    speakerCharacterId?: string;
+    speakerName: string;
+    text: string;
+    emotion?: string;
+    bubbleStyle?: string;
+    preferredPosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+    tailDirection?: 'down-left' | 'down-right' | 'up-left' | 'up-right';
+    avoidCovering?: string[];
+    maxWidthPercent?: number;
+    anchor?: 'mouth' | 'lower_face' | 'head' | 'upper_left' | 'upper_right';
+    anchorTarget?: 'mouth' | 'lower_face' | 'head';
+    anchorPoint?: { x: number; y: number };
+    bubbleRect?: { x: number; y: number; width: number; height: number };
+    layoutConfidence?: number;
+    placementHint?: string;
+    priority?: number;
+  }>;
+  storyStateSnapshot?: {
+    location?: string;
+    costume?: string;
+    items?: string[];
+    powers?: string[];
+    companions?: string[];
+  };
+  imagePromptUsed?: string;
+  characterDirections?: PageCharacterDirection[];
+  storyStateUpdate?: PageStoryStateUpdate;
+}
+
+export interface StoryVisualState {
+  costume: string | null;
+  companion: string | null;
+  weapon: string | null;
+  powers: string[];
+  inventory: string[];
+  transformation: string | null;
+  currentLocation?: string;
+}
+
+export interface StoryScene {
+  sceneId: string;
+  title: string;
+  illustrationUrl: string | null;
+  illustrationBrief: string;
+  pageNumbers: number[];
 }
 
 @Entity('stories')
@@ -88,6 +211,12 @@ export class Story {
   @Column({ type: 'jsonb', default: () => "'[]'" })
   pages!: StoryPage[];
 
+  @Column({ type: 'jsonb', nullable: true })
+  storyVisualState!: StoryVisualState | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  scenes!: StoryScene[] | null;
+
   @Column({ type: 'text', nullable: true })
   coverImageUrl!: string | null;
 
@@ -108,6 +237,12 @@ export class Story {
 
   @Column({ type: 'enum', enum: VideoStatus, nullable: true })
   videoStatus!: VideoStatus | null;
+
+  @Column({ type: 'boolean', default: false })
+  isSandbox!: boolean;
+
+  @Column({ type: 'float', nullable: true })
+  overallConfidence!: number | null;
 
   @CreateDateColumn()
   createdAt!: Date;

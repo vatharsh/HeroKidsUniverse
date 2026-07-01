@@ -61,6 +61,14 @@ const stars = [
   { x: 2, y: 59, size: 2, duration: 2.9, delay: 0.4 },
 ];
 
+const shootingStars = [
+  { top: "10%", left: "4%", delay: "0.4s", duration: "4.8s", length: 138 },
+  { top: "24%", left: "22%", delay: "2.9s", duration: "5.6s", length: 112 },
+  { top: "38%", left: "48%", delay: "5.8s", duration: "5.2s", length: 128 },
+  { top: "7%", left: "66%", delay: "8.1s", duration: "6.1s", length: 96 },
+  { top: "56%", left: "13%", delay: "10.7s", duration: "5.4s", length: 118 },
+];
+
 export default function StarField() {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -76,6 +84,19 @@ export default function StarField() {
             borderRadius: "50%",
             backgroundColor: "white",
             animation: `twinkle ${star.duration}s ease-in-out infinite ${star.delay}s`,
+          }}
+        />
+      ))}
+      {shootingStars.map((star, index) => (
+        <span
+          key={`shooting-${index}`}
+          className="shooting-star"
+          style={{
+            top: star.top,
+            left: star.left,
+            width: `${star.length}px`,
+            animationDelay: star.delay,
+            animationDuration: star.duration,
           }}
         />
       ))}

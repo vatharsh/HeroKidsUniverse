@@ -1,5 +1,7 @@
 "use client";
 
+import { useAuth } from "@/contexts/AuthContext";
+
 const MILESTONES = [
   {
     id: "story1",
@@ -59,6 +61,7 @@ const MILESTONES = [
 ];
 
 export default function UniverseTimeline() {
+  const { user } = useAuth();
   return (
     <section className="py-24 bg-space-gradient relative overflow-hidden">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[300px] bg-brand/10 rounded-full blur-[100px] pointer-events-none" />
@@ -122,9 +125,17 @@ export default function UniverseTimeline() {
               Villain defeated: The Shadow Swirl. Next arc teased: The Crystal Realm awaits.
             </p>
           </div>
-          <div className="flex flex-col items-center gap-1 shrink-0">
-            <span className="text-4xl font-[family-name:var(--font-display)] text-gold font-black">9</span>
-            <span className="text-white/40 text-xs">episodes</span>
+          <div className="flex flex-col items-center gap-3 shrink-0">
+            <div className="text-center">
+              <span className="text-4xl font-[family-name:var(--font-display)] text-gold font-black">9</span>
+              <p className="text-white/40 text-xs">episodes</p>
+            </div>
+            <a
+              href="/demo"
+              className="bg-brand/20 hover:bg-brand/40 border border-brand/40 text-brand hover:text-white text-xs font-bold px-4 py-2 rounded-full transition-all whitespace-nowrap"
+            >
+              See the full universe →
+            </a>
           </div>
         </div>
 
@@ -132,7 +143,7 @@ export default function UniverseTimeline() {
         <div className="text-center mt-12">
           <p className="text-white/40 text-sm mb-4">How many episodes will your child&apos;s universe reach?</p>
           <a
-            href="/register"
+            href={user ? "/create" : "/register"}
             className="inline-block bg-brand hover:bg-brand-dark text-white font-bold px-10 py-4 rounded-full shadow-brand transition-all hover:scale-105 text-lg"
           >
             Start Episode 1 →

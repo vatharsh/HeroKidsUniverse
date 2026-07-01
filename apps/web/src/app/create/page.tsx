@@ -17,12 +17,12 @@ type CharRole   = "friend" | "sibling" | "pet" | "villain" | "other";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
-const STORY_MODES = [
+const UNIVERSE_MODES = [
   {
     value: "new_adventure",
     emoji: "🌟",
     label: "New Adventure",
-    description: "A brand-new story in your universe.",
+    description: "A brand-new story that builds on your universe.",
   },
   {
     value: "continue_arc",
@@ -34,21 +34,20 @@ const STORY_MODES = [
     value: "new_arc",
     emoji: "🗺️",
     label: "New Story Arc",
-    description: "Start a new chapter with fresh stakes.",
-  },
-  {
-    value: "standalone",
-    emoji: "📖",
-    label: "Standalone Story",
-    description: "A one-off tale saved independently — not added to any universe.",
-  },
-  {
-    value: "freeform",
-    emoji: "✏️",
-    label: "Write My Own",
-    description: "Describe exactly what you want. Saved independently, not tied to any universe.",
+    description: "Start a fresh chapter with new stakes.",
   },
 ];
+
+const STANDALONE_MODES = [
+  {
+    value: "standalone",
+    emoji: "✏️",
+    label: "Write My Own",
+    description: "Saved independently — not tied to any universe. Pick a theme or describe your own story in the next steps.",
+  },
+];
+
+const STORY_MODES = [...UNIVERSE_MODES, ...STANDALONE_MODES];
 
 const THEMES = [
   { value: "space-adventure",      emoji: "🚀", name: "Space Adventure",      gradient: "from-indigo-950 to-purple-900" },
@@ -88,7 +87,7 @@ const STEP_LABELS: Record<StepType, string> = {
 
 const HEADER_TITLES: Record<StepType, string> = {
   hero:       "Who is the hero?",
-  mode:       "Choose story mode",
+  mode:       "What kind of story?",
   theme:      "Choose the adventure",
   characters: "Who joins this episode?",
   companion:  "Does your hero have a companion?",
@@ -132,6 +131,12 @@ interface LastStory {
   createdAt: string;
 }
 
+interface Universe {
+  id: string;
+  name: string;
+  heroTitle: string | null;
+}
+
 function CreatePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -161,9 +166,16 @@ function CreatePageInner() {
   const [charSaving, setCharSaving]           = useState(false);
   const charPhotoRef = useRef<HTMLInputElement>(null);
 
+  // Universe state (for general path universe picker)
+  const [universes, setUniverses]               = useState<Universe[]>([]);
+  const [selectedUniverseId, setSelectedUniverseId] = useState<string | null>(null);
+  // null = still loading, true/false = resolved
+  const [universeHasStories, setUniverseHasStories] = useState<boolean | null>(preselectedUniverseId ? null : true);
+
   // Story state
   const [step, setStep]                 = useState(0);
-  const [storyMode, setStoryMode]       = useState("new_adventure");
+  // Default to standalone for general path; universe path defaults to new_adventure
+  const [storyMode, setStoryMode]       = useState(() => preselectedUniverseId ? "new_adventure" : "standalone");
   const [selectedTheme, setSelectedTheme] = useState("");
   const [storyContext, setStoryContext] = useState("");
 
@@ -186,15 +198,32 @@ function CreatePageInner() {
     if (!token) { setHeroLoading(false); return; }
     const h = { Authorization: `Bearer ${token}` };
 
+    const storiesUrl = preselectedUniverseId
+      ? `${BASE}/stories?universeId=${preselectedUniverseId}`
+      : null;
+
     Promise.all([
-      fetch(`${BASE}/heroes`,     { headers: h }).then(r => r.json()).catch(() => ({ data: [] })),
-      fetch(`${BASE}/characters`, { headers: h }).then(r => r.json()).catch(() => ({ data: [] })),
-    ]).then(([heroRes, charRes]) => {
+      fetch(`${BASE}/heroes`,        { headers: h }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${BASE}/characters`,    { headers: h }).then(r => r.json()).catch(() => ({ data: [] })),
+      fetch(`${BASE}/universes/mine`,{ headers: h }).then(r => r.json()).catch(() => ({ data: [] })),
+      storiesUrl
+        ? fetch(storiesUrl, { headers: h }).then(r => r.json()).catch(() => ({ data: [] }))
+        : Promise.resolve({ data: [] }),
+    ]).then(([heroRes, charRes, univRes, storiesRes]) => {
       if (Array.isArray(heroRes.data) && heroRes.data.length > 0) {
         setHero(heroRes.data[0] as ExistingHero);
       }
       if (Array.isArray(charRes.data)) {
         setCharacters(charRes.data as Character[]);
+      }
+      if (Array.isArray(univRes.data)) {
+        setUniverses(univRes.data as Universe[]);
+        // Auto-select single universe so user doesn't have to pick
+        if (univRes.data.length === 1) setSelectedUniverseId(univRes.data[0].id);
+      }
+      if (preselectedUniverseId) {
+        const stories = Array.isArray(storiesRes.data) ? storiesRes.data : [];
+        setUniverseHasStories(stories.length > 0);
       }
     }).finally(() => setHeroLoading(false));
   }, []);
@@ -205,27 +234,37 @@ function CreatePageInner() {
   const stepSequence = useMemo<StepType[]>(() => {
     const arr: StepType[] = [];
     if (!hasHero) arr.push("hero");
-    arr.push("mode");
+    // Skip mode selection for new universes — only "New Adventure" makes sense for the first story
+    if (!(preselectedUniverseId && universeHasStories === false)) arr.push("mode");
     if (storyMode !== "freeform") arr.push("theme");
     arr.push("characters");
     arr.push("companion");
     arr.push("context");
     arr.push("generate");
     return arr;
-  }, [hasHero, storyMode]);
+  }, [hasHero, storyMode, preselectedUniverseId, universeHasStories]);
 
   const stepType = stepSequence[step] ?? "generate";
   const stepLabels = stepSequence.map(s => STEP_LABELS[s]);
   const selectedThemeData = THEMES.find(t => t.value === selectedTheme);
 
   // Reset theme when switching to freeform; fetch last story for continue_arc
+  const isUniverseMode = (mode: string) => ["new_adventure", "continue_arc", "new_arc"].includes(mode);
+
   function handleModeSelect(mode: string) {
     setStoryMode(mode);
-    if (mode === "freeform") setSelectedTheme("");
+    if (!isUniverseMode(mode)) {
+      setSelectedTheme("");
+      setSelectedUniverseId(null);
+    } else if (universes.length === 1) {
+      setSelectedUniverseId(universes[0].id);
+    }
     if (mode === "continue_arc" && !lastStory && !lastStoryLoading) {
       setLastStoryLoading(true);
       const token = localStorage.getItem("hvu_access");
-      fetch(`${BASE}/stories`, { headers: { Authorization: `Bearer ${token}` } })
+      const univId = preselectedUniverseId ?? (universes.length === 1 ? universes[0].id : null);
+      const url = univId ? `${BASE}/stories?universeId=${univId}` : `${BASE}/stories`;
+      fetch(url, { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json())
         .then(({ data }) => {
           const stories: LastStory[] = Array.isArray(data) ? data : [];
@@ -309,7 +348,12 @@ function CreatePageInner() {
   function canAdvance(): boolean {
     switch (stepType) {
       case "hero":       return !!heroName.trim() && !!heroDob && !!heroGender && (!photoFile || consented);
-      case "mode":       return !!storyMode;
+      case "mode": {
+        if (!storyMode) return false;
+        // On general path with a universe mode selected, must have a universe picked
+        if (!preselectedUniverseId && isUniverseMode(storyMode) && universes.length > 0 && !selectedUniverseId) return false;
+        return true;
+      }
       case "theme":      return true;
       case "characters": return true;
       case "companion":  return true;
@@ -360,19 +404,19 @@ function CreatePageInner() {
         }
       }
 
-      const isFreeform = storyMode === "freeform";
-      // Standalone and freeform stories are always independent — never attached to a universe
-      const isIndependent = storyMode === "standalone" || isFreeform;
+      const isIndependent = storyMode === "standalone";
+      // Universe ID: from URL param (universe button path) or from picker (general path)
+      const effectiveUniverseId = isIndependent ? undefined : (preselectedUniverseId ?? selectedUniverseId ?? undefined);
       const storyRes = await fetch(`${BASE}/stories`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
           heroId,
-          theme: isFreeform ? undefined : (selectedTheme || undefined),
-          storyMode: isFreeform ? "standalone" : storyMode,
+          theme: selectedTheme || undefined,
+          storyMode,
           storyContext: storyContext.trim() || undefined,
           characterIds: selectedCharIds.length > 0 ? selectedCharIds : undefined,
-          ...(!isIndependent && preselectedUniverseId ? { universeId: preselectedUniverseId } : {}),
+          ...(effectiveUniverseId ? { universeId: effectiveUniverseId } : {}),
           ...(companionType ? { companionType, companionName: companionName.trim() || undefined, companionPetId: companionPetId ?? undefined } : {}),
         }),
       });
@@ -540,70 +584,181 @@ function CreatePageInner() {
         {/* ── Story Mode ──────────────────────────────────────────────────── */}
         {stepType === "mode" && (
           <section>
-            {preselectedUniverseId && (storyMode === "standalone" || storyMode === "freeform") && (
-              <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
-                <span className="text-amber-600 text-sm">📖</span>
-                <span className="text-amber-700 text-xs font-semibold">This story will be saved independently — not added to any universe</span>
-              </div>
-            )}
-            {preselectedUniverseId && storyMode !== "standalone" && storyMode !== "freeform" && (
-              <div className="mb-4 bg-brand/8 border border-brand/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
-                <span className="text-brand text-sm">🌌</span>
-                <span className="text-ink-mid text-xs font-semibold">Episode will be added to the selected universe</span>
-              </div>
-            )}
-            <p className="text-ink-muted text-sm mb-6">
-              How should this episode connect to your universe?
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {STORY_MODES.map((mode) => (
-                <button key={mode.value} type="button"
-                  onClick={() => handleModeSelect(mode.value)}
-                  className={cn(
-                    "text-left p-5 rounded-2xl border-2 transition-all",
-                    storyMode === mode.value
-                      ? "border-brand bg-brand/5 shadow-brand/20 shadow-md"
-                      : "border-ink/10 bg-white hover:border-brand/30",
-                    mode.value === "freeform" && "sm:col-span-2",
-                  )}>
-                  <span className="text-3xl block mb-3">{mode.emoji}</span>
-                  <p className={cn("font-[family-name:var(--font-display)] text-base mb-1",
-                    storyMode === mode.value ? "text-brand" : "text-ink")}>
-                    {mode.label}
-                  </p>
-                  <p className="text-ink-muted text-xs leading-relaxed">{mode.description}</p>
-
-                  {/* Show last story context when Continue Adventure is selected */}
-                  {mode.value === "continue_arc" && storyMode === "continue_arc" && (
-                    <div className="mt-3 bg-brand/8 border border-brand/20 rounded-xl p-3">
-                      {lastStoryLoading ? (
-                        <p className="text-ink-muted text-xs italic">Finding your last story…</p>
-                      ) : lastStory ? (
-                        <>
-                          <p className="text-ink-mid text-xs font-semibold mb-1">Continuing from:</p>
-                          <p className="text-ink text-xs font-bold mb-1 line-clamp-1">
-                            📖 {lastStory.title ?? "Untitled Story"}
+            {preselectedUniverseId ? (
+              /* ── Universe path: only show modes relevant to how many stories exist ── */
+              <>
+                <div className="mb-5 bg-brand/8 border border-brand/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                  <span className="text-brand text-sm">🌌</span>
+                  <span className="text-ink-mid text-xs font-semibold">This episode will be saved to the selected universe</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {UNIVERSE_MODES.filter(m => universeHasStories || m.value === "new_adventure").map((mode) => (
+                    <button key={mode.value} type="button"
+                      onClick={() => handleModeSelect(mode.value)}
+                      className={cn(
+                        "text-left p-5 rounded-2xl border-2 transition-all",
+                        storyMode === mode.value
+                          ? "border-brand bg-brand/5 shadow-brand/20 shadow-md"
+                          : "border-ink/10 bg-white hover:border-brand/30",
+                      )}>
+                      <div className="flex items-start gap-4">
+                        <span className="text-3xl">{mode.emoji}</span>
+                        <div className="flex-1">
+                          <p className={cn("font-[family-name:var(--font-display)] text-base mb-1",
+                            storyMode === mode.value ? "text-brand" : "text-ink")}>
+                            {mode.label}
                           </p>
-                          {lastStory.cliffhanger && (
-                            <p className="text-ink-muted text-xs italic leading-relaxed line-clamp-3">
-                              &ldquo;{lastStory.cliffhanger}&rdquo;
-                            </p>
+                          <p className="text-ink-muted text-xs leading-relaxed">{mode.description}</p>
+                          {mode.value === "continue_arc" && storyMode === "continue_arc" && (
+                            <div className="mt-3 bg-brand/8 border border-brand/20 rounded-xl p-3">
+                              {lastStoryLoading ? (
+                                <p className="text-ink-muted text-xs italic">Finding your last story…</p>
+                              ) : lastStory ? (
+                                <>
+                                  <p className="text-ink-mid text-xs font-semibold mb-1">Continuing from:</p>
+                                  <p className="text-ink text-xs font-bold mb-1 line-clamp-1">📖 {lastStory.title ?? "Untitled Story"}</p>
+                                  {lastStory.cliffhanger && (
+                                    <p className="text-ink-muted text-xs italic leading-relaxed line-clamp-3">&ldquo;{lastStory.cliffhanger}&rdquo;</p>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-ink-muted text-xs italic">No previous completed story found — AI will start fresh.</p>
+                              )}
+                            </div>
                           )}
-                        </>
-                      ) : (
-                        <p className="text-ink-muted text-xs italic">No previous completed story found — AI will start fresh.</p>
-                      )}
-                    </div>
-                  )}
+                        </div>
+                        {storyMode === mode.value && (
+                          <Check className="w-4 h-4 text-brand flex-shrink-0 mt-1" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              /* ── General path: clearly split universe vs standalone ── */
+              <>
+                {/* Standalone section */}
+                <div className="mb-6">
+                  <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">One-off story · saved independently</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {STANDALONE_MODES.map((mode) => (
+                      <button key={mode.value} type="button"
+                        onClick={() => handleModeSelect(mode.value)}
+                        className={cn(
+                          "text-left p-5 rounded-2xl border-2 transition-all",
+                          storyMode === mode.value
+                            ? "border-brand bg-brand/5 shadow-brand/20 shadow-md"
+                            : "border-ink/10 bg-white hover:border-brand/30",
+                        )}>
+                        <span className="text-3xl block mb-3">{mode.emoji}</span>
+                        <p className={cn("font-[family-name:var(--font-display)] text-base mb-1",
+                          storyMode === mode.value ? "text-brand" : "text-ink")}>
+                          {mode.label}
+                        </p>
+                        <p className="text-ink-muted text-xs leading-relaxed">{mode.description}</p>
+                        {storyMode === mode.value && (
+                          <div className="mt-3 flex items-center gap-1 text-brand text-xs font-bold">
+                            <Check className="w-3 h-3" /> Selected
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                  {storyMode === mode.value && (
-                    <div className="mt-3 flex items-center gap-1 text-brand text-xs font-bold">
-                      <Check className="w-3 h-3" /> Selected
+                {/* Divider */}
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-px flex-1 bg-ink/10" />
+                  <span className="text-ink-muted text-xs font-semibold">or add to your universe</span>
+                  <div className="h-px flex-1 bg-ink/10" />
+                </div>
+
+                {/* Universe section */}
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-ink-muted mb-3">Universe episode · builds on past adventures</p>
+                  {universes.length === 0 ? (
+                    <div className="bg-ink/4 border border-ink/10 rounded-2xl p-5 text-center">
+                      <p className="text-ink-mid text-sm font-semibold mb-1">No universes yet</p>
+                      <p className="text-ink-muted text-xs mb-3">Create a universe first, then add episodes to it.</p>
+                      <a href="/dashboard" className="text-brand text-xs font-semibold underline">← Go to Dashboard to create one</a>
                     </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 gap-3">
+                        {UNIVERSE_MODES.map((mode) => (
+                          <button key={mode.value} type="button"
+                            onClick={() => handleModeSelect(mode.value)}
+                            className={cn(
+                              "text-left p-5 rounded-2xl border-2 transition-all",
+                              storyMode === mode.value
+                                ? "border-brand bg-brand/5 shadow-brand/20 shadow-md"
+                                : "border-ink/10 bg-white hover:border-brand/30",
+                            )}>
+                            <div className="flex items-start gap-4">
+                              <span className="text-3xl">{mode.emoji}</span>
+                              <div className="flex-1">
+                                <p className={cn("font-[family-name:var(--font-display)] text-base mb-1",
+                                  storyMode === mode.value ? "text-brand" : "text-ink")}>
+                                  {mode.label}
+                                </p>
+                                <p className="text-ink-muted text-xs leading-relaxed">{mode.description}</p>
+                                {mode.value === "continue_arc" && storyMode === "continue_arc" && (
+                                  <div className="mt-3 bg-brand/8 border border-brand/20 rounded-xl p-3">
+                                    {lastStoryLoading ? (
+                                      <p className="text-ink-muted text-xs italic">Finding your last story…</p>
+                                    ) : lastStory ? (
+                                      <>
+                                        <p className="text-ink-mid text-xs font-semibold mb-1">Continuing from:</p>
+                                        <p className="text-ink text-xs font-bold mb-1 line-clamp-1">📖 {lastStory.title ?? "Untitled Story"}</p>
+                                        {lastStory.cliffhanger && (
+                                          <p className="text-ink-muted text-xs italic leading-relaxed line-clamp-3">&ldquo;{lastStory.cliffhanger}&rdquo;</p>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <p className="text-ink-muted text-xs italic">No previous completed story found — AI will start fresh.</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                              {storyMode === mode.value && (
+                                <Check className="w-4 h-4 text-brand flex-shrink-0 mt-1" />
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Universe picker — shown when a universe mode is selected */}
+                      {isUniverseMode(storyMode) && universes.length > 1 && (
+                        <div className="mt-4 bg-brand/5 border border-brand/20 rounded-2xl p-4">
+                          <p className="text-ink-mid text-xs font-semibold mb-3">Which universe?</p>
+                          <div className="flex flex-col gap-2">
+                            {universes.map((u) => (
+                              <button key={u.id} type="button"
+                                onClick={() => setSelectedUniverseId(u.id)}
+                                className={cn(
+                                  "flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all",
+                                  selectedUniverseId === u.id
+                                    ? "border-brand bg-brand/8"
+                                    : "border-ink/10 bg-white hover:border-brand/30",
+                                )}>
+                                <span className="text-xl">🌌</span>
+                                <div className="flex-1">
+                                  <p className="text-ink text-sm font-semibold">{u.name}</p>
+                                  {u.heroTitle && <p className="text-ink-muted text-xs">{u.heroTitle}</p>}
+                                </div>
+                                {selectedUniverseId === u.id && <Check className="w-4 h-4 text-brand flex-shrink-0" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
-                </button>
-              ))}
-            </div>
+                </div>
+              </>
+            )}
           </section>
         )}
 
@@ -615,24 +770,46 @@ function CreatePageInner() {
               <span className="text-ink-muted/60 text-xs">Optional — skip if you have your own story in mind.</span>
             </p>
             <div className="grid grid-cols-2 gap-4">
-              {THEMES.map((theme) => (
-                <button key={theme.value} type="button"
-                  onClick={() => setSelectedTheme(theme.value)}
-                  className={cn(
-                    "group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-105 text-left",
-                    selectedTheme === theme.value
-                      ? "outline outline-[3px] outline-brand scale-105"
-                      : "hover:outline hover:outline-2 hover:outline-gold/50",
-                  )}>
-                  <div className={`aspect-square flex flex-col justify-between p-6 bg-gradient-to-br ${theme.gradient}`}>
-                    <span className="text-5xl leading-none">{theme.emoji}</span>
-                    <div>
-                      <h3 className="text-white font-[family-name:var(--font-display)] text-xl">{theme.name}</h3>
-                      <p className="text-white/0 group-hover:text-gold/80 transition-all text-sm">Explore →</p>
+              {THEMES.map((theme) => {
+                const isSelected = selectedTheme === theme.value;
+                return (
+                  <button key={theme.value} type="button"
+                    onClick={() => setSelectedTheme(theme.value)}
+                    className={cn(
+                      "group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 text-left",
+                      isSelected
+                        ? "ring-4 ring-brand ring-offset-2 ring-offset-cream scale-[1.03] shadow-xl shadow-brand/30"
+                        : "hover:scale-[1.02] hover:ring-2 hover:ring-gold/50 hover:ring-offset-1 hover:ring-offset-cream",
+                    )}>
+                    <div className={`aspect-square flex flex-col justify-between p-6 bg-gradient-to-br ${theme.gradient}`}>
+                      {/* Selected overlay */}
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-brand/20 pointer-events-none" />
+                      )}
+                      <div className="flex items-start justify-between">
+                        <span className="text-5xl leading-none">{theme.emoji}</span>
+                        {isSelected && (
+                          <span className="relative z-10 w-7 h-7 rounded-full bg-brand flex items-center justify-center shadow-lg">
+                            <Check className="w-4 h-4 text-white" />
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative z-10">
+                        <h3 className={cn(
+                          "font-[family-name:var(--font-display)] text-xl transition-colors",
+                          isSelected ? "text-white" : "text-white",
+                        )}>{theme.name}</h3>
+                        <p className={cn(
+                          "text-sm transition-all",
+                          isSelected ? "text-brand-light font-semibold" : "text-white/0 group-hover:text-gold/80",
+                        )}>
+                          {isSelected ? "✓ Selected" : "Explore →"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           </section>
         )}
@@ -900,7 +1077,7 @@ function CreatePageInner() {
         {stepType === "context" && (
           <section>
             <p className="text-ink-muted text-sm mb-2">
-              {storyMode === "freeform"
+              {storyMode === "standalone"
                 ? "Describe what happens in this story. Be as specific or as vague as you like — the AI will build around it."
                 : "Give the AI a hint about what should happen in this episode. The AI will weave it into the story while respecting your universe's history."}
             </p>
@@ -963,6 +1140,16 @@ function CreatePageInner() {
                     {STORY_MODES.find(m => m.value === storyMode)?.label}
                   </span>
                 </div>
+                {(() => {
+                  const uid = preselectedUniverseId ?? selectedUniverseId;
+                  const u = uid ? universes.find(u => u.id === uid) : null;
+                  return u ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink-muted">Universe</span>
+                      <span className="font-semibold text-ink">🌌 {u.name}</span>
+                    </div>
+                  ) : null;
+                })()}
                 {selectedTheme && (
                   <div className="flex items-center justify-between">
                     <span className="text-ink-muted">Adventure</span>

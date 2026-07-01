@@ -10,7 +10,9 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
-    "format": "prettier --write \"**/*.{ts,tsx,json,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "kill": "PID=$(lsof -ti :3000); if [ -n \"$PID\" ]; then kill -9 $PID && echo \"stopped\"; else echo \"nothing on 3000\"; fi",
+    "kill:web": "PID=$(lsof -ti :3001); if [ -n \"$PID\" ]; then kill -9 $PID && echo \"web stopped\"; else echo \"nothing on 3001\"; fi"
   },
   "devDependencies": {
     "prettier": "^3.3.3",

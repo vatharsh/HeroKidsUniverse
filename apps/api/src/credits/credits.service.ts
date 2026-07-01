@@ -37,6 +37,18 @@ export class CreditsService {
     };
   }
 
+  async getTransactions(userId: string, page: number, limit: number) {
+    const take = Math.min(limit, 50);
+    const skip = (page - 1) * take;
+    const [transactions, total] = await this.transactionsRepository.findAndCount({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      take,
+      skip,
+    });
+    return { items: transactions, total, page, limit: take, pages: Math.ceil(total / take) };
+  }
+
   async claimDemoCredit(userId: string) {
     return this.dataSource.transaction(async (manager) => {
       const existingDemo = await manager.findOne(CreditTransaction, {

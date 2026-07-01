@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -22,6 +22,15 @@ export class CreditsController {
   @Get()
   getCredits(@CurrentUser() currentUser: CurrentUserPayload) {
     return this.creditsService.getCredits(currentUser.id);
+  }
+
+  @Get('transactions')
+  getTransactions(
+    @CurrentUser() currentUser: CurrentUserPayload,
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+  ) {
+    return this.creditsService.getTransactions(currentUser.id, Number(page), Number(limit));
   }
 
   @Post('demo')

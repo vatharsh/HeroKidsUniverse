@@ -451,7 +451,6 @@ export default function InfluencerDetailPage() {
           socialHandle: d.socialHandle ?? "",
           commissionPct: String(d.commissionPct ?? ""),
           paymentMethod: d.paymentMethod ?? "",
-          notes: d.notes ?? "",
           status: d.status ?? (d.active ? "active" : "inactive"),
         });
       })
@@ -488,7 +487,6 @@ export default function InfluencerDetailPage() {
           socialHandle: editForm.socialHandle || null,
           commissionPct: Number(editForm.commissionPct),
           paymentMethod: editForm.paymentMethod || null,
-          notes: editForm.notes || null,
           status: editForm.status,
           active: editForm.status === "active",
         }),
@@ -621,15 +619,6 @@ export default function InfluencerDetailPage() {
                       <option value="blocked">Blocked</option>
                     </select>
                   </div>
-                  <div className="col-span-2">
-                    <label className="text-xs text-gray-500 block mb-1">Notes</label>
-                    <textarea
-                      value={editForm.notes ?? ""}
-                      onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
-                      rows={2}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-violet-400"
-                    />
-                  </div>
                 </div>
                 <button
                   onClick={() => void saveEdit()}
@@ -659,9 +648,13 @@ export default function InfluencerDetailPage() {
                     </div>
                   ) : null)}
                 </div>
-                {detail.notes && (
-                  <p className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-lg p-2">{detail.notes}</p>
-                )}
+                <div className="mt-4 border-t border-gray-100 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Influencer Notes <span className="normal-case font-normal">(set by influencer, read-only)</span></p>
+                  {detail.notes
+                    ? <p className="text-xs text-gray-700 bg-amber-50 border border-amber-100 rounded-lg p-3 whitespace-pre-wrap">{detail.notes}</p>
+                    : <p className="text-xs text-gray-400 italic">No notes from influencer yet.</p>
+                  }
+                </div>
               </div>
             )}
           </div>

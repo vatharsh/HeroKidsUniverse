@@ -14,6 +14,16 @@ import { StoryArc } from '../story-arcs/story-arc.entity';
 import { User } from '../users/user.entity';
 import { UniverseMemory } from './universe-memory.entity';
 
+export interface UniverseVisualState {
+  costume: string | null;
+  colorPalette: string | null;
+  companion: string | null;
+  weapon: string | null;
+  vehicle: string | null;
+  heroPowerVisual: string | null;
+  badgeStyle: string | null;
+}
+
 @Entity('universes')
 export class Universe {
   @PrimaryGeneratedColumn('uuid')
@@ -33,6 +43,15 @@ export class Universe {
 
   @Column({ type: 'text', nullable: true })
   coverImageUrl!: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  visualState!: UniverseVisualState | null;
+
+  @Column({ type: 'boolean', default: false })
+  isSandbox!: boolean;
+
+  @Column({ type: 'float', nullable: true })
+  avgConfidence!: number | null;
 
   @CreateDateColumn()
   createdAt!: Date;

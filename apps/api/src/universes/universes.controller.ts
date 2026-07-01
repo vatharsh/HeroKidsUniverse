@@ -4,6 +4,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
 import { CreateUniverseDto } from './dto/create-universe.dto';
 import { UpdateUniverseDto } from './dto/update-universe.dto';
+import type { UniverseVisualState } from './universe.entity';
 import { UniversesService } from './universes.service';
 
 @Controller('universes')
@@ -32,6 +33,15 @@ export class UniversesController {
     @Body() dto: UpdateUniverseDto,
   ) {
     return this.universesService.update(currentUser.id, id, dto);
+  }
+
+  @Patch(':id/visual-state')
+  updateVisualState(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() body: Partial<UniverseVisualState>,
+  ) {
+    return this.universesService.updateVisualState(id, user.id, body);
   }
 
   @Get(':id/timeline')

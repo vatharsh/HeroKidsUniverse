@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { PlatformSetting } from '../admin/platform-setting.entity';
 import { CharactersModule } from '../characters/characters.module';
 import { Character } from '../characters/entities/character.entity';
 import { CompanionsModule } from '../companions/companions.module';
@@ -30,6 +31,7 @@ import { StoriesService } from './stories.service';
       UniverseMemory,
       HeroPower,
       Quest,
+      PlatformSetting,
     ]),
     CharactersModule,
     CompanionsModule,

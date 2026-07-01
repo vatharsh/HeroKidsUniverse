@@ -17,6 +17,18 @@ export enum HeroGender {
   NonBinary = 'non-binary',
 }
 
+export interface CharacterIdentity {
+  faceShape: string | null;
+  skinTone: string | null;
+  eyeShape: string | null;
+  eyeColor: string | null;
+  hairstyle: string | null;
+  hairColor: string | null;
+  hairLength: string | null;
+  distinctiveFeatures: string[];
+  neverChangeRules: string[];
+}
+
 @Entity('heroes')
 export class Hero {
   @PrimaryGeneratedColumn('uuid')
@@ -41,7 +53,13 @@ export class Hero {
   avatarUrl!: string | null;
 
   @Column({ type: 'text', nullable: true })
+  avatarDescription!: string | null;
+
+  @Column({ type: 'text', nullable: true })
   characterSheetPrompt!: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  characterIdentity!: CharacterIdentity | null;
 
   @CreateDateColumn()
   createdAt!: Date;

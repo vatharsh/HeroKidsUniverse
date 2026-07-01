@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  BarChart3, BookOpen, Bot, Briefcase, ChevronRight, DollarSign, Globe,
-  LayoutDashboard, LogOut, Package, Settings, ShoppingCart,
-  Tag, Users, Zap,
+  Activity, BarChart3, BookOpen, Bot, Briefcase, ChevronRight, DollarSign, Globe,
+  LayoutDashboard, LogOut, Package, Settings, ShieldCheck, ShoppingCart,
+  Tag, Users, Zap, FileText, ScrollText,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -31,10 +31,14 @@ const NAV: NavItem[] = [
   { href: "/admin/orders",           icon: ShoppingCart,    label: "Orders"           },
   { href: "/admin/merchandise",      icon: Package,         label: "Merchandise",  flagKey: "ENABLE_MERCHANDISE" },
   { href: "/admin/ai-analytics",     icon: Bot,             label: "AI Analytics"     },
+  { href: "/admin/qa",               icon: Activity,        label: "AI Quality"       },
+  { href: "/admin/ai-prompts",       icon: ScrollText,      label: "Prompt Registry"  },
+  { href: "/admin/character-canons", icon: ShieldCheck,     label: "Character Canons" },
   { href: "/admin/influencers",      icon: Briefcase,       label: "Influencers", flagKey: "ENABLE_INFLUENCER_PROGRAM" },
   { href: "/admin/coupons",          icon: Tag,             label: "Coupons"          },
   { href: "/admin/pricing",          icon: DollarSign,      label: "Pricing"          },
   { href: "/admin/payments",         icon: BarChart3,       label: "Payments"         },
+  { href: "/admin/reports",          icon: FileText,        label: "Reports"          },
   { href: "/admin/settings",         icon: Settings,        label: "Settings"         },
 ];
 
@@ -150,9 +154,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,rgba(244,240,255,0.7)_0%,rgba(248,250,252,1)_20%,rgba(255,255,255,1)_100%)] flex">
       {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col shadow-sm">
+      <aside className="w-56 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col shadow-sm h-screen sticky top-0">
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-gray-100">
+        <div className="px-5 py-5 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-purple-700 flex items-center justify-center text-white text-sm font-black shadow-sm">H</div>
             <div>
@@ -162,8 +166,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 py-4 px-2 flex flex-col gap-0.5">
+        {/* Nav — scrollable */}
+        <nav className="flex-1 overflow-y-auto py-4 px-2 flex flex-col gap-0.5 min-h-0">
           {NAV.filter((item) => !item.flagKey || flags[item.flagKey] !== false).map(({ href, icon: Icon, label }) => {
             const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
             return (
@@ -184,9 +188,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* User */}
-        <div className="p-3 border-t border-gray-100">
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
+        {/* User + Logout — always pinned at bottom */}
+        <div className="flex-shrink-0 border-t border-gray-100 p-3 space-y-1">
+          <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg">
             <div className="w-7 h-7 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 text-xs font-bold flex-shrink-0">
               {user.name?.[0]?.toUpperCase() ?? "A"}
             </div>
@@ -194,14 +198,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <p className="text-gray-900 text-xs font-semibold truncate">{user.name}</p>
               <p className="text-gray-400 text-[10px] truncate">{user.email}</p>
             </div>
-            <button
-              onClick={() => { void logout(); router.push("/"); }}
-              className="text-gray-300 hover:text-red-500 transition p-1"
-              title="Sign out"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
           </div>
+          <button
+            onClick={() => { void logout(); router.push("/"); }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600 transition-all"
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" />
+            Sign out
+          </button>
         </div>
       </aside>
 

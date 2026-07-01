@@ -7,6 +7,7 @@ export enum CommerceOrderType {
   Digital = 'digital',
   Physical = 'physical',
   Mixed = 'mixed',
+  CreditPurchase = 'credit_purchase',
 }
 
 export enum CommerceOrderStatus {
@@ -130,6 +131,9 @@ export class Order extends SoftDeleteColumns {
 
   @Column({ type: 'text', nullable: true })
   adminNotes!: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  isSandbox!: boolean;
 
   @CreateDateColumn()
   createdAt!: Date;

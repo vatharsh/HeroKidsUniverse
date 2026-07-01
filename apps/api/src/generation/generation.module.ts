@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AiModule } from '../ai/ai.module';
+import { AIQualityAssuranceModule } from '../ai/ai-quality-assurance.module';
 import { AiUsageLog } from '../ai/entities/ai-usage-log.entity';
 import { StoryGenerationCost } from '../ai/entities/story-generation-cost.entity';
 import { StoryGenerationLog } from '../ai/entities/story-generation-log.entity';
@@ -25,6 +26,7 @@ import { GenerationService } from './generation.service';
 @Module({
   imports: [
     AiModule,
+    AIQualityAssuranceModule,
     UploadModule,
     TypeOrmModule.forFeature([
       Story,

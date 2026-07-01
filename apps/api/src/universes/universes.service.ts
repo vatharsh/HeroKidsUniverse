@@ -2,12 +2,13 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
+import { PlatformSetting } from '../admin/platform-setting.entity';
 import { HeroPower } from '../powers/hero-power.entity';
 import { Quest, QuestStatus } from '../quests/quest.entity';
 import { CreateUniverseDto } from './dto/create-universe.dto';
 import { UpdateUniverseDto } from './dto/update-universe.dto';
 import { UniverseMemory } from './universe-memory.entity';
-import { Universe } from './universe.entity';
+import { Universe, UniverseVisualState } from './universe.entity';
 
 @Injectable()
 export class UniversesService {
@@ -20,9 +21,17 @@ export class UniversesService {
     private readonly powersRepository: Repository<HeroPower>,
     @InjectRepository(Quest)
     private readonly questsRepository: Repository<Quest>,
+    @InjectRepository(PlatformSetting)
+    private readonly settingsRepo: Repository<PlatformSetting>,
   ) {}
 
+  private async isSandboxMode(): Promise<boolean> {
+    const row = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
+    return row ? row.value === 'true' : true;
+  }
+
   async create(userId: string, dto: CreateUniverseDto): Promise<Universe> {
+    const isSandbox = await this.isSandboxMode();
     return this.universesRepository.save(
       this.universesRepository.create({
         userId,
@@ -30,6 +39,7 @@ export class UniversesService {
         heroTitle: dto.heroTitle ?? null,
         tagline: dto.tagline ?? null,
         coverImageUrl: null,
+        isSandbox,
       }),
     );
   }
@@ -57,6 +67,12 @@ export class UniversesService {
       ...(dto.tagline !== undefined ? { tagline: dto.tagline } : {}),
     });
 
+    return this.universesRepository.save(universe);
+  }
+
+  async updateVisualState(universeId: string, userId: string, patch: Partial<UniverseVisualState>) {
+    const universe = await this.universesRepository.findOneOrFail({ where: { id: universeId, userId } });
+    universe.visualState = { ...(universe.visualState ?? {}), ...patch } as UniverseVisualState;
     return this.universesRepository.save(universe);
   }
 

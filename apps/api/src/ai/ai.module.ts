@@ -3,11 +3,13 @@ import { Module } from '@nestjs/common';
 import { IMAGE_GENERATION_PROVIDER } from './interfaces/image-generation.provider';
 import { NARRATION_PROVIDER } from './interfaces/narration.provider';
 import { STORY_GENERATION_PROVIDER } from './interfaces/story-generation.provider';
+import { PromptRegistryModule } from './prompt-registry.module';
 import { GeminiStoryProvider } from './providers/gemini-story.provider';
 import { OpenAIImageProvider } from './providers/openai-image.provider';
 import { OpenAITTSProvider } from './providers/openai-tts.provider';
 
 @Module({
+  imports: [PromptRegistryModule],
   providers: [
     { provide: STORY_GENERATION_PROVIDER, useClass: GeminiStoryProvider },
     { provide: IMAGE_GENERATION_PROVIDER, useClass: OpenAIImageProvider },

@@ -83,7 +83,7 @@ export default function StoriesPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              {["Title", "User", "Hero", "Universe", "Mode", "Status", "AI Cost", "Created"].map(h => (
+              {["Title", "User", "Hero", "Universe", "Mode", "Status", "AI Cost", "Created", ""].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-gray-500 text-xs font-semibold uppercase tracking-wide">{h}</th>
               ))}
             </tr>
@@ -108,6 +108,9 @@ export default function StoriesPage() {
                   </td>
                   <td className="px-4 py-3 text-red-500 text-xs font-bold">{s.totalCostUsd != null ? `$${Number(s.totalCostUsd).toFixed(4)}` : "—"}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs font-medium">{new Date(s.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3">
+                    <a href={`/admin/stories/${s.id}/debug`} className="text-violet-600 hover:text-violet-800 text-xs font-medium transition">Debug</a>
+                  </td>
                 </tr>
               ))
             )}

@@ -33,14 +33,21 @@ export class HeroesService {
   ): Promise<HeroResponse> {
     let avatarUrl = createHeroDto.avatarUrl ?? null;
 
+    let avatarDescription: string | null = null;
+    let characterIdentity: Hero['characterIdentity'] = null;
     if (photo) {
       await this.uploadService.uploadHeroPhoto(userId, photo);
-      avatarUrl = await this.generateAvatar(userId, createHeroDto.name, photo);
+      const result = await this.generateAvatar(userId, createHeroDto.name, photo);
+      avatarUrl = result.avatarUrl;
+      avatarDescription = result.avatarDescription;
+      characterIdentity = result.characterIdentity;
     }
 
     const hero = this.heroesRepository.create({
       ...createHeroDto,
       avatarUrl,
+      avatarDescription,
+      characterIdentity,
       userId,
     });
     return this.withComputedAge(await this.heroesRepository.save(hero));
@@ -80,7 +87,10 @@ export class HeroesService {
 
     if (photo) {
       await this.uploadService.uploadHeroPhoto(userId, photo);
-      hero.avatarUrl = await this.generateAvatar(userId, hero.name ?? 'Hero', photo);
+      const result = await this.generateAvatar(userId, hero.name ?? 'Hero', photo);
+      hero.avatarUrl = result.avatarUrl;
+      hero.avatarDescription = result.avatarDescription;
+      hero.characterIdentity = result.characterIdentity;
     } else if (updateHeroDto.avatarUrl !== undefined) {
       hero.avatarUrl = updateHeroDto.avatarUrl;
     }
@@ -135,27 +145,38 @@ export class HeroesService {
     userId: string,
     name: string,
     photo: Express.Multer.File,
-  ): Promise<string | null> {
+  ): Promise<{ avatarUrl: string | null; avatarDescription: string | null; characterIdentity: Hero['characterIdentity'] }> {
     try {
-      const avatar = await this.imageProvider.generateAvatar({
-        name,
-        role: 'hero',
-        photoBuffer: photo.buffer,
-        photoMimeType: photo.mimetype,
-      });
+      // Run avatar generation and appearance description in parallel
+      const [avatar, avatarDescription] = await Promise.all([
+        this.imageProvider.generateAvatar({
+          name,
+          role: 'hero',
+          photoBuffer: photo.buffer,
+          photoMimeType: photo.mimetype,
+        }),
+        this.imageProvider.describeCharacterAppearance(photo.buffer, photo.mimetype),
+      ]);
 
+      let avatarUrl: string | null = null;
       if (avatar.imageBase64) {
-        return this.uploadService.uploadHeroAvatar(userId, avatar.imageBase64);
+        avatarUrl = await this.uploadService.uploadHeroAvatar(userId, avatar.imageBase64);
+      } else {
+        avatarUrl = avatar.imageUrl || null;
       }
 
-      return avatar.imageUrl || null;
+      const characterIdentity = avatarDescription
+        ? await this.imageProvider.extractStructuredIdentity(avatarDescription)
+        : null;
+
+      return { avatarUrl, avatarDescription, characterIdentity };
     } catch (err) {
       this.logger.warn(
         `Avatar generation failed for hero ${name}: ${
           err instanceof Error ? err.message : 'Unknown error'
         }`,
       );
-      return null;
+      return { avatarUrl: null, avatarDescription: null, characterIdentity: null };
     }
   }
 }

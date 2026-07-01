@@ -9,7 +9,7 @@ export class PlatformSettingsController {
 
   @Public()
   @Get()
-  getSettings() {
-    return this.adminService.getSettings();
+  getPublicSettings() {
+    return this.adminService.getPublicSettings();
   }
 }

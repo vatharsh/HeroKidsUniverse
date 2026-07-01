@@ -9,7 +9,6 @@ import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
 import Breadcrumb from "@/components/shared/Breadcrumb";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { fetchMyOrdersV2, type OrderV2ListResponse } from "@/lib/merchandise";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +37,6 @@ function statusLabel(status: string) {
 
 export default function MyOrdersPage() {
   const { user, loading: authLoading } = useAuth();
-  const { flags, loading: flagsLoading } = usePublicPlatformSettings();
   const router = useRouter();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,8 +44,7 @@ export default function MyOrdersPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (authLoading || flagsLoading) return;
-    if (flags.ENABLE_MERCHANDISE === false) return;
+    if (authLoading) return;
     if (!user) { router.push("/login"); return; }
 
     setLoading(true);
@@ -55,7 +52,7 @@ export default function MyOrdersPage() {
       .then((res) => setOrders(res.items))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load orders"))
       .finally(() => setLoading(false));
-  }, [authLoading, flagsLoading, flags.ENABLE_MERCHANDISE, router, user]);
+  }, [authLoading, router, user]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -68,23 +65,8 @@ export default function MyOrdersPage() {
     ].some((v) => (v ?? "").toLowerCase().includes(q)));
   }, [orders, search]);
 
-  if (authLoading || flagsLoading) {
+  if (authLoading) {
     return <div className="min-h-screen bg-space-gradient flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-white" /></div>;
-  }
-
-  if (flags.ENABLE_MERCHANDISE === false) {
-    return (
-      <div className="min-h-screen bg-cream flex flex-col">
-        <Navbar />
-        <main className="flex-1 max-w-5xl mx-auto px-6 py-24 w-full">
-          <div className="rounded-3xl border border-ink/10 bg-white p-8 shadow-card">
-            <h1 className="font-[family-name:var(--font-display)] text-ink text-3xl mb-3">My Orders</h1>
-            <p className="text-ink-muted text-sm">Merchandise is currently hidden in platform settings.</p>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
   }
 
   return (

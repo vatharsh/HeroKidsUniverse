@@ -118,6 +118,34 @@ body {
   50%       { opacity: 1;   transform: scale(1.2); }
 }
 
+@keyframes shootingStar {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(28deg) scaleX(0.35);
+  }
+  8% {
+    opacity: 0.95;
+  }
+  28% {
+    opacity: 0.95;
+  }
+  46% {
+    opacity: 0;
+    transform: translate3d(38vw, 22vh, 0) rotate(28deg) scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(38vw, 22vh, 0) rotate(28deg) scaleX(1);
+  }
+}
+
+@keyframes storybookShine {
+  0%   { transform: translateX(-130%) skewX(-14deg); opacity: 0; }
+  18%  { opacity: 0.35; }
+  42%  { opacity: 0; }
+  100% { transform: translateX(130%) skewX(-14deg); opacity: 0; }
+}
+
 /* Book page flip — exit (page folds away) */
 @keyframes bookExitFwd {
   from { opacity: 1; transform: perspective(1200px) rotateY(0deg); }
@@ -200,6 +228,19 @@ body {
 .animate-shimmer    { animation: shimmer 3s linear infinite; }
 .animate-twinkle    { animation: twinkle 2s ease-in-out infinite; }
 
+.storybook-stage {
+  filter: drop-shadow(0 26px 52px rgba(0, 0, 0, 0.34));
+}
+
+.storybook-page-shine::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -35%;
+  width: 32%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+  animation: storybookShine 5.2s ease-in-out infinite;
+}
+
 .text-gradient-brand {
   background: linear-gradient(135deg, #A78BFA 0%, #7C3AED 50%, #5B21B6 100%);
   -webkit-background-clip: text;
@@ -248,6 +289,35 @@ body {
   background: white;
   animation: twinkle var(--duration, 2s) ease-in-out infinite;
   animation-delay: var(--delay, 0s);
+}
+
+.shooting-star {
+  position: absolute;
+  height: 2px;
+  border-radius: 9999px;
+  opacity: 0;
+  transform-origin: right center;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 22%, rgba(253,230,138,0.78) 68%, #fff 100%);
+  box-shadow:
+    0 0 8px rgba(253,230,138,0.8),
+    0 0 18px rgba(167,139,250,0.45);
+  animation: shootingStar 5.5s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.shooting-star::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow:
+    0 0 10px rgba(255,255,255,0.95),
+    0 0 18px rgba(245,158,11,0.72);
+  transform: translateY(-50%);
 }
 
 /* ── Comic book utilities ────────────────────────────────────────────── */

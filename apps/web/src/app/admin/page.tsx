@@ -32,6 +32,8 @@ interface DashboardData {
   usdToInr: number;
   displayCurrency?: string;
   aiCostCritical?: boolean;
+  sandboxMode?: boolean;
+  revenueView?: "sandbox" | "live" | "all";
 }
 
 const ACCENT = {
@@ -178,16 +180,26 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sandboxFilter, setSandboxFilter] = useState<"sandbox" | "live" | "all">("sandbox");
 
-  useEffect(() => {
+  function fetchDashboard(filter: "sandbox" | "live" | "all") {
     const token = getAccessToken();
     if (!token) return;
-    fetch(`${BASE}/admin/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+    setLoading(true);
+    const qs = filter === "all" ? "" : `?sandbox=${filter === "sandbox"}`;
+    fetch(`${BASE}/admin/dashboard${qs}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(j => setData(j.data ?? j))
       .catch(() => setError("Failed to load dashboard"))
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => { fetchDashboard("sandbox"); }, []);
+
+  function setFilter(f: "sandbox" | "live" | "all") {
+    setSandboxFilter(f);
+    fetchDashboard(f);
+  }
 
   if (loading) {
     return (
@@ -230,6 +242,26 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
+      {/* Sandbox / Live toggle */}
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        {data.sandboxMode && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 text-amber-700 text-[11px] font-black px-3 py-1 uppercase tracking-wide">
+            ⚠ Sandbox mode ON — new orders are test orders
+          </span>
+        )}
+        <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white/80 p-1 text-xs shadow-sm ml-auto">
+          {(["all", "sandbox", "live"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1 rounded-full font-semibold capitalize transition ${sandboxFilter === f ? "bg-violet-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              {f === "all" ? "All Orders" : f === "sandbox" ? "Sandbox" : "Live"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Profitability widget */}
       <div className="mb-4">
         <ProfitWidget data={data} />
@@ -252,10 +284,10 @@ export default function AdminDashboardPage() {
           title="REVENUE SIGNAL"
           subtitle="A softer visual read of the money side."
           items={[
-            { label: "Revenue Today", value: Math.max(data.revenueToday, 1), color: "bg-emerald-500", helper: "INR" },
-            { label: "Revenue Month", value: Math.max(data.revenueThisMonth, 1), color: "bg-teal-500", helper: "INR" },
-            { label: "AI Cost Today", value: Math.max(Math.round(data.aiCostToday * data.usdToInr), 1), color: "bg-rose-500", helper: "INR" },
-            { label: "AI Cost Month", value: Math.max(Math.round(data.aiCostThisMonth * data.usdToInr), 1), color: "bg-amber-500", helper: "INR" },
+            { label: "Revenue Today", value: data.revenueToday, color: "bg-emerald-500", helper: "INR" },
+            { label: "Revenue Month", value: data.revenueThisMonth, color: "bg-teal-500", helper: "INR" },
+            { label: "AI Cost Today", value: Math.round(data.aiCostToday * data.usdToInr), color: "bg-rose-500", helper: "INR" },
+            { label: "AI Cost Month", value: Math.round(data.aiCostThisMonth * data.usdToInr), color: "bg-amber-500", helper: "INR" },
           ]}
         />
       </div>

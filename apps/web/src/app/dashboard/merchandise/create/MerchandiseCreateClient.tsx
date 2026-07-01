@@ -46,6 +46,7 @@ import {
   type MerchandiseDesign,
 } from "@/lib/merchandise";
 import { getAccessToken } from "@/lib/api";
+import { addressesApi, type UserAddress } from "@/lib/account";
 import { cn } from "@/lib/utils";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
@@ -413,6 +414,9 @@ export default function MerchandiseCreatePage() {
   const [shippingPincode, setShippingPincode] = useState("");
   const [shippingCountry, setShippingCountry] = useState("India");
   const [shippingName, setShippingName] = useState("");
+  const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
+  const [selectedSavedAddressId, setSelectedSavedAddressId] = useState<string | null>(null);
+  const [saveAddressChecked, setSaveAddressChecked] = useState(false);
 
   // Coupon state
   const [couponInput, setCouponInput] = useState("");
@@ -617,6 +621,28 @@ export default function MerchandiseCreatePage() {
       .finally(() => setLoading(false));
   }, [authLoading, flagsLoading, merchEnabled, router, searchParams, user]);
 
+  // Load saved addresses for pre-fill at checkout
+  useEffect(() => {
+    if (!user) return;
+    addressesApi.list()
+      .then(list => {
+        setSavedAddresses(list);
+        // Auto-select default address
+        const def = list.find(a => a.isDefault);
+        if (def) {
+          setSelectedSavedAddressId(def.id);
+          setShippingName(def.fullName);
+          setShippingAddress(def.addressLine1);
+          setShippingAddressLine2(def.addressLine2 ?? "");
+          setShippingCity(def.city);
+          setShippingState(def.state);
+          setShippingPincode(def.pincode);
+          setShippingCountry(def.country);
+        }
+      })
+      .catch(() => {});
+  }, [user]);
+
   useEffect(() => {
     if (!selectedProductSlug) return;
     setProductDetail(null);
@@ -806,6 +832,21 @@ export default function MerchandiseCreatePage() {
         shippingPincode:      cartHasPhysical ? (shippingPincode || undefined) : undefined,
         shippingCountry:      cartHasPhysical ? (shippingCountry || "India")   : undefined,
       });
+      // Save address if user checked the checkbox and it's a new address
+      if (saveAddressChecked && cartHasPhysical && shippingName && shippingAddress && shippingCity) {
+        addressesApi.create({
+          label: null,
+          fullName: shippingName,
+          phone: customerPhone,
+          addressLine1: shippingAddress,
+          addressLine2: shippingAddressLine2 || null,
+          city: shippingCity,
+          state: shippingState,
+          pincode: shippingPincode,
+          country: shippingCountry || "India",
+          isDefault: savedAddresses.length === 0,
+        }).catch(() => {}); // non-blocking
+      }
       router.push(`/dashboard/orders/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not place the order");
@@ -1653,6 +1694,55 @@ export default function MerchandiseCreatePage() {
                 </div>
                 {cartHasPhysical && (
                   <>
+                    {/* Saved address picker */}
+                    {savedAddresses.length > 0 && (
+                      <div className="col-span-2 mb-1">
+                        <label className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted block mb-2">Saved Addresses</label>
+                        <div className="flex flex-col gap-2">
+                          {savedAddresses.map(a => (
+                            <button key={a.id} type="button"
+                              onClick={() => {
+                                setSelectedSavedAddressId(a.id);
+                                setShippingName(a.fullName);
+                                setShippingAddress(a.addressLine1);
+                                setShippingAddressLine2(a.addressLine2 ?? "");
+                                setShippingCity(a.city);
+                                setShippingState(a.state);
+                                setShippingPincode(a.pincode);
+                                setShippingCountry(a.country);
+                              }}
+                              className={cn(
+                                "text-left p-3 rounded-xl border-2 transition-all text-sm",
+                                selectedSavedAddressId === a.id
+                                  ? "border-brand bg-brand/5"
+                                  : "border-ink/10 bg-cream hover:border-brand/30",
+                              )}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-semibold text-ink">{a.fullName}</span>
+                                {a.isDefault && <span className="text-[10px] bg-brand/10 text-brand font-bold px-2 py-0.5 rounded-full">Default</span>}
+                              </div>
+                              <p className="text-ink-muted text-xs mt-0.5">
+                                {a.addressLine1}, {a.city}, {a.state} {a.pincode}
+                              </p>
+                            </button>
+                          ))}
+                          <button type="button"
+                            onClick={() => {
+                              setSelectedSavedAddressId(null);
+                              setShippingName(""); setShippingAddress(""); setShippingAddressLine2("");
+                              setShippingCity(""); setShippingState(""); setShippingPincode(""); setShippingCountry("India");
+                            }}
+                            className={cn(
+                              "text-left p-3 rounded-xl border-2 transition-all text-sm",
+                              selectedSavedAddressId === null
+                                ? "border-brand bg-brand/5"
+                                : "border-ink/10 bg-cream hover:border-brand/30",
+                            )}>
+                            <span className="font-semibold text-ink">+ Enter a new address</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="col-span-2">
                       <label className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted block mb-1.5">Shipping Name</label>
                       <input value={shippingName} onChange={(e) => setShippingName(e.target.value)} className="w-full rounded-xl border border-ink/15 bg-cream px-4 py-2.5 text-sm" />
@@ -1684,6 +1774,13 @@ export default function MerchandiseCreatePage() {
                   </>
                 )}
               </div>
+              {cartHasPhysical && (
+                <label className="flex items-center gap-3 cursor-pointer bg-brand/5 border border-brand/20 rounded-xl px-4 py-3">
+                  <input type="checkbox" checked={saveAddressChecked} onChange={e => setSaveAddressChecked(e.target.checked)}
+                    className="w-4 h-4 rounded accent-brand" />
+                  <span className="text-sm text-ink font-medium">Save this address for future orders</span>
+                </label>
+              )}
               <div>
                 <label className="text-xs font-bold uppercase tracking-[0.16em] text-ink-muted block mb-2">Payment Method</label>
                 <div className="grid grid-cols-3 gap-2">

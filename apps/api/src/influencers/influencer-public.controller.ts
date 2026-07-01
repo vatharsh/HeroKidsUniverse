@@ -9,7 +9,14 @@ export class InfluencerPublicController {
 
   @Public()
   @Post('coupon/validate')
-  validateCoupon(@Body() body: { code: string }) {
-    return this.influencersService.validateCoupon(body.code);
+  validateCoupon(
+    @Body() body: { code: string; subtotalAmount?: number; productIds?: string[]; categoryIds?: string[]; userId?: string },
+  ) {
+    return this.influencersService.validateCoupon(body.code, {
+      subtotalAmount: body.subtotalAmount,
+      productIds: body.productIds,
+      categoryIds: body.categoryIds,
+      userId: body.userId,
+    });
   }
 }

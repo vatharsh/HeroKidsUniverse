@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -49,7 +50,7 @@ type EmbeddedPreviewImage = {
 };
 
 @Injectable()
-export class MerchandiseService {
+export class MerchandiseService implements OnModuleInit {
   constructor(
     @InjectRepository(MerchandiseDesign)
     private readonly designsRepository: Repository<MerchandiseDesign>,
@@ -71,6 +72,17 @@ export class MerchandiseService {
     private readonly usersRepository: Repository<User>,
     private readonly configService: ConfigService,
   ) {}
+
+  async onModuleInit() {
+    // Backfill: mark all pre-existing orders as sandbox since we're in sandbox mode during initial setup
+    await this.ordersRepository
+      .createQueryBuilder()
+      .update()
+      .set({ isSandbox: true })
+      .where('"isSandbox" = false')
+      .execute()
+      .catch(() => null); // ignore if column doesn't exist yet on first boot
+  }
 
   async findProducts() {
     await this.ensureMerchandiseEnabled();
@@ -261,6 +273,7 @@ export class MerchandiseService {
     const amountInr = product.unitPriceInr * dto.quantity;
     const paymentMethod = dto.paymentMethod ?? PaymentMethod.Cash;
     const status = isPhysical ? OrderStatus.PrintFileGenerated : OrderStatus.DigitalReady;
+    const isSandbox = await this.getBooleanSetting('SANDBOX_MODE', true);
     const order = manager.create(MerchandiseOrder, {
       userId,
       designId: design.id,
@@ -295,6 +308,7 @@ export class MerchandiseService {
       razorpayOrderId: null,
       razorpayPaymentId: null,
       adminNotes: null,
+      isSandbox,
     });
 
     const saved = await manager.save(MerchandiseOrder, order);

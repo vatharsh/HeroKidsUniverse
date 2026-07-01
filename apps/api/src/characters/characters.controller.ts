@@ -15,13 +15,17 @@ import { FileInterceptor } from '@nestjs/platform-express';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import { CharacterCanonService } from './character-canon.service';
 import { CharactersService } from './characters.service';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import { UpdateCharacterDto } from './dto/update-character.dto';
 
 @Controller('characters')
 export class CharactersController {
-  constructor(private readonly charactersService: CharactersService) {}
+  constructor(
+    private readonly charactersService: CharactersService,
+    private readonly characterCanonService: CharacterCanonService,
+  ) {}
 
   @Post()
   @UseInterceptors(FileInterceptor('photo'))
@@ -46,6 +50,11 @@ export class CharactersController {
   @Get(':id')
   findOne(@CurrentUser() currentUser: CurrentUserPayload, @Param('id') id: string) {
     return this.charactersService.findOne(currentUser.id, id);
+  }
+
+  @Get(':id/canon')
+  getCharacterCanon(@Param('id') id: string) {
+    return this.characterCanonService.getCanonForHero(id);
   }
 
   @Post(':id/avatar/refresh')

@@ -1,7 +1,8 @@
 "use client";
 
 import { Loader2, Package, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import Footer from "@/components/layout/Footer";
 import Navbar from "@/components/layout/Navbar";
@@ -488,8 +489,9 @@ function HeroEditModal({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function CharactersPage() {
+function CharactersPageContent() {
   const { flags } = usePublicPlatformSettings();
+  const searchParams = useSearchParams();
   const [hero, setHero]                 = useState<Hero | null>(null);
   const [showHeroEdit, setShowHeroEdit] = useState(false);
   const [characters, setCharacters]     = useState<Character[]>([]);
@@ -511,8 +513,10 @@ export default function CharactersPage() {
       fetch(`${BASE}/avatars`,    { headers: h }).then(r => r.json()).catch(() => ({ data: null })),
       fetch(`${BASE}/characters/me/economy`, { headers: h }).then(r => r.json()).catch(() => ({ data: null })),
     ]).then(([heroRes, charRes, avatarRes, economyRes]) => {
-      if (Array.isArray(heroRes.data) && heroRes.data.length > 0) setHero(heroRes.data[0] as Hero);
-      if (Array.isArray(charRes.data)) setCharacters(charRes.data as Character[]);
+      const loadedHero = Array.isArray(heroRes.data) && heroRes.data.length > 0 ? heroRes.data[0] as Hero : null;
+      const loadedChars = Array.isArray(charRes.data) ? charRes.data as Character[] : [];
+      if (loadedHero) setHero(loadedHero);
+      setCharacters(loadedChars);
       if (economyRes.data) setEconomy(economyRes.data as CharacterEconomy);
       if (avatarRes.data) {
         const avatarRefreshTokens = avatarRes.data.avatarRefreshTokens ?? economyRes.data?.avatarRefreshTokens ?? 0;
@@ -524,6 +528,16 @@ export default function CharactersPage() {
           characterGenerationsMax:  avatarRefreshTokens,
           avatarRefreshTokens,
         });
+      }
+      // Auto-open edit modal from URL params (e.g. coming from /account/characters)
+      if (searchParams.get("editHero") === "1" && loadedHero) {
+        setShowHeroEdit(true);
+      } else {
+        const editId = searchParams.get("edit");
+        if (editId) {
+          const target = loadedChars.find(c => c.id === editId);
+          if (target) { setShowForm(true); setEditing(target); }
+        }
       }
     }).finally(() => setLoading(false));
   }, []);
@@ -848,5 +862,13 @@ export default function CharactersPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function CharactersPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-cream" />}>
+      <CharactersPageContent />
+    </Suspense>
   );
 }

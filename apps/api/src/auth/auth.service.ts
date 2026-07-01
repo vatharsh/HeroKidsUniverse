@@ -63,7 +63,11 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(registerDto.password, 12);
-    const freeSignupCredits = await this.getSettingNumber('FREE_SIGNUP_CREDITS', Number(SETTING_DEFAULTS.FREE_SIGNUP_CREDITS.value));
+    const [freeSignupCredits, sandboxSetting] = await Promise.all([
+      this.getSettingNumber('FREE_SIGNUP_CREDITS', Number(SETTING_DEFAULTS.FREE_SIGNUP_CREDITS.value)),
+      this.platformSettingsRepository.findOne({ where: { key: 'SANDBOX_MODE' } }),
+    ]);
+    const isSandbox = sandboxSetting ? sandboxSetting.value === 'true' : true;
     const user = await this.usersRepository.save(
       this.usersRepository.create({
         email,
@@ -72,6 +76,7 @@ export class AuthService {
         role: UserRole.Parent,
         credits: freeSignupCredits,
         referredBy,
+        isSandbox,
       }),
     );
 
@@ -142,6 +147,8 @@ export class AuthService {
       id: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone ?? null,
+      profileImageUrl: user.profileImageUrl ?? null,
       role: user.role,
       plan: user.plan,
       isPremium: user.isPremium,

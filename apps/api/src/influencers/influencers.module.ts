@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminInfluencerSettingsController } from './admin-influencer-settings.controller';
 import { UploadModule } from '../upload/upload.module';
 import { AdminInfluencersController } from './admin-influencers.controller';
+import { CouponUsageRecord } from './coupon-usage-record.entity';
 import { InfluencerPortalController } from './influencer-portal.controller';
 import { InfluencerCommission } from './influencer-commission.entity';
 import { InfluencerCommissionRule } from './influencer-commission-rule.entity';
@@ -17,6 +18,7 @@ import { Influencer } from './influencer.entity';
 import { InfluencersService } from './influencers.service';
 import { Order } from '../merchandise/orders/order.entity';
 import { User } from '../users/user.entity';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -24,6 +26,7 @@ import { User } from '../users/user.entity';
       Influencer,
       InfluencerReferral,
       InfluencerCouponCode,
+      CouponUsageRecord,
       InfluencerCommissionRule,
       InfluencerCommission,
       InfluencerWallet,
@@ -33,6 +36,7 @@ import { User } from '../users/user.entity';
       Order,
     ]),
     UploadModule,
+    UsersModule,
   ],
   controllers: [AdminInfluencersController, AdminInfluencerSettingsController, InfluencerPublicController, InfluencerPortalController],
   providers: [InfluencersService],

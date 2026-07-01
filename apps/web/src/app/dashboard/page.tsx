@@ -203,24 +203,21 @@ function InProgressSection({ jobs, stories }: { jobs: GenerationJob[]; stories: 
   );
 }
 
-const DISMISSED_KEY = "hvu_dismissed_failed_jobs";
+const DISMISSED_BEFORE_KEY = "hvu_dismissed_failures_before";
 
-function FailedJobsBanner({ jobs }: { jobs: GenerationJob[] }) {
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(DISMISSED_KEY);
-      return new Set(stored ? (JSON.parse(stored) as string[]) : []);
-    } catch { return new Set(); }
-  });
-
-  const visibleFailures = jobs.filter((j) => j.status === "failed" && !dismissedIds.has(j.id));
+function FailedJobsBanner({
+  jobs,
+  dismissedBefore,
+  onDismiss,
+}: {
+  jobs: GenerationJob[];
+  dismissedBefore: number;
+  onDismiss: () => void;
+}) {
+  const visibleFailures = jobs.filter(
+    (j) => j.status === "failed" && new Date(j.createdAt).getTime() > dismissedBefore,
+  );
   if (visibleFailures.length === 0) return null;
-
-  function dismiss() {
-    const next = new Set([...dismissedIds, ...visibleFailures.map((j) => j.id)]);
-    setDismissedIds(next);
-    try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
-  }
 
   return (
     <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
@@ -233,7 +230,7 @@ function FailedJobsBanner({ jobs }: { jobs: GenerationJob[] }) {
       </div>
       <button
         type="button"
-        onClick={dismiss}
+        onClick={onDismiss}
         className="text-red-400 hover:text-red-600 transition flex-shrink-0 p-0.5"
         aria-label="Dismiss"
       >
@@ -429,8 +426,13 @@ function StandaloneSection({ stories, onDelete }: { stories: Story[]; onDelete: 
           <div className="w-8 h-8 bg-ink/5 rounded-xl flex items-center justify-center">
             <BookOpen className="w-4 h-4 text-ink-muted" />
           </div>
-          <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl">Standalone Stories</h2>
+          <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl">One-off Stories</h2>
         </div>
+        <a
+          href="/create"
+          className="inline-flex items-center gap-1.5 bg-ink/6 hover:bg-ink/12 text-ink-mid font-semibold text-sm px-4 py-2 rounded-full transition-all border border-ink/12">
+          <Plus className="w-3.5 h-3.5" /> New Story
+        </a>
       </div>
       <div className="ml-11 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {visible.map((story) => (
@@ -472,7 +474,24 @@ export default function DashboardPage() {
   const [jobs, setJobs]                 = useState<GenerationJob[]>([]);
   const [fetching, setFetching]         = useState(true);
   const [showTopUp, setShowTopUp]       = useState(() => searchParams.get("topup") === "1");
+  const [dismissedBefore, setDismissedBefore] = useState<number>(() => {
+    try { return Number(localStorage.getItem(DISMISSED_BEFORE_KEY) ?? "0"); } catch { return 0; }
+  });
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  function dismissFailedBanner() {
+    const now = Date.now();
+    setDismissedBefore(now);
+    try { localStorage.setItem(DISMISSED_BEFORE_KEY, String(now)); } catch { /* ignore */ }
+  }
+
+  // New Universe modal
+  const [showNewUniverse, setShowNewUniverse]       = useState(false);
+  const [newUnivName, setNewUnivName]               = useState("");
+  const [newUnivHeroTitle, setNewUnivHeroTitle]     = useState("");
+  const [newUnivTagline, setNewUnivTagline]         = useState("");
+  const [newUnivSaving, setNewUnivSaving]           = useState(false);
+  const [newUnivError, setNewUnivError]             = useState("");
 
   const allStories = [
     ...Object.values(universeStories).flat(),
@@ -529,6 +548,33 @@ export default function DashboardPage() {
 
     setFetching(false);
   }, [router]);
+
+  async function createUniverse() {
+    if (!newUnivName.trim()) return;
+    setNewUnivSaving(true);
+    setNewUnivError("");
+    try {
+      const token = getAccessToken() ?? "";
+      const res = await fetch(`${BASE}/universes`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newUnivName.trim(),
+          ...(newUnivHeroTitle.trim() ? { heroTitle: newUnivHeroTitle.trim() } : {}),
+          ...(newUnivTagline.trim()   ? { tagline:   newUnivTagline.trim()   } : {}),
+        }),
+      });
+      const { data } = await res.json();
+      if (!res.ok || !data?.id) throw new Error(data?.message ?? "Failed to create universe");
+      setShowNewUniverse(false);
+      setNewUnivName(""); setNewUnivHeroTitle(""); setNewUnivTagline("");
+      router.push(`/create?universeId=${data.id}`);
+    } catch (err) {
+      setNewUnivError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setNewUnivSaving(false);
+    }
+  }
 
   async function deleteStory(id: string) {
     const token = getAccessToken();
@@ -657,7 +703,7 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* ── Failed jobs banner ──────────────────────────────────── */}
-            <FailedJobsBanner jobs={jobs} />
+            <FailedJobsBanner jobs={jobs} dismissedBefore={dismissedBefore} onDismiss={dismissFailedBanner} />
 
             {/* ── Wallet bar ───────────────────────────────────────────── */}
             {user && (
@@ -701,9 +747,16 @@ export default function DashboardPage() {
             {/* ── My Universes ─────────────────────────────────────────── */}
             {universes.length > 0 && (
               <div className="mb-6">
-                <h2 className="font-[family-name:var(--font-display)] text-ink text-3xl mb-8 flex items-center gap-2">
-                  <Globe className="w-6 h-6 text-brand" /> My Universes
-                </h2>
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="font-[family-name:var(--font-display)] text-ink text-3xl flex items-center gap-2">
+                    <Globe className="w-6 h-6 text-brand" /> My Universes
+                  </h2>
+                  <button
+                    onClick={() => setShowNewUniverse(true)}
+                    className="inline-flex items-center gap-1.5 bg-brand/10 hover:bg-brand/20 text-brand font-semibold text-sm px-4 py-2 rounded-full transition-all border border-brand/20">
+                    <Plus className="w-3.5 h-3.5" /> New Universe
+                  </button>
+                </div>
                 {universes.map((universe) => (
                   <UniverseSection
                     key={universe.id}
@@ -720,16 +773,23 @@ export default function DashboardPage() {
 
             {/* ── Empty state ──────────────────────────────────────────── */}
             {universes.length === 0 && standaloneStories.length === 0 && activeJobs.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-3xl shadow-card">
+              <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-3xl shadow-card px-6">
                 <div className="text-7xl mb-5">🌌</div>
                 <h3 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">Your universe awaits</h3>
-                <p className="text-ink-muted mb-8 max-w-xs text-sm">
-                  Create the first episode and begin your child&apos;s adventure.
+                <p className="text-ink-muted mb-8 max-w-sm text-sm">
+                  Start a universe to build a growing world of adventures — or just write a one-off story right now.
                 </p>
-                <a href="/create"
-                  className="bg-brand text-white font-bold px-8 py-3.5 rounded-full shadow-brand hover:bg-brand-dark transition-all hover:scale-105">
-                  Create First Episode →
-                </a>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => setShowNewUniverse(true)}
+                    className="bg-brand text-white font-bold px-8 py-3.5 rounded-full shadow-brand hover:bg-brand-dark transition-all hover:scale-105">
+                    🌌 Start a Universe
+                  </button>
+                  <a href="/create"
+                    className="bg-ink/8 text-ink font-bold px-8 py-3.5 rounded-full hover:bg-ink/15 transition-all border border-ink/10">
+                    📖 Write a Story
+                  </a>
+                </div>
               </div>
             )}
 
@@ -738,6 +798,84 @@ export default function DashboardPage() {
       </main>
 
       <Footer />
+
+      {/* ── New Universe Modal ──────────────────────────────────────────── */}
+      {showNewUniverse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowNewUniverse(false); }}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl">Start a New Universe</h2>
+              <button onClick={() => setShowNewUniverse(false)} className="text-ink-muted hover:text-ink transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-ink-muted text-sm mb-6">
+              A universe is your child&apos;s growing world — every story, power, and character lives here and builds on the last.
+            </p>
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-ink-mid text-sm font-medium block mb-1.5">
+                  Universe Name <span className="text-brand">*</span>
+                  <span className="text-ink-muted text-xs font-normal ml-1">— e.g. &quot;Arjun&apos;s Hero World&quot;</span>
+                </label>
+                <input
+                  type="text"
+                  value={newUnivName}
+                  onChange={(e) => setNewUnivName(e.target.value)}
+                  placeholder="Name this universe"
+                  maxLength={60}
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition"
+                />
+              </div>
+
+              <div>
+                <label className="text-ink-mid text-sm font-medium block mb-1.5">
+                  Hero Title <span className="text-ink-muted font-normal text-xs">— optional, e.g. &quot;Commander&quot;, &quot;Captain&quot;</span>
+                </label>
+                <input
+                  type="text"
+                  value={newUnivHeroTitle}
+                  onChange={(e) => setNewUnivHeroTitle(e.target.value)}
+                  placeholder="Leave blank to use hero's name"
+                  maxLength={40}
+                  className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition"
+                />
+              </div>
+
+              <div>
+                <label className="text-ink-mid text-sm font-medium block mb-1.5">
+                  Tagline <span className="text-ink-muted font-normal text-xs">— optional, e.g. &quot;Defender of the Stars&quot;</span>
+                </label>
+                <input
+                  type="text"
+                  value={newUnivTagline}
+                  onChange={(e) => setNewUnivTagline(e.target.value)}
+                  placeholder="A short catchphrase"
+                  maxLength={80}
+                  className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition"
+                />
+              </div>
+            </div>
+
+            {newUnivError && (
+              <p className="text-red-600 text-sm mt-4">{newUnivError}</p>
+            )}
+
+            <button
+              onClick={createUniverse}
+              disabled={!newUnivName.trim() || newUnivSaving}
+              className="w-full mt-6 bg-brand disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all hover:bg-brand-dark flex items-center justify-center gap-2">
+              {newUnivSaving
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</>
+                : <><Globe className="w-4 h-4" /> Create Universe &amp; Write First Episode →</>}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
 
 import { Order } from '../merchandise/orders/order.entity';
 import { User, UserRole } from '../users/user.entity';
+import { CouponUsageRecord } from './coupon-usage-record.entity';
 import { InfluencerCommission, CommissionStatus } from './influencer-commission.entity';
 import { InfluencerCommissionRule } from './influencer-commission-rule.entity';
 import { InfluencerCouponCode, CouponDiscountType, CouponType } from './influencer-coupon-code.entity';
@@ -36,6 +37,7 @@ export interface CouponValidationResult {
   appliesToCategoryIds?: string[] | null;
   code?: string;
   warningMessage?: string;
+  perUserUsageLimit?: number | null;
 }
 
 export interface SettlePayoutDto {
@@ -91,6 +93,8 @@ export class InfluencersService implements OnModuleInit {
     private readonly usersRepo: Repository<User>,
     @InjectRepository(Order)
     private readonly ordersRepo: Repository<Order>,
+    @InjectRepository(CouponUsageRecord)
+    private readonly couponUsageRepo: Repository<CouponUsageRecord>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -110,7 +114,7 @@ export class InfluencersService implements OnModuleInit {
 
   async validateCoupon(
     code: string,
-    context?: { subtotalAmount?: number; productIds?: string[]; categoryIds?: string[] },
+    context?: { subtotalAmount?: number; productIds?: string[]; categoryIds?: string[]; userId?: string },
   ): Promise<CouponValidationResult> {
     const normalizedCode = code.trim();
     if (!normalizedCode) {
@@ -157,6 +161,15 @@ export class InfluencersService implements OnModuleInit {
       }
     }
 
+    if (context?.userId && coupon.perUserUsageLimit !== null && coupon.perUserUsageLimit !== undefined) {
+      const userUsageCount = await this.couponUsageRepo.count({
+        where: { couponCodeId: coupon.id, userId: context.userId },
+      });
+      if (userUsageCount >= coupon.perUserUsageLimit) {
+        return { valid: false, errorMessage: 'You have already used this coupon the maximum number of times' };
+      }
+    }
+
     return {
       valid: true,
       couponCodeId: coupon.id,
@@ -169,6 +182,7 @@ export class InfluencersService implements OnModuleInit {
       appliesToProductIds: coupon.appliesToProductIds,
       appliesToCategoryIds: coupon.appliesToCategoryIds,
       code: coupon.code,
+      perUserUsageLimit: coupon.perUserUsageLimit,
       warningMessage: Number(coupon.discountValue) > 15 ? 'Discount above 15% may reduce margin.' : undefined,
     };
   }
@@ -258,6 +272,33 @@ export class InfluencersService implements OnModuleInit {
 
       const couponRepo = manager.getRepository(InfluencerCouponCode);
       const coupon = await couponRepo.findOne({ where: { id: params.couponCodeId, isDeleted: false } });
+      if (coupon) {
+        coupon.usageCount += 1;
+        await couponRepo.save(coupon);
+      }
+
+      const usageRepo = manager.getRepository(CouponUsageRecord);
+      const existingUsage = await usageRepo.findOne({ where: { orderId: params.orderId } });
+      if (!existingUsage) {
+        await usageRepo.save(usageRepo.create({
+          couponCodeId: params.couponCodeId,
+          userId: params.userId,
+          orderId: params.orderId,
+        }));
+      }
+    });
+  }
+
+  async recordCouponUsageForOrder(couponCodeId: string, userId: string, orderId: string): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const usageRepo = manager.getRepository(CouponUsageRecord);
+      const existing = await usageRepo.findOne({ where: { orderId } });
+      if (existing) return;
+
+      await usageRepo.save(usageRepo.create({ couponCodeId, userId, orderId }));
+
+      const couponRepo = manager.getRepository(InfluencerCouponCode);
+      const coupon = await couponRepo.findOne({ where: { id: couponCodeId, isDeleted: false } });
       if (coupon) {
         coupon.usageCount += 1;
         await couponRepo.save(coupon);
@@ -575,6 +616,7 @@ export class InfluencersService implements OnModuleInit {
       expiresAt: dto.expiresAt ?? null,
       usageLimit: dto.usageLimit ?? null,
       usageCount: 0,
+      perUserUsageLimit: dto.perUserUsageLimit ?? null,
       minimumOrderAmount: this.readNullableNumber(dto, 'minimumOrderAmount'),
       appliesToProductIds: this.readStringArray(dto, 'appliesToProductIds'),
       appliesToCategoryIds: this.readStringArray(dto, 'appliesToCategoryIds'),
@@ -602,6 +644,7 @@ export class InfluencersService implements OnModuleInit {
       startsAt: dto.startsAt === undefined ? coupon.startsAt : dto.startsAt,
       expiresAt: dto.expiresAt === undefined ? coupon.expiresAt : dto.expiresAt,
       usageLimit: dto.usageLimit === undefined ? coupon.usageLimit : dto.usageLimit,
+      perUserUsageLimit: dto.perUserUsageLimit === undefined ? coupon.perUserUsageLimit : (dto.perUserUsageLimit ?? null),
       minimumOrderAmount: dto.minimumOrderAmount === undefined ? coupon.minimumOrderAmount : this.readNullableNumber(dto, 'minimumOrderAmount'),
       appliesToProductIds: dto.appliesToProductIds === undefined ? coupon.appliesToProductIds : this.readStringArray(dto, 'appliesToProductIds'),
       appliesToCategoryIds: dto.appliesToCategoryIds === undefined ? coupon.appliesToCategoryIds : this.readStringArray(dto, 'appliesToCategoryIds'),
@@ -781,24 +824,44 @@ export class InfluencersService implements OnModuleInit {
   }
 
   async reverseCommissionForOrder(orderId: string): Promise<void> {
-    const commission = await this.commissionsRepo.findOne({
-      where: [
-        { orderId, status: CommissionStatus.Pending, isDeleted: false },
-        { orderId, status: CommissionStatus.Approved, isDeleted: false },
-      ],
+    await this.dataSource.transaction(async (manager) => {
+      const commissionsRepo = manager.getRepository(InfluencerCommission);
+      const commission = await commissionsRepo.findOne({
+        where: [
+          { orderId, status: CommissionStatus.Pending, isDeleted: false },
+          { orderId, status: CommissionStatus.Approved, isDeleted: false },
+        ],
+      });
+
+      if (commission) {
+        commission.status = CommissionStatus.Cancelled;
+        await commissionsRepo.save(commission);
+
+        const walletRepo = manager.getRepository(InfluencerWallet);
+        const wallet = await walletRepo.findOne({
+          where: { influencerId: commission.influencerId, isDeleted: false },
+        });
+        if (wallet) {
+          wallet.approvedAmount = Math.max(0, round2(Number(wallet.approvedAmount) - Number(commission.commissionAmount)));
+          await walletRepo.save(wallet);
+        }
+
+        // Decrement coupon usageCount and remove usage record
+        const couponRepo = manager.getRepository(InfluencerCouponCode);
+        const coupon = await couponRepo.findOne({ where: { id: commission.couponCodeId, isDeleted: false } });
+        if (coupon && coupon.usageCount > 0) {
+          coupon.usageCount -= 1;
+          await couponRepo.save(coupon);
+        }
+      }
+
+      // Delete usage record regardless of whether commission existed (handles platform coupons)
+      const usageRepo = manager.getRepository(CouponUsageRecord);
+      const usageRecord = await usageRepo.findOne({ where: { orderId } });
+      if (usageRecord) {
+        await usageRepo.remove(usageRecord);
+      }
     });
-    if (!commission) return;
-
-    commission.status = CommissionStatus.Cancelled;
-    await this.commissionsRepo.save(commission);
-
-    const wallet = await this.walletsRepo.findOne({
-      where: { influencerId: commission.influencerId, isDeleted: false },
-    });
-    if (!wallet) return;
-
-    wallet.approvedAmount = Math.max(0, round2(Number(wallet.approvedAmount) - Number(commission.commissionAmount)));
-    await this.walletsRepo.save(wallet);
   }
 
   async getPortalMe(userId: string) {
@@ -841,6 +904,13 @@ export class InfluencersService implements OnModuleInit {
         currentCommissionRate: currentRate,
       },
     };
+  }
+
+  async updatePortalNotes(userId: string, notes: string | null) {
+    const influencer = await this.influencersRepo.findOne({ where: { userId, isDeleted: false } });
+    if (!influencer) throw new NotFoundException('Influencer profile not found');
+    await this.influencersRepo.update(influencer.id, { notes: notes ?? null });
+    return { ok: true };
   }
 
   async getPortalDashboardSummary(userId: string) {

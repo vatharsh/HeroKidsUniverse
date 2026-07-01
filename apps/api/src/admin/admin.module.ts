@@ -1,17 +1,21 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { AIQualityAssuranceModule } from '../ai/ai-quality-assurance.module';
+import { PromptRegistryModule } from '../ai/prompt-registry.module';
 import { AiUsageLog } from '../ai/entities/ai-usage-log.entity';
 import { StoryGenerationCost } from '../ai/entities/story-generation-cost.entity';
 import { CreditsModule } from '../credits/credits.module';
 import { CreditTransaction } from '../credits/credit-transaction.entity';
 import { GenerationJob } from '../generation/generation-job.entity';
+import { Hero } from '../heroes/hero.entity';
 import { InfluencersModule } from '../influencers/influencers.module';
 import { InfluencerReferral } from '../influencers/influencer-referral.entity';
 import { Influencer } from '../influencers/influencer.entity';
 import { MerchandiseModule } from '../merchandise/merchandise.module';
 import { MerchandiseOrder } from '../merchandise/order.entity';
 import { OrderStatusHistory } from '../merchandise/order-status-history.entity';
+import { Order as CommerceOrder } from '../merchandise/orders/order.entity';
 import { PaymentsModule } from '../payments/payments.module';
 import { Payment } from '../payments/payment.entity';
 import { StoryArc } from '../story-arcs/story-arc.entity';
@@ -22,9 +26,12 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { PlatformSetting } from './platform-setting.entity';
 import { PlatformSettingsController } from './platform-settings.controller';
+import { PromptRegistryController } from './prompt-registry.controller';
 
 @Module({
   imports: [
+    AIQualityAssuranceModule,
+    PromptRegistryModule,
     MerchandiseModule,
     PaymentsModule,
     CreditsModule,
@@ -39,14 +46,16 @@ import { PlatformSettingsController } from './platform-settings.controller';
       CreditTransaction,
       MerchandiseOrder,
       OrderStatusHistory,
+      CommerceOrder,
       Payment,
       Influencer,
       InfluencerReferral,
       StoryArc,
       PlatformSetting,
+      Hero,
     ]),
   ],
-  controllers: [AdminController, PlatformSettingsController],
+  controllers: [AdminController, PlatformSettingsController, PromptRegistryController],
   providers: [AdminService],
 })
 export class AdminModule {}

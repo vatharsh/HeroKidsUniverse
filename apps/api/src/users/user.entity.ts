@@ -77,6 +77,15 @@ export class User {
   @Column({ type: 'text', nullable: true })
   referredBy!: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  phone!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  profileImageUrl!: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  isSandbox!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 

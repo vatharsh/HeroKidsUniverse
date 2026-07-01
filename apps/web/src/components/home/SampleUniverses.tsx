@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useAuth } from "@/contexts/AuthContext";
 
 /* ── Static demo universe data ─────────────────────────────────────── */
 
@@ -213,6 +214,7 @@ function UniverseArt({ id }: { id: string }) {
 /* ── Section ───────────────────────────────────────────────────────── */
 
 export default function SampleUniverses() {
+  const { user } = useAuth();
   return (
     <section id="sample-universes" className="py-24 bg-space-gradient relative overflow-hidden">
       {/* Ambient glow */}
@@ -312,7 +314,7 @@ export default function SampleUniverses() {
         <div className="text-center mt-14">
           <p className="text-white/40 text-sm mb-6">Your child&apos;s universe will be entirely their own — different heroes, different powers, different worlds.</p>
           <a
-            href="/register"
+            href={user ? "/create" : "/register"}
             className="inline-block bg-brand hover:bg-brand-dark text-white font-bold px-10 py-4 rounded-full shadow-brand transition-all hover:scale-105 text-lg"
           >
             Start Building Your Universe →

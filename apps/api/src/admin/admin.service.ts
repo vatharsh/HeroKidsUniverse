@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -22,12 +22,13 @@ import { Influencer } from '../influencers/influencer.entity';
 import { InfluencersService } from '../influencers/influencers.service';
 import { MerchandiseOrder, OrderStatus, ProductType } from '../merchandise/order.entity';
 import { OrderStatusHistory } from '../merchandise/order-status-history.entity';
+import { CommerceOrderStatus, CommerceOrderType, Order as CommerceOrder } from '../merchandise/orders/order.entity';
 import { Payment, PaymentStatus } from '../payments/payment.entity';
 import { StoryArc } from '../story-arcs/story-arc.entity';
 import { Story, StoryStatus, StoryTheme, VideoStatus } from '../stories/story.entity';
 import { Universe } from '../universes/universe.entity';
 import { User, UserPlan, UserRole } from '../users/user.entity';
-import { PlatformSetting, SETTING_DEFAULTS, normalizeSettingValue } from './platform-setting.entity';
+import { PlatformSetting, PUBLIC_SETTING_KEYS, SETTING_DEFAULTS, normalizeSettingValue } from './platform-setting.entity';
 
 const ACTIVE_JOB_STATUSES = [
   JobStatus.Queued,
@@ -50,7 +51,9 @@ function makePage<T>(items: T[], total: number, page: number, limit: number): Pa
 }
 
 @Injectable()
-export class AdminService {
+export class AdminService implements OnModuleInit {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     @InjectRepository(Story) private readonly storiesRepo: Repository<Story>,
@@ -65,9 +68,30 @@ export class AdminService {
     @InjectRepository(Influencer) private readonly influencersRepo: Repository<Influencer>,
     @InjectRepository(InfluencerReferral) private readonly referralsRepo: Repository<InfluencerReferral>,
     @InjectRepository(PlatformSetting) private readonly settingsRepo: Repository<PlatformSetting>,
+    @InjectRepository(CommerceOrder) private readonly commerceOrdersRepo: Repository<CommerceOrder>,
     private readonly dataSource: DataSource,
     private readonly influencersService: InfluencersService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const setting = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
+      const isSandbox = setting ? setting.value === 'true' : true;
+      if (isSandbox) {
+        const [usersResult, universesResult, storiesResult] = await Promise.all([
+          this.usersRepo.createQueryBuilder().update().set({ isSandbox: true }).where('isSandbox = false').execute(),
+          this.universesRepo.createQueryBuilder().update().set({ isSandbox: true }).where('isSandbox = false').execute(),
+          this.storiesRepo.createQueryBuilder().update().set({ isSandbox: true }).where('isSandbox = false').execute(),
+        ]);
+        const total = (usersResult.affected ?? 0) + (universesResult.affected ?? 0) + (storiesResult.affected ?? 0);
+        if (total > 0) {
+          this.logger.log(`Backfilled ${usersResult.affected} users, ${universesResult.affected} universes, ${storiesResult.affected} stories to isSandbox=true`);
+        }
+      }
+    } catch (err) {
+      this.logger.warn('Admin isSandbox backfill skipped', err);
+    }
+  }
 
   // ── Platform Settings ──────────────────────────────────────────────────────
 
@@ -88,13 +112,46 @@ export class AdminService {
     });
   }
 
+  async getPublicSettings() {
+    const rows = await this.settingsRepo.find({
+      where: PUBLIC_SETTING_KEYS.map((key) => ({ key })),
+    });
+    const stored = new Map(rows.map((r) => [r.key, r.value]));
+
+    return PUBLIC_SETTING_KEYS.map((key) => {
+      const def = SETTING_DEFAULTS[key];
+      return {
+        key,
+        value: stored.get(key) ?? def?.value ?? 'false',
+        type: def?.type ?? 'boolean',
+      };
+    });
+  }
+
   async upsertSetting(key: string, value: unknown) {
     const def = SETTING_DEFAULTS[key];
     const type = def?.type ?? (await this.settingsRepo.findOne({ where: { key } }))?.type ?? 'string';
     const description = def?.description ?? null;
+    this.validateSettingValue(key, type, value);
     await this.settingsRepo.upsert({ key, value: normalizeSettingValue(type, value), type, description }, ['key']);
     const row = await this.settingsRepo.findOne({ where: { key } });
     return row ?? { key, value: normalizeSettingValue(type, value), type, description, updatedAt: new Date() };
+  }
+
+  private validateSettingValue(key: string, type: string, value: unknown) {
+    if (type === 'number') {
+      const raw = typeof value === 'number' ? value : Number(String(value ?? '').trim());
+      if (!Number.isFinite(raw)) {
+        throw new BadRequestException(`${key} must be a valid number`);
+      }
+    }
+
+    if (type === 'boolean' && typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (!['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'].includes(normalized)) {
+        throw new BadRequestException(`${key} must be a valid boolean`);
+      }
+    }
   }
 
   // ── Health Score ───────────────────────────────────────────────────────────
@@ -111,7 +168,7 @@ export class AdminService {
 
     const [monthStart] = this.getDateBounds();
     const [revenueToday, aiCostToday, aiCostThisMonth, storiesGeneratedToday, activeJobs] = await Promise.all([
-      this.sumPayments(todayStart),
+      this.sumOrderRevenue(todayStart),
       this.sumAiCost(todayStart),
       this.sumAiCost(monthStart),
       this.storiesRepo.count({ where: { createdAt: MoreThanOrEqual(todayStart) } as any }),
@@ -135,16 +192,30 @@ export class AdminService {
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
 
-  async getDashboard() {
+  async getDashboard(sandboxFilter?: boolean) {
     const [todayStart, monthStart] = this.getDateBounds();
-    const [usdToInr, dailyWarning, monthlyWarning, dailyHardLimit, monthlyHardLimit, displayCurrency] = await Promise.all([
+    const [usdToInr, dailyWarning, monthlyWarning, dailyHardLimit, monthlyHardLimit, displayCurrency, sandboxMode] = await Promise.all([
       this.getSetting('USD_INR_RATE', 96),
       this.getSetting('AI_DAILY_COST_WARNING_USD', 10),
       this.getSetting('AI_MONTHLY_COST_WARNING_USD', 200),
       this.getSetting('AI_DAILY_COST_HARD_LIMIT_USD', 25),
       this.getSetting('AI_MONTHLY_COST_HARD_LIMIT_USD', 500),
       this.getSettingString('DISPLAY_CURRENCY', 'INR'),
+      this.getSettingBool('SANDBOX_MODE', true),
     ]);
+
+    // All counts and costs filtered consistently by the same sandbox flag
+    const sf = sandboxFilter;  // undefined = all, true = sandbox, false = live
+
+    const userWhere = sf !== undefined ? { isSandbox: sf } : {};
+    const universeWhere = sf !== undefined ? { isSandbox: sf } : {};
+    const storyWhere = sf !== undefined ? { isSandbox: sf } : {};
+    const orderWhere = sf !== undefined
+      ? { status: CommerceOrderStatus.Processing, isDeleted: false, isSandbox: sf }
+      : { status: CommerceOrderStatus.Processing, isDeleted: false };
+    const shippedWhere = sf !== undefined
+      ? { status: CommerceOrderStatus.Shipped, isDeleted: false, isSandbox: sf, updatedAt: MoreThanOrEqual(todayStart) }
+      : { status: CommerceOrderStatus.Shipped, isDeleted: false, updatedAt: MoreThanOrEqual(todayStart) };
 
     const [
       totalUsers,
@@ -163,38 +234,37 @@ export class AdminService {
       mostPopularThemeRow,
       mostPopularProductRow,
     ] = await Promise.all([
-      this.usersRepo.count(),
-      this.universesRepo.count(),
-      this.storiesRepo.count(),
-      this.storiesRepo.count({ where: { createdAt: MoreThanOrEqual(todayStart) } as any }),
+      this.usersRepo.count({ where: userWhere as any }),
+      this.universesRepo.count({ where: universeWhere as any }),
+      this.storiesRepo.count({ where: storyWhere as any }),
+      this.storiesRepo.count({ where: { ...storyWhere, createdAt: MoreThanOrEqual(todayStart) } as any }),
       this.jobsRepo.count({ where: { status: In(ACTIVE_JOB_STATUSES) } as any }),
-      this.ordersRepo.count({ where: { status: OrderStatus.Pending } }),
-      this.ordersRepo.count({
-        where: { status: OrderStatus.Shipped, updatedAt: MoreThanOrEqual(todayStart) } as any,
-      }),
-      this.sumPayments(),
-      this.sumPayments(todayStart),
-      this.sumPayments(monthStart),
-      this.sumAiCost(),
-      this.sumAiCost(todayStart),
-      this.sumAiCost(monthStart),
-      this.storiesRepo
-        .createQueryBuilder('story')
-        .select('story.theme', 'theme')
-        .addSelect('COUNT(*)', 'count')
-        .where('story.theme IS NOT NULL')
-        .groupBy('story.theme')
-        .orderBy('COUNT(*)', 'DESC')
-        .limit(1)
-        .getRawOne<{ theme: StoryTheme; count: string }>(),
-      this.ordersRepo
-        .createQueryBuilder('merchOrder')
-        .select('merchOrder.productType', 'productType')
-        .addSelect('COUNT(*)', 'count')
-        .groupBy('merchOrder.productType')
-        .orderBy('COUNT(*)', 'DESC')
-        .limit(1)
-        .getRawOne<{ productType: ProductType; count: string }>(),
+      this.commerceOrdersRepo.count({ where: orderWhere as any }),
+      this.commerceOrdersRepo.count({ where: shippedWhere as any }),
+      this.sumOrderRevenue(undefined, sf),
+      this.sumOrderRevenue(todayStart, sf),
+      this.sumOrderRevenue(monthStart, sf),
+      this.sumAiCost(undefined, sf),
+      this.sumAiCost(todayStart, sf),
+      this.sumAiCost(monthStart, sf),
+      (() => {
+        const qb = this.storiesRepo
+          .createQueryBuilder('story')
+          .select('story.theme', 'theme')
+          .addSelect('COUNT(*)', 'count')
+          .where('story.theme IS NOT NULL');
+        if (sf !== undefined) qb.andWhere('story.isSandbox = :sf', { sf });
+        return qb.groupBy('story.theme').orderBy('COUNT(*)', 'DESC').limit(1).getRawOne<{ theme: StoryTheme; count: string }>();
+      })(),
+      (() => {
+        const qb = this.commerceOrdersRepo
+          .createQueryBuilder('co')
+          .select('co.orderType', 'productType')
+          .addSelect('COUNT(*)', 'count')
+          .where('co.isDeleted = false');
+        if (sf !== undefined) qb.andWhere('co.isSandbox = :sf', { sf });
+        return qb.groupBy('co.orderType').orderBy('COUNT(*)', 'DESC').limit(1).getRawOne<{ productType: string; count: string }>();
+      })(),
     ]);
 
     const estimatedGrossProfitInr = revenueThisMonth - totalAiCostUsd * usdToInr;
@@ -224,6 +294,8 @@ export class AdminService {
       aiCostCritical,
       usdToInr,
       displayCurrency,
+      sandboxMode,
+      revenueView: sandboxFilter !== undefined ? (sandboxFilter ? 'sandbox' : 'live') : 'all',
     };
   }
 
@@ -570,33 +642,47 @@ export class AdminService {
     );
   }
 
-  async getAiAnalytics() {
+  async getAiAnalytics(isSandbox?: boolean) {
     const [todayStart, monthStart] = this.getDateBounds();
-    const [aiCostToday, aiCostThisMonth, totalStoriesGenerated, totalImagesGenerated, totalNarrationSeconds, totalVideosGenerated] =
+
+    const addSandboxFilter = (qb: ReturnType<typeof this.aiUsageRepo.createQueryBuilder>) => {
+      if (isSandbox !== undefined) qb.andWhere('ai.isSandbox = :isSandbox', { isSandbox });
+      return qb;
+    };
+    const addCostSandboxFilter = (qb: ReturnType<typeof this.costRepo.createQueryBuilder>) => {
+      if (isSandbox !== undefined) qb.andWhere('cost.isSandbox = :isSandbox', { isSandbox });
+      return qb;
+    };
+
+    const [aiCostToday, aiCostThisMonth, totalImagesGenerated, totalNarrationSeconds, totalVideosGenerated] =
       await Promise.all([
-        this.sumAiCost(todayStart),
-        this.sumAiCost(monthStart),
-        this.storiesRepo.count(),
-        this.aiUsageRepo
+        this.sumAiCost(todayStart, isSandbox),
+        this.sumAiCost(monthStart, isSandbox),
+        addSandboxFilter(this.aiUsageRepo
           .createQueryBuilder('ai')
           .select('COALESCE(SUM(ai.imagesGenerated), 0)', 'sum')
-          .where('ai.operation = :op', { op: AiOperation.ImageGeneration })
+          .where('ai.operation = :op', { op: AiOperation.ImageGeneration }))
           .getRawOne<{ sum: string }>()
           .then((r) => toNumber(r?.sum)),
-        this.aiUsageRepo
+        addSandboxFilter(this.aiUsageRepo
           .createQueryBuilder('ai')
           .select('COALESCE(SUM(ai.audioSeconds), 0)', 'sum')
-          .where('ai.operation = :op', { op: AiOperation.Narration })
+          .where('ai.operation = :op', { op: AiOperation.Narration }))
           .getRawOne<{ sum: string }>()
           .then((r) => toNumber(r?.sum)),
         this.storiesRepo.count({ where: { videoStatus: VideoStatus.Completed } }),
       ]);
 
+    const totalStoriesGenerated = isSandbox !== undefined
+      ? await addCostSandboxFilter(this.costRepo.createQueryBuilder('cost').select('COUNT(*)', 'cnt'))
+          .getRawOne<{ cnt: string }>().then((r) => toNumber(r?.cnt))
+      : await this.storiesRepo.count();
+
     const avgCostPerStory = totalStoriesGenerated ? aiCostThisMonth / totalStoriesGenerated : 0;
     const avgCostPerImage = totalImagesGenerated ? aiCostThisMonth / totalImagesGenerated : 0;
     const avgCostPerNarrationMinute = totalNarrationSeconds ? aiCostThisMonth / (totalNarrationSeconds / 60) : 0;
 
-    const byProvider = await this.aiUsageRepo
+    const byProvider = await addSandboxFilter(this.aiUsageRepo
       .createQueryBuilder('ai')
       .select('ai.provider', 'provider')
       .addSelect('COUNT(*)', 'requestCount')
@@ -605,10 +691,10 @@ export class AdminService {
       .addSelect('SUM(ai.audioSeconds)', 'narrationSeconds')
       .addSelect('SUM(ai.estimatedCostUsd)', 'estimatedCostUsd')
       .setParameter('storyOp', AiOperation.StoryGeneration)
-      .groupBy('ai.provider')
+      .groupBy('ai.provider'))
       .getRawMany();
 
-    const byModel = await this.aiUsageRepo
+    const byModel = await addSandboxFilter(this.aiUsageRepo
       .createQueryBuilder('ai')
       .select('ai.provider', 'provider')
       .addSelect('ai.model', 'model')
@@ -619,19 +705,19 @@ export class AdminService {
       .addSelect('SUM(ai.audioSeconds)', 'audioSeconds')
       .addSelect('SUM(ai.estimatedCostUsd)', 'estimatedCostUsd')
       .groupBy('ai.provider')
-      .addGroupBy('ai.model')
+      .addGroupBy('ai.model'))
       .getRawMany();
 
-    const byOperation = await this.aiUsageRepo
+    const byOperation = await addSandboxFilter(this.aiUsageRepo
       .createQueryBuilder('ai')
       .select('ai.operation', 'operation')
       .addSelect('COUNT(*)', 'requestCount')
       .addSelect('AVG(ai.estimatedCostUsd)', 'avgCostUsd')
       .addSelect('SUM(ai.estimatedCostUsd)', 'totalCostUsd')
-      .groupBy('ai.operation')
+      .groupBy('ai.operation'))
       .getRawMany();
 
-    const topExpensiveStories = await this.costRepo
+    const topExpensiveStories = await addCostSandboxFilter(this.costRepo
       .createQueryBuilder('cost')
       .leftJoin('stories', 'story', 'story.id = cost.storyId')
       .leftJoin('users', 'user', 'user.id = story.userId')
@@ -644,10 +730,10 @@ export class AdminService {
       .addSelect('COALESCE(cost.videoCostUsd, 0)', 'videoCostUsd')
       .addSelect('cost.totalCostUsd', 'totalCostUsd')
       .orderBy('cost.totalCostUsd', 'DESC')
-      .limit(10)
+      .limit(10))
       .getRawMany();
 
-    const topExpensiveUsers = await this.aiUsageRepo
+    const topExpensiveUsers = await addSandboxFilter(this.aiUsageRepo
       .createQueryBuilder('ai')
       .leftJoin('users', 'user', 'user.id = ai.userId')
       .select('ai.userId', 'userId')
@@ -661,10 +747,10 @@ export class AdminService {
       .addGroupBy('user.name')
       .addGroupBy('user.email')
       .orderBy('SUM(ai.estimatedCostUsd)', 'DESC')
-      .limit(10)
+      .limit(10))
       .getRawMany();
 
-    const universeAnalytics = await this.aiUsageRepo
+    const universeAnalytics = await addSandboxFilter(this.aiUsageRepo
       .createQueryBuilder('ai')
       .leftJoin('stories', 'story', 'story.id = ai.storyId')
       .leftJoin('universes', 'universe', 'universe.id = story.universeId')
@@ -678,8 +764,21 @@ export class AdminService {
       .groupBy('story.universeId')
       .addGroupBy('universe.name')
       .orderBy('SUM(ai.estimatedCostUsd)', 'DESC')
-      .limit(20)
+      .limit(20))
       .getRawMany();
+
+    const qaAvgRows = await this.dataSource.query<Array<Record<string, unknown>>>(
+      `SELECT
+         AVG("overallConfidence")  AS avgConfidence,
+         AVG("avgIdentityScore")   AS avgIdentity,
+         AVG("avgStoryScore")      AS avgStory,
+         AVG("pagesRetried")       AS avgRetries,
+         COUNT(*)                  AS totalRuns,
+         ROUND(100.0 * COUNT(*) FILTER (WHERE "overallStatus" = 'pass') / NULLIF(COUNT(*), 0), 1) AS passRate
+       FROM story_qa_runs
+       WHERE "createdAt" >= NOW() - INTERVAL '30 days'`,
+    );
+    const qaAvg = qaAvgRows[0] ?? null;
 
     return {
       aiCostToday,
@@ -697,6 +796,186 @@ export class AdminService {
       topExpensiveStories,
       topExpensiveUsers,
       universeAnalytics,
+      isSandbox: isSandbox ?? null,
+      // QA summary — added backward-compatibly (null when no QA runs exist)
+      qaAvgConfidence:    qaAvg?.avgconfidence   !== undefined ? Number(qaAvg.avgconfidence)   : null,
+      qaAvgIdentity:      qaAvg?.avgidentity     !== undefined ? Number(qaAvg.avgidentity)     : null,
+      qaAvgStory:         qaAvg?.avgstory        !== undefined ? Number(qaAvg.avgstory)        : null,
+      qaAvgRetries:       qaAvg?.avgretries      !== undefined ? Number(qaAvg.avgretries)      : null,
+      qaPassRate:         qaAvg?.passrate        !== undefined ? Number(qaAvg.passrate)        : null,
+      qaTotalRuns:        qaAvg?.totalruns       !== undefined ? Number(qaAvg.totalruns)       : 0,
+    };
+  }
+
+  async getGenerationRuns(params: {
+    page?: number;
+    limit?: number;
+    days?: number;
+    status?: string;
+    sandbox?: boolean;
+  } = {}) {
+    const { page = 1, limit = 25, days = 30, status, sandbox } = params;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const offset = (page - 1) * limit;
+
+    const sandboxClause = sandbox !== undefined ? `AND s."isSandbox" = ${sandbox}` : '';
+    const statusClause = status ? `AND s.status = '${status.replace(/'/g, "''")}'` : '';
+
+    const [rows, countResult] = await Promise.all([
+      this.dataSource.query<Array<Record<string, unknown>>>(
+        `SELECT
+           s.id AS "storyId",
+           s.title AS "storyTitle",
+           s.status AS "status",
+           s."createdAt" AS "createdAt",
+           s."storyMode" AS "storyMode",
+           u.name AS "universeName",
+           usr.name AS "userName",
+           usr.email AS "userEmail",
+           qr."overallConfidence" AS "qaConfidence",
+           qr."overallStatus" AS "qaStatus",
+           qr."avgIdentityScore" AS "avgIdentityScore",
+           qr."avgStoryScore" AS "avgStoryScore",
+           qr."pagesRetried" AS "pagesRetried",
+           qr."storyPromptVersion" AS "storyPromptVersion",
+           qr."imagePromptVersion" AS "imagePromptVersion",
+           qr."qaVersion" AS "qaVersion",
+           qr."generationTimeMs" AS "qaTimeMs",
+           gc."storyCostUsd" AS "storyCostUsd",
+           gc."imageCostUsd" AS "imageCostUsd",
+           gc."audioCostUsd" AS "audioCostUsd",
+           gc."totalCostUsd" AS "totalCostUsd",
+           EXTRACT(EPOCH FROM (j."completedAt" - j."startedAt"))::int AS "durationSeconds"
+         FROM stories s
+         LEFT JOIN universes u ON u.id = s."universeId"
+         LEFT JOIN users usr ON usr.id = s."userId"
+         LEFT JOIN LATERAL (
+           SELECT * FROM story_qa_runs WHERE "storyId" = s.id ORDER BY "createdAt" DESC LIMIT 1
+         ) qr ON true
+         LEFT JOIN story_generation_costs gc ON gc."storyId" = s.id
+         LEFT JOIN LATERAL (
+           SELECT * FROM generation_jobs WHERE "storyId" = s.id ORDER BY "createdAt" DESC LIMIT 1
+         ) j ON true
+         WHERE s."createdAt" >= $1 ${sandboxClause} ${statusClause}
+         ORDER BY s."createdAt" DESC
+         LIMIT $2 OFFSET $3`,
+        [cutoff, limit, offset],
+      ),
+      this.dataSource.query<Array<{ cnt: string }>>(
+        `SELECT COUNT(*)::int AS cnt FROM stories s WHERE s."createdAt" >= $1 ${sandboxClause} ${statusClause}`,
+        [cutoff],
+      ),
+    ]);
+
+    const total = Number(countResult[0]?.cnt ?? 0);
+    return {
+      items: rows.map((r) => ({
+        storyId:             String(r.storyId ?? ''),
+        storyTitle:          r.storyTitle ? String(r.storyTitle) : null,
+        status:              String(r.status ?? ''),
+        createdAt:           r.createdAt,
+        storyMode:           r.storyMode ? String(r.storyMode).replace(/_/g, ' ') : null,
+        universeName:        r.universeName ? String(r.universeName) : null,
+        userName:            r.userName ? String(r.userName) : null,
+        userEmail:           r.userEmail ? String(r.userEmail) : null,
+        overallConfidence:   r.qaConfidence !== null && r.qaConfidence !== undefined ? Math.round(Number(r.qaConfidence) * 10) / 10 : null,
+        qaStatus:            r.qaStatus ? String(r.qaStatus) : null,
+        avgIdentityScore:    r.avgIdentityScore !== null && r.avgIdentityScore !== undefined ? Math.round(Number(r.avgIdentityScore) * 10) / 10 : null,
+        avgStoryScore:       r.avgStoryScore !== null && r.avgStoryScore !== undefined ? Math.round(Number(r.avgStoryScore) * 10) / 10 : null,
+        pagesRetried:        Number(r.pagesRetried ?? 0),
+        storyPromptVersion:  r.storyPromptVersion ? String(r.storyPromptVersion) : null,
+        imagePromptVersion:  r.imagePromptVersion ? String(r.imagePromptVersion) : null,
+        qaVersion:           r.qaVersion ? String(r.qaVersion) : null,
+        storyCostUsd:        r.storyCostUsd !== null && r.storyCostUsd !== undefined ? Number(r.storyCostUsd) : null,
+        imageCostUsd:        r.imageCostUsd !== null && r.imageCostUsd !== undefined ? Number(r.imageCostUsd) : null,
+        audioCostUsd:        r.audioCostUsd !== null && r.audioCostUsd !== undefined ? Number(r.audioCostUsd) : null,
+        totalCostUsd:        r.totalCostUsd !== null && r.totalCostUsd !== undefined ? Number(r.totalCostUsd) : null,
+        durationSeconds:     r.durationSeconds !== null && r.durationSeconds !== undefined ? Number(r.durationSeconds) : null,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
+
+  async getAiLogs(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    operation?: string;
+    provider?: string;
+    sandbox?: boolean;
+  } = {}) {
+    const { page = 1, limit = 50, search, operation, provider, sandbox } = params;
+    const offset = (page - 1) * limit;
+
+    const whereClauses: string[] = [];
+    const queryParams: unknown[] = [];
+    let i = 1;
+
+    if (provider) { whereClauses.push(`al.provider ILIKE $${i++}`); queryParams.push(`%${provider}%`); }
+    if (operation) { whereClauses.push(`al.operation = $${i++}`); queryParams.push(operation); }
+    if (sandbox !== undefined) { whereClauses.push(`al."isSandbox" = $${i++}`); queryParams.push(sandbox); }
+    if (search?.trim()) {
+      whereClauses.push(`(al.model ILIKE $${i} OR u.email ILIKE $${i} OR s.title ILIKE $${i})`);
+      queryParams.push(`%${search.trim()}%`);
+      i++;
+    }
+
+    const whereStr = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    queryParams.push(limit, offset);
+
+    const [rows, countRows] = await Promise.all([
+      this.dataSource.query<Array<Record<string, unknown>>>(
+        `SELECT al.id, al."userId", al."storyId",
+                al.provider, al.model, al.operation,
+                al."inputTokens", al."outputTokens",
+                al."imagesGenerated", al."audioSeconds",
+                al."estimatedCostUsd",
+                al."isSandbox", al."createdAt",
+                u.email AS "userEmail", s.title AS "storyTitle"
+         FROM ai_usage_logs al
+         LEFT JOIN users u ON u.id = al."userId"
+         LEFT JOIN stories s ON s.id = al."storyId"
+         ${whereStr}
+         ORDER BY al."createdAt" DESC
+         LIMIT $${i} OFFSET $${i + 1}`,
+        queryParams,
+      ),
+      this.dataSource.query<Array<{ cnt: string }>>(
+        `SELECT COUNT(*)::int AS cnt
+         FROM ai_usage_logs al
+         LEFT JOIN users u ON u.id = al."userId"
+         LEFT JOIN stories s ON s.id = al."storyId"
+         ${whereStr}`,
+        queryParams.slice(0, -2),
+      ),
+    ]);
+
+    return {
+      items: rows.map((r) => ({
+        id:              String(r.id ?? ''),
+        userId:          r.userId ? String(r.userId) : null,
+        storyId:         r.storyId ? String(r.storyId) : null,
+        provider:        String(r.provider ?? ''),
+        model:           String(r.model ?? ''),
+        operation:       String(r.operation ?? ''),
+        inputTokens:     Number(r.inputTokens ?? 0),
+        outputTokens:    Number(r.outputTokens ?? 0),
+        imagesGenerated: Number(r.imagesGenerated ?? 0),
+        audioSeconds:    Number(r.audioSeconds ?? 0),
+        estimatedCostUsd:Number(r.estimatedCostUsd ?? 0),
+        isSandbox:       Boolean(r.isSandbox),
+        createdAt:       r.createdAt,
+        userEmail:       r.userEmail ? String(r.userEmail) : null,
+        storyTitle:      r.storyTitle ? String(r.storyTitle) : null,
+      })),
+      total:      Number(countRows[0]?.cnt ?? 0),
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(Number(countRows[0]?.cnt ?? 0) / limit)),
     };
   }
 
@@ -765,6 +1044,7 @@ export class AdminService {
     discountValue: number;
     maxDiscountAmount?: number | null;
     usageLimit?: number | null;
+    perUserUsageLimit?: number | null;
     minimumOrderAmount?: number | null;
     startsAt?: string | null;
     expiresAt?: string | null;
@@ -788,6 +1068,7 @@ export class AdminService {
         discountValue: dto.discountValue,
         maxDiscountAmount: dto.maxDiscountAmount ?? null,
         usageLimit: dto.usageLimit ?? null,
+        perUserUsageLimit: dto.perUserUsageLimit ?? null,
         minimumOrderAmount: dto.minimumOrderAmount ?? null,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
@@ -806,6 +1087,7 @@ export class AdminService {
       discountValue: number;
       maxDiscountAmount: number | null;
       usageLimit: number | null;
+      perUserUsageLimit: number | null;
       minimumOrderAmount: number | null;
       startsAt: string | null;
       expiresAt: string | null;
@@ -819,6 +1101,7 @@ export class AdminService {
     if (dto.discountValue !== undefined) coupon.discountValue = dto.discountValue;
     if ('maxDiscountAmount' in dto) coupon.maxDiscountAmount = dto.maxDiscountAmount ?? null;
     if ('usageLimit' in dto) coupon.usageLimit = dto.usageLimit ?? null;
+    if ('perUserUsageLimit' in dto) coupon.perUserUsageLimit = dto.perUserUsageLimit ?? null;
     if ('minimumOrderAmount' in dto) coupon.minimumOrderAmount = dto.minimumOrderAmount ?? null;
     if ('startsAt' in dto) coupon.startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
     if ('expiresAt' in dto) coupon.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
@@ -862,7 +1145,7 @@ export class AdminService {
     const [inputCostPer1M, outputCostPer1M, imageCostPerImage, ttsCostPerChar] = await Promise.all([
       this.getSetting('GEMINI_INPUT_COST_PER_1M_TOKENS', 0.10),
       this.getSetting('GEMINI_OUTPUT_COST_PER_1M_TOKENS', 0.40),
-      this.getSetting('OPENAI_IMAGE_COST_PER_IMAGE', 0.04),
+      this.getSetting('OPENAI_IMAGE_COST_PER_IMAGE', 0.011),
       this.getSetting('OPENAI_TTS_COST_PER_CHAR', 0.000015),
     ]);
     // Narration stored as audioSeconds; derive approx chars via 5 chars/word ÷ 0.55 s/word
@@ -996,6 +1279,14 @@ export class AdminService {
     return raw;
   }
 
+  private async getSettingBool(key: string, fallback: boolean): Promise<boolean> {
+    const def = SETTING_DEFAULTS[key];
+    const row = await this.settingsRepo.findOne({ where: { key } });
+    if (row) return row.value === 'true' || row.value === '1';
+    if (process.env[key]) return process.env[key] === 'true' || process.env[key] === '1';
+    return def ? def.value === 'true' : fallback;
+  }
+
   private async ensureDefaultSettings() {
     const existing = await this.settingsRepo.find({ select: ['key'] });
     const existingKeys = new Set(existing.map((row) => row.key));
@@ -1012,19 +1303,40 @@ export class AdminService {
     );
   }
 
-  private async sumPayments(start?: Date) {
-    const qb = this.paymentsRepo
-      .createQueryBuilder('payment')
-      .select('SUM(payment.amountInr)', 'sum')
-      .where('payment.status = :status', { status: PaymentStatus.Captured });
-    if (start) qb.andWhere('payment.createdAt >= :start', { start });
+  private async sumOrderRevenue(start?: Date, isSandbox?: boolean) {
+    // All v2 orders (merchandise + credit purchases) — this is where all real orders land
+    const cqb = this.commerceOrdersRepo
+      .createQueryBuilder('co')
+      .select('SUM(co.totalAmount)', 'sum')
+      .where('co.status NOT IN (:...excluded)', {
+        excluded: [CommerceOrderStatus.Cancelled, CommerceOrderStatus.Failed, CommerceOrderStatus.Refunded, CommerceOrderStatus.PendingPayment],
+      })
+      .andWhere('co.isDeleted = false');
+    if (start) cqb.andWhere('co.createdAt >= :start', { start });
+    if (isSandbox !== undefined) cqb.andWhere('co.isSandbox = :isSandbox', { isSandbox });
+    const crow = await cqb.getRawOne<{ sum: string }>();
+    const v2Revenue = toNumber(crow?.sum);
+
+    // Legacy merchandise_orders table (old orders before v2 migration)
+    const qb = this.ordersRepo
+      .createQueryBuilder('o')
+      .select('SUM(o.amountInr)', 'sum')
+      .where('o.status NOT IN (:...excluded)', {
+        excluded: [OrderStatus.Cancelled, OrderStatus.Failed, OrderStatus.Refunded, OrderStatus.PendingPayment],
+      })
+      .andWhere('o.isDeleted = false');
+    if (start) qb.andWhere('o.createdAt >= :start', { start });
+    if (isSandbox !== undefined) qb.andWhere('o.isSandbox = :isSandbox', { isSandbox });
     const row = await qb.getRawOne<{ sum: string }>();
-    return toNumber(row?.sum);
+    const legacyRevenue = toNumber(row?.sum);
+
+    return v2Revenue + legacyRevenue;
   }
 
-  private async sumAiCost(start?: Date) {
+  private async sumAiCost(start?: Date, isSandbox?: boolean) {
     const qb = this.aiUsageRepo.createQueryBuilder('ai').select('SUM(ai.estimatedCostUsd)', 'sum');
     if (start) qb.andWhere('ai.createdAt >= :start', { start });
+    if (isSandbox !== undefined) qb.andWhere('ai.isSandbox = :isSandbox', { isSandbox });
     const row = await qb.getRawOne<{ sum: string }>();
     return toNumber(row?.sum);
   }
@@ -1042,5 +1354,117 @@ export class AdminService {
     const started = job.startedAt ?? job.createdAt;
     const end = job.completedAt ?? new Date();
     return end.getTime() - started.getTime();
+  }
+
+  async getQaDashboard(params: { days?: number } = {}) {
+    const days = params.days ?? 30;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+
+    const [agg, failedPages, recentRuns, trend] = await Promise.all([
+      this.dataSource.query<Array<{
+        totalruns: string; avgoverallconfidence: string;
+        avgidentityscore: string; avgstoryscore: string;
+        avgexpressionscore: string; avgdialoguescoreval: string;
+        avgcompositionscore: string; avgnarrationscore: string;
+        passrate: string; retryrate: string;
+        storiesacceptedfirstattempt: string; storiesrequiringretry: string;
+      }>>(
+        `SELECT
+           COUNT(*)::int AS totalruns,
+           COALESCE(AVG("overallConfidence"), 0) AS avgoverallconfidence,
+           COALESCE(AVG("avgIdentityScore"), 0) AS avgidentityscore,
+           COALESCE(AVG("avgStoryScore"), 0) AS avgstoryscore,
+           COALESCE(AVG("avgExpressionScore"), 0) AS avgexpressionscore,
+           COALESCE(AVG("avgDialogueScore"), 0) AS avgdialoguescoreval,
+           COALESCE(AVG("avgCompositionScore"), 0) AS avgcompositionscore,
+           COALESCE(AVG("avgNarrationScore"), 0) AS avgnarrationscore,
+           CASE WHEN COUNT(*) = 0 THEN 0 ELSE
+             SUM(CASE WHEN "overallStatus" = 'pass' THEN 1 ELSE 0 END)::float / COUNT(*) * 100 END AS passrate,
+           CASE WHEN COUNT(*) = 0 THEN 0 ELSE
+             SUM(CASE WHEN "pagesRetried" > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100 END AS retryrate,
+           SUM(CASE WHEN "pagesRetried" = 0 AND "overallStatus" IN ('pass','pass_with_warning') THEN 1 ELSE 0 END) AS storiesacceptedfirstattempt,
+           SUM(CASE WHEN "pagesRetried" > 0 THEN 1 ELSE 0 END) AS storiesrequiringretry
+         FROM story_qa_runs
+         WHERE "createdAt" >= $1`,
+        [cutoff],
+      ),
+      this.dataSource.query<Array<{ failedpages: string }>>(
+        `SELECT COUNT(*)::int AS failedpages FROM story_qa_pages WHERE accepted = false AND "createdAt" >= $1`,
+        [cutoff],
+      ),
+      this.dataSource.query<Array<{
+        id: string; storyId: string; overallConfidence: string | null;
+        overallStatus: string; avgIdentityScore: string | null;
+        pagesRetried: string; createdAt: string;
+        story_title: string | null; user_email: string | null;
+      }>>(
+        `SELECT r.id, r."storyId", r."overallConfidence", r."overallStatus",
+                r."avgIdentityScore", r."pagesRetried", r."createdAt",
+                s.title AS story_title, u.email AS user_email
+         FROM story_qa_runs r
+         LEFT JOIN stories s ON s.id = r."storyId"
+         LEFT JOIN users u ON u.id = r."userId"
+         WHERE r."createdAt" >= $1
+         ORDER BY r."createdAt" DESC
+         LIMIT 30`,
+        [cutoff],
+      ),
+      this.dataSource.query<Array<{ day: string; avgconfidence: string; cnt: string }>>(
+        `SELECT DATE_TRUNC('day', "createdAt")::date::text AS day,
+                AVG("overallConfidence") AS avgconfidence,
+                COUNT(*)::int AS cnt
+         FROM story_qa_runs
+         WHERE "createdAt" >= $1
+         GROUP BY 1
+         ORDER BY 1 DESC`,
+        [cutoff],
+      ),
+    ]);
+
+    // Aggregate top failure reasons from qa_pages
+    const failureRows = await this.dataSource.query<Array<{ issue: string; cnt: string }>>(
+      `SELECT jsonb_array_elements_text(issues) AS issue, COUNT(*)::int AS cnt
+       FROM story_qa_pages
+       WHERE "createdAt" >= $1 AND issues IS NOT NULL AND issues != '[]'::jsonb
+       GROUP BY 1
+       ORDER BY 2 DESC
+       LIMIT 15`,
+      [cutoff],
+    ).catch(() => [] as Array<{ issue: string; cnt: string }>);
+
+    const a = agg[0] ?? {};
+    return {
+      totalRuns:                    Number(a.totalruns ?? 0),
+      avgOverallConfidence:         Math.round(Number(a.avgoverallconfidence ?? 0) * 10) / 10,
+      avgIdentityScore:             Math.round(Number(a.avgidentityscore ?? 0) * 10) / 10,
+      avgStoryScore:                Math.round(Number(a.avgstoryscore ?? 0) * 10) / 10,
+      avgExpressionScore:           Math.round(Number(a.avgexpressionscore ?? 0) * 10) / 10,
+      avgDialogueScore:             Math.round(Number(a.avgdialoguescoreval ?? 0) * 10) / 10,
+      avgCompositionScore:          Math.round(Number(a.avgcompositionscore ?? 0) * 10) / 10,
+      avgNarrationScore:            Math.round(Number(a.avgnarrationscore ?? 0) * 10) / 10,
+      passRate:                     Math.round(Number(a.passrate ?? 0) * 10) / 10,
+      retryRate:                    Math.round(Number(a.retryrate ?? 0) * 10) / 10,
+      storiesAcceptedFirstAttempt:  Number(a.storiesacceptedfirstattempt ?? 0),
+      storiesRequiringRetry:        Number(a.storiesrequiringretry ?? 0),
+      failedPages:                  Number(failedPages[0]?.failedpages ?? 0),
+      recentRuns: recentRuns.map((r) => ({
+        id: r.id,
+        storyId: r.storyId,
+        storyTitle: r.story_title ?? null,
+        userEmail: r.user_email ?? null,
+        overallConfidence: r.overallConfidence !== null ? Number(r.overallConfidence) : null,
+        overallStatus: r.overallStatus,
+        avgIdentityScore: r.avgIdentityScore !== null ? Math.round(Number(r.avgIdentityScore) * 10) / 10 : null,
+        pagesRetried: Number(r.pagesRetried),
+        createdAt: r.createdAt,
+      })),
+      topFailureReasons: failureRows.map((f) => ({ reason: f.issue, count: Number(f.cnt) })),
+      confidenceTrend: trend.map((t) => ({
+        date: t.day,
+        avgConfidence: Math.round(Number(t.avgconfidence) * 10) / 10,
+        count: Number(t.cnt),
+      })),
+    };
   }
 }

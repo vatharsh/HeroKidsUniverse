@@ -151,6 +151,9 @@ export class MerchandiseOrder extends SoftDeleteColumns {
   @Column({ type: 'text', nullable: true })
   adminNotes!: string | null;
 
+  @Column({ type: 'boolean', default: false })
+  isSandbox!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 

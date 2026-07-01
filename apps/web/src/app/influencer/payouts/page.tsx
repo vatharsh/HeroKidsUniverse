@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
@@ -21,6 +22,37 @@ interface PageData {
   items: PayoutRow[];
   page: number;
   totalPages: number;
+}
+
+function buildReceiptText(row: PayoutRow): string {
+  const lines = [
+    "══════════════════════════════════════",
+    "        HeroKids Universe",
+    "        Influencer Payout Receipt",
+    "══════════════════════════════════════",
+    `Payout #     : ${row.payoutNumber}`,
+    `Amount       : ₹${row.amount.toLocaleString("en-IN")}`,
+    `Status       : ${row.status.toUpperCase()}`,
+    `Method       : ${row.paymentMethod ?? "—"}`,
+    `Reference    : ${row.paymentReference ?? "—"}`,
+    `Paid Date    : ${row.paidDate ? new Date(row.paidDate).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "—"}`,
+    "──────────────────────────────────────",
+    "Thank you for being a HeroKids partner!",
+    "support@herokidsuniverse.com",
+    "══════════════════════════════════════",
+  ];
+  return lines.join("\n");
+}
+
+function downloadReceipt(row: PayoutRow) {
+  const text = buildReceiptText(row);
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `receipt-${row.payoutNumber}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function InfluencerPayoutsPage() {
@@ -63,13 +95,25 @@ export default function InfluencerPayoutsPage() {
                 {row.paidDate ? ` · ${new Date(row.paidDate).toLocaleDateString()}` : ""}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-lg font-black text-emerald-700">₹{row.amount.toLocaleString()}</p>
-              <p className="text-xs text-gray-500 capitalize">{row.status}</p>
-              {row.paymentProofUrl && (
-                <a href={row.paymentProofUrl} target="_blank" className="text-xs text-violet-600 hover:underline mt-1 inline-block" rel="noreferrer">
-                  View Proof
-                </a>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-lg font-black text-emerald-700">₹{row.amount.toLocaleString()}</p>
+                <p className="text-xs text-gray-500 capitalize">{row.status}</p>
+                {row.paymentProofUrl && (
+                  <a href={row.paymentProofUrl} target="_blank" className="text-xs text-violet-600 hover:underline mt-1 inline-block" rel="noreferrer">
+                    View Proof
+                  </a>
+                )}
+              </div>
+              {row.status === "paid" && (
+                <button
+                  type="button"
+                  onClick={() => downloadReceipt(row)}
+                  title="Download Receipt"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 border border-violet-200 px-3 py-2 rounded-xl hover:bg-violet-50 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" /> Receipt
+                </button>
               )}
             </div>
           </div>

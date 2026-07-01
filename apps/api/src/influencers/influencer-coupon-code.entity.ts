@@ -56,6 +56,9 @@ export class InfluencerCouponCode extends SoftDeleteColumns {
   @Column({ type: 'int', default: 0 })
   usageCount!: number;
 
+  @Column({ type: 'int', nullable: true })
+  perUserUsageLimit!: number | null;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   minimumOrderAmount!: number | null;
 

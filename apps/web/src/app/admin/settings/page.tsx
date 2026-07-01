@@ -25,6 +25,13 @@ interface SettingGroup {
 
 const GROUPS: SettingGroup[] = [
   {
+    title: "Mode",
+    description: "Controls whether the platform is in sandbox (test) mode or live mode. Affects order stamping and image generation limits.",
+    items: [
+      { key: "SANDBOX_MODE", label: "Sandbox Mode", description: "ON = sandbox/test mode: orders are marked as test, Dev image cap applies. OFF = live mode: real orders, Prod image cap applies.", type: "boolean" },
+    ],
+  },
+  {
     title: "AI Cost Alerts",
     description: "Thresholds used by the admin dashboard and health checks.",
     items: [

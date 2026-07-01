@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
+import { PlatformSetting } from '../../admin/platform-setting.entity';
 import { InfluencerCommission } from '../../influencers/influencer-commission.entity';
 import { CouponType } from '../../influencers/influencer-coupon-code.entity';
 import { InfluencersService } from '../../influencers/influencers.service';
@@ -22,7 +23,9 @@ import { OrderItemAttributeValue } from './order-item-attribute-value.entity';
 import { OrderItem } from './order-item.entity';
 
 @Injectable()
-export class OrderV2Service {
+export class OrderV2Service implements OnModuleInit {
+  private readonly logger = new Logger(OrderV2Service.name);
+
   constructor(
     @InjectRepository(Order)
     private readonly ordersRepo: Repository<Order>,
@@ -52,7 +55,29 @@ export class OrderV2Service {
     private readonly usersRepo: Repository<User>,
     private readonly influencersService: InfluencersService,
     private readonly dataSource: DataSource,
+    @InjectRepository(PlatformSetting)
+    private readonly settingsRepo: Repository<PlatformSetting>,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const setting = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
+      const isSandbox = setting ? setting.value === 'true' : true;
+      if (isSandbox) {
+        const result = await this.ordersRepo
+          .createQueryBuilder()
+          .update()
+          .set({ isSandbox: true })
+          .where('isSandbox = false')
+          .execute();
+        if (result.affected && result.affected > 0) {
+          this.logger.log(`Backfilled ${result.affected} v2 orders to isSandbox=true`);
+        }
+      }
+    } catch (err) {
+      this.logger.warn('Order isSandbox backfill skipped', err);
+    }
+  }
 
   async createOrder(userId: string, dto: CreateOrderV2Dto) {
     return this.dataSource.transaction(async (manager) => {
@@ -142,6 +167,7 @@ export class OrderV2Service {
             subtotalAmount,
             productIds: normalizedItems.map((row) => row.product.id),
             categoryIds: normalizedItems.map((row) => row.product.categoryId),
+            userId,
           })
         : null;
       if (dto.couponCode && couponResult && !couponResult.valid) {
@@ -279,29 +305,29 @@ export class OrderV2Service {
         changedByUserId: userId,
       }));
 
-      if (
-        couponResult?.valid &&
-        order.couponCodeId &&
-        order.influencerId &&
-        couponResult.couponType !== CouponType.Platform
-      ) {
-        await this.influencersService.createCommissionForOrder({
-          influencerId: order.influencerId,
-          couponCodeId: order.couponCodeId,
-          orderId: order.id,
-          orderNumber: order.orderNumber,
-          userId,
-          subtotalAmount,
-          orderTotal: totalAmount,
-          discountAmount,
-          shippingAmount: 0,
-          taxAmount: Number(order.taxAmount),
-        });
-        const commission = await manager.findOneByOrFail(InfluencerCommission, { orderId: order.id });
-        const refreshedOrder = await manager.findOneByOrFail(Order, { id: order.id });
-        refreshedOrder.influencerCommissionRate = Number(commission.commissionRate);
-        refreshedOrder.influencerCommissionAmount = Number(commission.commissionAmount);
-        await manager.save(Order, refreshedOrder);
+      if (couponResult?.valid && order.couponCodeId) {
+        if (order.influencerId && couponResult.couponType !== CouponType.Platform) {
+          await this.influencersService.createCommissionForOrder({
+            influencerId: order.influencerId,
+            couponCodeId: order.couponCodeId,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            userId,
+            subtotalAmount,
+            orderTotal: totalAmount,
+            discountAmount,
+            shippingAmount: 0,
+            taxAmount: Number(order.taxAmount),
+          });
+          const commission = await manager.findOneByOrFail(InfluencerCommission, { orderId: order.id });
+          const refreshedOrder = await manager.findOneByOrFail(Order, { id: order.id });
+          refreshedOrder.influencerCommissionRate = Number(commission.commissionRate);
+          refreshedOrder.influencerCommissionAmount = Number(commission.commissionAmount);
+          await manager.save(Order, refreshedOrder);
+        } else {
+          // Platform coupon: record usage and increment usageCount (no commission)
+          await this.influencersService.recordCouponUsageForOrder(order.couponCodeId, userId, order.id);
+        }
       }
 
       return this.getOrderDetail(order.id, userId, false, manager);

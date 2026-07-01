@@ -36,6 +36,9 @@ export class Character {
   @Column({ type: 'text', nullable: true })
   avatarUrl!: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  avatarDescription!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

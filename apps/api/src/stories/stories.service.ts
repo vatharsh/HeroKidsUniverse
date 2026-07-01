@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Inj
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 
+import { PlatformSetting } from '../admin/platform-setting.entity';
 import { Character } from '../characters/entities/character.entity';
 import { CompanionsService } from '../companions/companions.service';
 import { CompanionType } from '../companions/entities/universe-companion.entity';
@@ -33,10 +34,17 @@ export class StoriesService {
     private readonly powersRepository: Repository<HeroPower>,
     @InjectRepository(Quest)
     private readonly questsRepository: Repository<Quest>,
+    @InjectRepository(PlatformSetting)
+    private readonly settingsRepo: Repository<PlatformSetting>,
     private readonly dataSource: DataSource,
     private readonly generationService: GenerationService,
     private readonly companionsService: CompanionsService,
   ) {}
+
+  private async isSandboxMode(): Promise<boolean> {
+    const row = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
+    return row ? row.value === 'true' : true;
+  }
 
   async create(userId: string, createStoryDto: CreateStoryDto): Promise<Story> {
     const hero = await this.heroesRepository.findOne({
@@ -47,7 +55,10 @@ export class StoriesService {
       throw new NotFoundException('Hero not found');
     }
 
-    let universeId = createStoryDto.universeId ?? hero.universeId ?? null;
+    const isStandalone = createStoryDto.storyMode === StoryMode.Standalone;
+
+    // Standalone stories are always independent — ignore any universe on the hero or request
+    let universeId = isStandalone ? null : (createStoryDto.universeId ?? hero.universeId ?? null);
 
     if (universeId) {
       const universe = await this.universesRepository.findOne({ where: { id: universeId } });
@@ -61,8 +72,8 @@ export class StoriesService {
       }
     }
 
-    // Auto-link to the user's universe if not already specified
-    if (!universeId) {
+    // Auto-link to the user's universe if not already specified (never for standalone)
+    if (!universeId && !isStandalone) {
       const defaultUniverse = await this.universesRepository.findOne({ where: { userId } });
       if (defaultUniverse) {
         universeId = defaultUniverse.id;
@@ -100,6 +111,8 @@ export class StoriesService {
       }
     }
 
+    const isSandbox = await this.isSandboxMode();
+
     const story = await this.dataSource.transaction(async (manager) => {
       const user = await manager.findOneOrFail(User, {
         where: { id: userId },
@@ -127,6 +140,7 @@ export class StoriesService {
           pages: [],
           characterIds,
           creditsUsed: 1,
+          isSandbox,
         }),
       );
 

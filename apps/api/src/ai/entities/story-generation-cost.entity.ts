@@ -26,6 +26,9 @@ export class StoryGenerationCost {
   @Column({ type: 'decimal', precision: 10, scale: 6, default: 0 })
   totalCostUsd!: number;
 
+  @Column({ type: 'boolean', default: false })
+  isSandbox!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 }

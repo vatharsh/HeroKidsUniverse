@@ -117,7 +117,7 @@ export default function UsersPage() {
     if (q) params.set("search", q);
     fetch(`${BASE}/admin/users?${params}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(j => setData(j.data ?? j))
+      .then(j => { const d = j.data ?? j; if (d?.items) setData(d); })
       .finally(() => setLoading(false));
   }
 
@@ -172,10 +172,10 @@ export default function UsersPage() {
           <tbody>
             {loading ? (
               <tr><td colSpan={10} className="px-4 py-10 text-center"><Loader2 className="w-5 h-5 text-violet-600 animate-spin mx-auto" /></td></tr>
-            ) : data?.items.length === 0 ? (
+            ) : (data?.items?.length ?? 0) === 0 ? (
               <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-xs">No users found</td></tr>
             ) : (
-              data?.items.map(u => (
+              data?.items?.map(u => (
                 <tr key={u.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
