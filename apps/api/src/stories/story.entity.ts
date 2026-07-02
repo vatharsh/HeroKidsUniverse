@@ -117,6 +117,7 @@ export interface StoryPage {
   narrationText?: string;
   finalNarrationText?: string;
   imageUrl?: string;
+  backgroundUrl?: string; // background-only scene; frontend overlays hero avatar on top
   audioUrl?: string;
   sceneDescription?: string;
   dialogue?: PageDialogue[];

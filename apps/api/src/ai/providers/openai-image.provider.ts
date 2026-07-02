@@ -79,6 +79,12 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
   }
 
   async generateImage(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
+    // In background-only mode: generate scene + supporting characters without the hero.
+    // The hero avatar is overlaid by the frontend — no identity references needed.
+    if (input.backgroundOnlyMode) {
+      return this.generateBackgroundScene(input);
+    }
+
     // Resolve reference images before building the prompt so we know what's available
     const refSpecs = [
       ...(input.heroAvatarUrl         ? [{ url: input.heroAvatarUrl,    name: 'hero.png' }]          : []),
@@ -298,6 +304,63 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
       quality: imageQuality,
     });
 
+    return this.fromImageResponse(response);
+  }
+
+  /**
+   * Background-only generation: scene + supporting characters, no main hero drawn.
+   * The hero avatar is composited over this by the frontend.
+   */
+  private async generateBackgroundScene(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
+    const imageQuality = this.config.get<string>('OPENAI_IMAGE_QUALITY') ?? 'low';
+    const styleDefault = input.style ?? 'premium wide-format semi-realistic children\'s storybook illustration, warm painterly lighting, rich colourful environments, Indian family warmth';
+
+    // Only pass supporting character avatar references — not the hero
+    const charRefSpecs = (input.characterAvatarUrls ?? []).map((url, i) => ({ url, name: `char-${i}.png` }));
+    const charFiles = charRefSpecs.length > 0
+      ? (await Promise.all(charRefSpecs.map(r => this.urlToFile(r.url, r.name)))).filter((f): f is Awaited<ReturnType<typeof toFile>> => f !== null)
+      : [];
+
+    const castLine = input.supportingCharacters?.length
+      ? `Supporting characters in this scene: ${input.supportingCharacters.join(', ')}.`
+      : '';
+
+    const prompt = [
+      styleDefault,
+      castLine,
+      input.sceneDescription,
+      'CRITICAL: Do NOT draw the main child hero character in this image. The main hero will be composited over this image by the app.',
+      'Leave the lower-center foreground area naturally open and unoccupied — no character standing there, no object blocking it.',
+      'Generate only: scene background, environment, atmosphere, and supporting characters (if any) positioned to the sides or background.',
+      'Wide cinematic composition. Rich, detailed background. Child-safe, joyful atmosphere.',
+      'NO text, NO words, NO letters, NO speech bubbles, NO captions anywhere in the image.',
+    ].filter(Boolean).join('\n');
+
+    if (charFiles.length > 0) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const edited = await (this.client.images.edit as any)({
+          model: this.model,
+          image: charFiles,
+          prompt,
+          n: 1,
+          size: '1024x1024',
+          quality: imageQuality,
+        });
+        return this.fromImageResponse(edited);
+      } catch {
+        // fall through to generate
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const response = await (this.client.images.generate as any)({
+      model: this.model,
+      prompt,
+      n: 1,
+      size: '1024x1024',
+      quality: imageQuality,
+    });
     return this.fromImageResponse(response);
   }
 

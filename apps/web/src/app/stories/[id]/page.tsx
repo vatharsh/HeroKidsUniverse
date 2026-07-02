@@ -63,6 +63,7 @@ interface StoryPage {
   narrationText?: string;
   finalNarrationText?: string;
   imageUrl?: string;
+  backgroundUrl?: string;
   audioUrl?: string;
   sceneDescription?: string;
   dialogue?: PageDialogue[];
@@ -1044,7 +1045,27 @@ export default function StoryReaderPage() {
 
           {/* Panel image */}
           <div className="relative w-full overflow-hidden" style={{ aspectRatio: "376/499" }}>
-            {currentPage?.imageUrl ? (
+            {currentPage?.backgroundUrl ? (
+              /* Background-only mode: AI scene + hero avatar composited on top */
+              <>
+                <div className="absolute inset-0 scale-110"
+                  style={{ backgroundImage: `url(${currentPage.backgroundUrl})`, backgroundSize: "cover", backgroundPosition: "center", filter: "blur(14px) brightness(0.5)" }} />
+                <img
+                  src={currentPage.backgroundUrl}
+                  alt={`Page ${page + 1} background`}
+                  className="absolute inset-0 w-full h-full object-cover z-10"
+                />
+                {/* Hero avatar overlay — positioned lower-center, natural size */}
+                {story.hero?.avatarUrl && (
+                  <img
+                    src={story.hero.avatarUrl}
+                    alt={story.hero.name ?? "Hero"}
+                    className="absolute z-20 object-contain drop-shadow-2xl"
+                    style={{ bottom: "0%", left: "50%", transform: "translateX(-50%)", height: "72%", width: "auto", maxWidth: "60%" }}
+                  />
+                )}
+              </>
+            ) : currentPage?.imageUrl ? (
               <>
                 {/* Blurred background fill */}
                 <div className="absolute inset-0 scale-110"
