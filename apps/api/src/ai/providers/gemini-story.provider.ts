@@ -443,7 +443,9 @@ Respond with ONLY valid JSON (no markdown, no code fences):
   },
   "newPowers": [],
   "newQuests": [],
-  "newMemories": [],
+  "newMemories": [
+    { "type": "character_met", "title": "Short label for this memory (required)", "detail": "Optional extra context" }
+  ],
   "scenes": [
 ${v.sceneEntries}
   ],
@@ -451,6 +453,7 @@ ${v.sceneEntries}
 }
 
 IMPORTANT: The "pages" array MUST be empty []. All pages must be inside "scenes". This is required.
+newMemories: each entry MUST have "type" and "title" (non-empty string). "detail" is optional. Leave array empty [] if no new memories.
 newMemories type must be one of: character_met, villain_defeated, power_earned, item_found, location_discovered, quest_opened, quest_completed, achievement_unlocked
 newPowers and newQuests may be empty arrays if none were earned/opened.
 background: one sentence, specific location + time of day + lighting mood

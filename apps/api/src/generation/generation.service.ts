@@ -1770,16 +1770,19 @@ export class GenerationService implements OnModuleInit {
 
     const validMemoryTypes = new Set<string>(Object.values(MemoryType));
     const memories = (generated.newMemories ?? [])
-      .filter((m) => validMemoryTypes.has(m.type) && !!m.title)
-      .map((m) =>
-        this.memoriesRepo.create({
+      .filter((m) => m && typeof m === 'object' && validMemoryTypes.has(m.type))
+      .map((m) => {
+        const title = typeof m.title === 'string' && m.title.trim() ? m.title.trim() : null;
+        if (!title) return null;
+        return this.memoriesRepo.create({
           universeId: story.universeId as string,
           type: m.type as MemoryType,
-          title: m.title,
-          detail: m.detail ?? null,
+          title,
+          detail: typeof m.detail === 'string' ? m.detail : null,
           storyId: story.id,
-        }),
-      );
+        });
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null);
     if (memories.length > 0) await this.memoriesRepo.save(memories);
 
     const powers = (generated.newPowers ?? []).map((name) =>
