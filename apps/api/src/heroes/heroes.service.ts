@@ -36,7 +36,7 @@ export class HeroesService {
     let avatarDescription: string | null = null;
     let characterIdentity: Hero['characterIdentity'] = null;
     if (photo) {
-      await this.uploadService.uploadHeroPhoto(userId, photo);
+      // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
       const result = await this.generateAvatar(userId, createHeroDto.name, photo);
       avatarUrl = result.avatarUrl;
       avatarDescription = result.avatarDescription;
@@ -86,7 +86,7 @@ export class HeroesService {
     });
 
     if (photo) {
-      await this.uploadService.uploadHeroPhoto(userId, photo);
+      // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
       const result = await this.generateAvatar(userId, hero.name ?? 'Hero', photo);
       hero.avatarUrl = result.avatarUrl;
       hero.avatarDescription = result.avatarDescription;
@@ -110,6 +110,40 @@ export class HeroesService {
     }
 
     await this.heroesRepository.remove(hero);
+  }
+
+  async adminRegenerateAvatar(heroId: string): Promise<HeroResponse> {
+    const hero = await this.heroesRepository.findOne({ where: { id: heroId } });
+    if (!hero) throw new NotFoundException('Hero not found');
+    if (!hero.avatarUrl) throw new NotFoundException('Hero has no avatar to regenerate from');
+
+    let photoBuffer: Buffer | null = null;
+    try {
+      const res = await fetch(hero.avatarUrl);
+      if (res.ok) photoBuffer = Buffer.from(await res.arrayBuffer());
+    } catch {
+      // fall through — generate without photo reference
+    }
+
+    const mockPhoto = photoBuffer
+      ? { buffer: photoBuffer, mimetype: 'image/png', originalname: 'avatar.png' } as Express.Multer.File
+      : null;
+
+    if (mockPhoto) {
+      const result = await this.generateAvatar(hero.userId, hero.name ?? 'Hero', mockPhoto);
+      hero.avatarUrl = result.avatarUrl ?? hero.avatarUrl;
+      hero.avatarDescription = result.avatarDescription ?? hero.avatarDescription;
+      hero.characterIdentity = result.characterIdentity ?? hero.characterIdentity;
+    } else {
+      // Re-generate from description only (no image reference)
+      const avatar = await this.imageProvider.generateAvatar({ name: hero.name ?? 'Hero', role: 'hero' });
+      if (avatar.imageBase64) {
+        hero.avatarUrl = await this.uploadService.uploadHeroAvatar(hero.userId, avatar.imageBase64);
+      }
+    }
+
+    this.logger.log(`Admin avatar regeneration for hero ${heroId} complete`);
+    return this.withComputedAge(await this.heroesRepository.save(hero));
   }
 
   private async findHeroEntity(userId: string, id: string): Promise<Hero> {

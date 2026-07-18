@@ -9,6 +9,7 @@ import { CreditPacksService } from '../credits/credit-packs.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CharacterCanonService } from '../characters/character-canon.service';
 import { Hero } from '../heroes/hero.entity';
+import { HeroesService } from '../heroes/heroes.service';
 import { OrderV2Service } from '../merchandise/orders/order-v2.service';
 import { Story } from '../stories/story.entity';
 import { AdminService } from './admin.service';
@@ -23,6 +24,7 @@ export class AdminController {
     private readonly orderV2Service: OrderV2Service,
     private readonly creditPacksService: CreditPacksService,
     private readonly characterCanonService: CharacterCanonService,
+    private readonly heroesService: HeroesService,
     private readonly qaService: AIQualityAssuranceService,
     @InjectRepository(Story) private readonly storiesRepo: Repository<Story>,
     @InjectRepository(Hero) private readonly heroesRepo: Repository<Hero>,
@@ -300,6 +302,11 @@ export class AdminController {
   @Post('character-canons/:id/regenerate')
   regenerateCharacterCanon(@Param('id') id: string) {
     return this.characterCanonService.regenerateCanon(id);
+  }
+
+  @Post('heroes/:id/regenerate-avatar')
+  regenerateHeroAvatar(@Param('id') id: string) {
+    return this.heroesService.adminRegenerateAvatar(id);
   }
 
   @Post('coupons/platform')

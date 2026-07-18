@@ -22,6 +22,7 @@ import type {
   UniverseContext,
 } from '../ai/interfaces/story-generation.provider';
 import { AIQualityAssuranceService } from '../ai/ai-quality-assurance.service';
+import { BACKGROUND_SCENE_STYLE, STORYBOOK_STYLE } from '../ai/style.constants';
 import { CharacterCanonService } from '../characters/character-canon.service';
 import type { FaceMetricsJson } from '../characters/entities/character-canon.entity';
 import { Character } from '../characters/entities/character.entity';
@@ -662,7 +663,7 @@ export class GenerationService implements OnModuleInit {
             heroAvatarDescription: hero.avatarDescription ?? undefined,
             characterAvatarUrls,
             characterAvatarDescriptions,
-            style: 'premium semi-realistic children\'s storybook illustration, warm painterly lighting, identity-faithful faces, rich colorful backgrounds, Indian family warmth, no Pixar/anime/Disney facial exaggeration, no generic cartoon child',
+            style: isBackgroundOnly ? BACKGROUND_SCENE_STYLE : STORYBOOK_STYLE,
             storyVisualState: storyVisualState ?? undefined,
             dialogue: page.dialogue,
             characters: page.characters,
@@ -892,61 +893,80 @@ export class GenerationService implements OnModuleInit {
     const illustratedScenes = scenes.slice(0, maxScenes);
     const remainingScenes = scenes.slice(maxScenes);
 
-    const sceneResults: SceneResult[] = await this.mapWithConcurrency(
-      illustratedScenes,
-      2,
-      async (scene): Promise<SceneResult> => {
-        try {
-          const firstPage = scene.pages[0];
-          const imageInput: ImageGenerationInput = {
-            sceneDescription: scene.illustrationBrief,
-            heroName,
-            heroAge,
-            supportingCharacters,
-            heroAvatarUrl: hero.avatarUrl ?? undefined,
-            heroAvatarDescription: hero.avatarDescription ?? undefined,
-            characterAvatarUrls,
-            characterAvatarDescriptions,
-            style: 'premium wide-format semi-realistic children\'s storybook illustration, warm painterly lighting, identity-faithful faces, rich colorful environments with ample clean space for app-rendered speech bubbles, Indian family warmth, no Pixar/anime/Disney facial exaggeration, no generic cartoon child',
-            storyVisualState: storyVisualState ?? undefined,
-            characters: firstPage?.characters,
-            camera: 'wide cinematic composition, characters positioned with generous background space on all sides for flexible cropping',
-            heroCanonSummary,
-            heroNeverChangeRules,
-            heroFaceMetrics,
-            characterCanonSummaries,
-            storyStateBlock: sceneStateBlockMap.get(scene.sceneId) ?? undefined,
-            characterDirections: firstPage?.characterDirections,
-            backgroundOnlyMode: isBackgroundOnly,
-          };
-          let imageOutput = await this.generateImageWithRetry(imageInput);
+    const buildSceneImageInput = (scene: SceneOutput, styleReferenceUrl?: string): ImageGenerationInput => {
+      const firstPage = scene.pages[0];
+      return {
+        sceneDescription: scene.illustrationBrief,
+        heroName,
+        heroAge,
+        supportingCharacters,
+        heroAvatarUrl: hero.avatarUrl ?? undefined,
+        heroAvatarDescription: hero.avatarDescription ?? undefined,
+        characterAvatarUrls,
+        characterAvatarDescriptions,
+        style: STORYBOOK_STYLE,
+        styleReferenceUrl,
+        storyVisualState: storyVisualState ?? undefined,
+        characters: firstPage?.characters,
+        camera: 'wide cinematic composition, characters positioned with generous background space on all sides for flexible cropping',
+        heroCanonSummary,
+        heroNeverChangeRules,
+        heroFaceMetrics,
+        characterCanonSummaries,
+        storyStateBlock: sceneStateBlockMap.get(scene.sceneId) ?? undefined,
+        characterDirections: firstPage?.characterDirections,
+        backgroundOnlyMode: isBackgroundOnly,
+      };
+    };
 
-          if (!isBackgroundOnly && faceQAEnabled && hero.avatarUrl && imageOutput.imageBase64) {
-            const qaResult = await this.imageProvider.checkFaceConsistency(
-              hero.avatarUrl, imageOutput.imageBase64, heroName,
-            ).catch(() => null);
-            if (qaResult && qaResult.identityScore < faceQAThreshold) {
-              this.logger.warn(
-                `Face QA scene ${scene.sceneId}: score=${qaResult.identityScore}/${faceQAThreshold} — regenerating with identity boost`,
-              );
-              try {
-                imageOutput = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true });
-              } catch {
-                this.logger.warn(`Identity boost regeneration failed for scene ${scene.sceneId}, using original`);
-              }
+    const generateSceneImage = async (scene: SceneOutput, styleReferenceUrl?: string): Promise<SceneResult> => {
+      try {
+        const imageInput = buildSceneImageInput(scene, styleReferenceUrl);
+        let imageOutput = await this.generateImageWithRetry(imageInput);
+
+        if (!isBackgroundOnly && faceQAEnabled && hero.avatarUrl && imageOutput.imageBase64) {
+          const qaResult = await this.imageProvider.checkFaceConsistency(
+            hero.avatarUrl, imageOutput.imageBase64, heroName,
+          ).catch(() => null);
+          if (qaResult && qaResult.identityScore < faceQAThreshold) {
+            this.logger.warn(
+              `Face QA scene ${scene.sceneId}: score=${qaResult.identityScore}/${faceQAThreshold} — regenerating with identity boost`,
+            );
+            try {
+              imageOutput = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true });
+            } catch {
+              this.logger.warn(`Identity boost regeneration failed for scene ${scene.sceneId}, using original`);
             }
           }
-
-          settled++;
-          if (onPageDone) await onPageDone(settled, illustratedScenes.length).catch(() => {});
-          return { scene, imageOutput };
-        } catch (err) {
-          settled++;
-          if (onPageDone) await onPageDone(settled, illustratedScenes.length).catch(() => {});
-          return { scene, imageOutput: null, error: err instanceof Error ? err.message : 'Unknown' };
         }
-      },
+
+        settled++;
+        if (onPageDone) await onPageDone(settled, illustratedScenes.length).catch(() => {});
+        return { scene, imageOutput };
+      } catch (err) {
+        settled++;
+        if (onPageDone) await onPageDone(settled, illustratedScenes.length).catch(() => {});
+        return { scene, imageOutput: null, error: err instanceof Error ? err.message : 'Unknown' };
+      }
+    };
+
+    // Generate scene 1 first so its output can anchor visual consistency for all later scenes
+    const sceneResults: SceneResult[] = [];
+    let styleReferenceUrl: string | undefined;
+    if (illustratedScenes.length > 0) {
+      const scene1Result = await generateSceneImage(illustratedScenes[0]);
+      sceneResults.push(scene1Result);
+      styleReferenceUrl = scene1Result.imageOutput?.imageUrl ?? undefined;
+    }
+
+    // Remaining scenes run in parallel, each receiving scene 1's image as a visual anchor
+    const remainingIllustrated = illustratedScenes.slice(1);
+    const remainingResults = await this.mapWithConcurrency(
+      remainingIllustrated,
+      2,
+      (scene) => generateSceneImage(scene, styleReferenceUrl),
     );
+    sceneResults.push(...remainingResults);
 
     const sceneIllustrationMap = new Map<string, string | undefined>();
     const storedScenes: StoryScene[] = [];
@@ -1039,7 +1059,9 @@ export class GenerationService implements OnModuleInit {
               heroAvatarDescription: hero.avatarDescription ?? undefined,
               characterAvatarUrls,
               characterAvatarDescriptions,
-              style: 'premium semi-realistic children\'s storybook illustration, warm painterly lighting, identity-faithful faces, rich colorful backgrounds, clean space for app-rendered speech bubbles, Indian family warmth, no Pixar/anime/Disney facial exaggeration, no generic cartoon child',
+              style: STORYBOOK_STYLE,
+              // Anchor to this scene's own illustration so hair/costume/face stay identical to the base scene image
+              styleReferenceUrl: sceneImageUrl,
               storyVisualState: storyVisualState ?? undefined,
               dialogue: page.dialogue,
               characters: page.characters,
@@ -1171,9 +1193,14 @@ export class GenerationService implements OnModuleInit {
 
       if (!layout?.bubbles?.length) return bubbles;
 
+      const MIN_LAYOUT_CONFIDENCE = 0.35;
       return bubbles.map((bubble, index) => {
         const placed = layout.bubbles[index];
         if (!placed) return bubble;
+        // A low-confidence anchor/rect guess is worse than the frontend's position-based heuristic fallback — drop it.
+        if (placed.confidence < MIN_LAYOUT_CONFIDENCE) {
+          return { ...bubble, layoutConfidence: placed.confidence };
+        }
         return {
           ...bubble,
           anchorPoint: placed.anchorPoint,

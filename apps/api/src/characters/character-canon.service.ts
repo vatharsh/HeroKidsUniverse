@@ -169,7 +169,7 @@ Return ONLY valid JSON matching this exact structure (no markdown):
     }
   },
   "appearanceSummary": "One dense paragraph (60-90 words) for a storybook illustrator.",
-  "neverChangeRules": ["Never change the child's hairstyle.", "Never change the skin tone.", "Never change the face shape.", "Never make the child look older or younger.", "Never make the character look like a generic cartoon child."],
+  "neverChangeRules": ["Never change the child's hairstyle.", "Never change the skin tone.", "Never change the face shape.", "Never make the child look older or younger."],
   "distinctiveFeatures": [],
   "faceMetrics": {
     "face_width_category": "medium",

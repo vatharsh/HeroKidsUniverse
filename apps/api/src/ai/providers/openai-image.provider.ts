@@ -16,6 +16,7 @@ import {
 } from '../interfaces/image-generation.provider';
 import type { CharacterIdentity } from '../../heroes/hero.entity';
 import { PromptRegistryService } from '../prompt-registry.service';
+import { AVATAR_STYLE, BACKGROUND_SCENE_STYLE, STORYBOOK_STYLE } from '../style.constants';
 
 @Injectable()
 export class OpenAIImageProvider implements ImageGenerationProvider {
@@ -63,14 +64,16 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
 
   private getIdentityQaFallback(heroName: string): string {
     return (
+      `Both images are in cartoon/storybook illustration style — that is expected and must NOT lower the score.\n` +
       `Image 1 is the approved cartoon avatar of a child named ${heroName}. ` +
-      `Image 2 is a generated storybook illustration that must depict the same child.\n` +
-      `Compare face identity in detail: face shape, skin tone, hairstyle, hair colour, eye shape, eyebrows, nose, mouth/smile, cheeks/jawline, age appearance, glasses/accessories, distinctive features, and overall resemblance.\n` +
-      `Ignore differences in background, pose, lighting, and clothing unless they hide or alter the face. Penalize generic cartoon/Pixar/anime face drift heavily.\n` +
-      `Score consistency 1–10 (10 = near-perfect match, 1 = completely different child).\n` +
+      `Image 2 is a generated storybook scene that must depict the same child.\n` +
+      `Judge IDENTITY ONLY: face shape, skin tone, hairstyle, hair colour, eye shape, age appearance, distinctive features (glasses, dimples, etc.), and overall resemblance.\n` +
+      `Ignore differences in background, pose, lighting, and clothing unless they conceal or significantly alter the face.\n` +
+      `Score consistency 1–10 (10 = same child unmistakably, 1 = completely different child).\n` +
+      `Analyse the actual images provided. Do not echo placeholder numbers — every score must reflect what you see.\n` +
       `Return ONLY valid JSON:\n` +
-      `{"identityScore": 8, "issues": ["hairstyle lengthened"], "suggestions": ["restore shorter wavy hair"], "recommendation": "accept"}\n` +
-      `recommendation = "accept" when identityScore >= 7; "regenerate" when < 7. issues and suggestions are empty arrays if none.`
+      `{"identityScore": <1-10>, "issues": [<observed mismatches or []>], "suggestions": [<or []>], "recommendation": "accept or regenerate"}\n` +
+      `recommendation = "accept" when identityScore >= 7; "regenerate" when < 7.`
     );
   }
 
@@ -89,6 +92,8 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
     const refSpecs = [
       ...(input.heroAvatarUrl         ? [{ url: input.heroAvatarUrl,    name: 'hero.png' }]          : []),
       ...(input.characterAvatarUrls ?? []).map((url, i) => ({ url, name: `char-${i}.png` })),
+      // Style reference (scene 1 output) — visual anchor for cross-scene character consistency
+      ...(input.styleReferenceUrl ? [{ url: input.styleReferenceUrl, name: 'style-ref.png' }] : []),
     ];
 
     const files = refSpecs.length > 0
@@ -102,6 +107,13 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
     const imageQuality = this.config.get<string>('OPENAI_IMAGE_QUALITY') ?? 'low';
     const dbImageTemplate = await this.getActiveImageTemplate();
 
+    const styleRefIndex = input.heroAvatarUrl
+      ? 1 + (input.characterAvatarUrls?.length ?? 0) + 1
+      : (input.characterAvatarUrls?.length ?? 0) + 1;
+    const styleRefLine = input.styleReferenceUrl
+      ? `${styleRefIndex}. VISUAL CONSISTENCY REFERENCE (style-ref.png) — this is scene 1 of the same story. Every character who appears in this reference must look IDENTICAL in the new scene: same face shape, same skin tone, same hairstyle, same clothing style, same age. Match the art style, lighting, colour palette, and brushwork exactly. If this reference conflicts with the scene description on any appearance detail, follow this reference.`
+      : '';
+
     const referenceOrderLine = refSpecs.length
       ? [
           'REFERENCE IMAGE ORDER:',
@@ -110,6 +122,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
             const number = input.heroAvatarUrl ? index + 2 : index + 1;
             return `${number}. ${input.supportingCharacters?.[index] ?? `Supporting character ${index + 1}`} reference portrait.`;
           }),
+          styleRefLine,
           'Use these reference portraits as IDENTITY REFERENCES, not style references.',
           'The first reference is the approved avatar identity. Preserve face shape, skin tone, hairstyle, hair colour, eye shape, nose, mouth, ears, smile, age appearance, facial hair, bindi, glasses, and distinctive features.',
           'Apply storybook style only to brushwork, lighting, colour palette, clothing rendering, and background. Do not stylize or redesign facial anatomy.',
@@ -226,7 +239,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
         ].join(' ')
       : '';
 
-    const styleDefault = input.style ?? 'premium semi-realistic children\'s storybook illustration, warm painterly lighting, expressive but identity-faithful faces, rich colorful backgrounds, Indian family warmth, no Pixar/anime/Disney facial exaggeration, no generic cartoon child';
+    const styleDefault = input.style ?? STORYBOOK_STYLE;
     const stateBlock = input.storyStateBlock ?? storyStateLockLine;
 
     let prompt: string;
@@ -245,7 +258,8 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
           identityBoostLine,
           sceneDescription: input.sceneDescription,
         }),
-        'RUNTIME IDENTITY LOCK: the approved avatar/reference is identity, not style. No generic cute child, no Pixar/anime/Disney face drift, no enlarged eyes, no rounded cheeks, no smaller nose, no changed smile, no changed skin tone, no changed hairstyle, no changed age. No text or speech bubbles in the image.',
+        'If the scene description conflicts with the reference images or identity descriptions on any appearance detail, ignore the conflicting detail and follow the identity descriptions/reference images instead.',
+        'RUNTIME IDENTITY LOCK: preserve face shape, skin tone, hairstyle, eye shape, age, and distinctive features from the reference. Do not change skin tone, do not change hairstyle, do not change age. No text or speech bubbles in the image.',
       ].filter(Boolean).join('\n');
     } else {
       // Hardcoded fallback
@@ -261,7 +275,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
         identityBoostLine,
         input.sceneDescription,
         'If the scene description conflicts with the reference portraits or identity descriptions, ignore the conflicting visual detail and follow the identity descriptions/reference portraits.',
-        'IDENTITY LOCK: do not turn people into generic cartoon archetypes. Do not enlarge eyes, round cheeks, shrink the nose, alter the mouth/smile, change skin tone, change hairstyle, or change age. Do not add glasses, bindis, moustaches, jewellery, white hair, facial hair, or age changes unless the identity description or reference image has them.',
+        'IDENTITY LOCK: preserve face shape, skin tone, hairstyle, eye shape, and age from the reference. Do not add glasses, bindis, moustaches, jewellery, or age changes unless the identity description or reference image has them.',
         'CAST LOCK: draw only the named characters required by the scene. Do not duplicate a child face for another child. Each named person must remain visually distinct and consistent across pages.',
         'Child-safe, joyful and adventurous atmosphere. NO text, NO words, NO letters, NO speech bubbles, NO captions, NO written dialogue anywhere in the image. Leave clean visual space where speech bubbles will be overlaid.',
       ].filter(Boolean).join('\n');
@@ -313,7 +327,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
    */
   private async generateBackgroundScene(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     const imageQuality = this.config.get<string>('OPENAI_IMAGE_QUALITY') ?? 'low';
-    const styleDefault = input.style ?? 'premium wide-format semi-realistic children\'s storybook illustration, warm painterly lighting, rich colourful environments, Indian family warmth';
+    const styleDefault = input.style ?? BACKGROUND_SCENE_STYLE;
 
     // Only pass supporting character avatar references — not the hero
     const charRefSpecs = (input.characterAvatarUrls ?? []).map((url, i) => ({ url, name: `char-${i}.png` }));
@@ -536,20 +550,20 @@ Description to parse:
     const registryRules = await this.getPromptTemplateText('avatar_generation');
 
     const prompt = [
-      'Create a high-quality HeroKids storybook avatar portrait that looks almost identical to the reference photo.',
-      'IDENTITY PRESERVATION IS THE TOP PRIORITY — the output must be instantly recognisable as the same person, just gently illustrated:',
+      `Create a HeroKids storybook avatar portrait in ${AVATAR_STYLE}.`,
+      'IDENTITY PRESERVATION IS THE TOP PRIORITY — the output must be instantly recognisable as the same person, illustrated in cartoon storybook style:',
       '• Keep the exact face shape, facial proportions, and bone structure.',
       '• Keep the exact skin tone and complexion.',
       '• Keep the exact hairstyle, hair colour, hair length, and hair texture — do not alter it in any way.',
       '• Keep the exact eye shape, eye colour, and gaze direction.',
-      '• Keep the exact facial expression and emotion — if they are smiling, keep that smile; if they look serious, keep that.',
+      '• Keep the exact facial expression and emotion.',
       '• Keep any distinctive features: glasses, freckles, dimples, moles, birthmarks, braces.',
       '• Keep the same age appearance.',
-      'Allowed changes ONLY: replace the background with a clean soft-gradient or neutral studio background; apply subtle, flattering portrait lighting to make the subject look their best.',
+      'Allowed changes ONLY: apply the cartoon illustration style; replace the background with a clean soft-gradient or neutral studio background.',
       registryRules
         ? `ACTIVE PROMPT REGISTRY AVATAR RULES:\n${registryRules}`
-        : 'Style: premium semi-realistic children\'s storybook portrait, warm painterly style with soft natural studio lighting. Avoid exaggerated Pixar or anime proportions — the child must look like an illustrated version of themselves, not a generic cartoon character. Indian family warmth.',
-      'The result should feel ready to use as the character reference for future illustrated story pages. Avoid changing the nose, ears, jaw, smile, eyes, or hairline.',
+        : '',
+      'The result must serve as the character reference for story page illustrations — same style, so the avatar composites naturally onto story scenes.',
       adjustmentLine,
       input.role ? `Role context (do not change appearance for this — it is only for subtle heroic confidence in the pose): ${input.role}.` : '',
       'Single portrait, head and shoulders, no text, no watermark, no border.',
@@ -623,8 +637,8 @@ Description to parse:
         messages: [{
           role: 'user',
           content: [
-            { type: 'image_url', image_url: { url: avatarDataUrl, detail: 'low' } },
-            { type: 'image_url', image_url: { url: generatedDataUrl, detail: 'low' } },
+            { type: 'image_url', image_url: { url: avatarDataUrl, detail: 'high' } },
+            { type: 'image_url', image_url: { url: generatedDataUrl, detail: 'high' } },
             {
               type: 'text',
               text: await this.getIdentityQaPrompt(heroName),
@@ -653,9 +667,17 @@ Description to parse:
     if (!input.speechBubbles.length) return { bubbles: [] };
 
     try {
-      let imageUrl = input.imageUrl;
-      if (!imageUrl && input.imageBase64) {
+      let imageUrl: string | undefined;
+      if (input.imageBase64) {
         imageUrl = `data:image/png;base64,${input.imageBase64}`;
+      } else if (input.imageUrl) {
+        // OpenAI vision cannot fetch localhost URLs — resolve to base64 via local disk read
+        const loaded = await this.urlToBuffer(input.imageUrl);
+        if (loaded) {
+          imageUrl = `data:${loaded.contentType};base64,${loaded.buffer.toString('base64')}`;
+        } else {
+          imageUrl = input.imageUrl; // last resort: pass URL directly (works for R2/CDN)
+        }
       }
       if (!imageUrl) return null;
 
@@ -673,8 +695,9 @@ Description to parse:
         `Character directions: ${JSON.stringify(input.characterDirections ?? [])}`,
         `Requested bubbles: ${JSON.stringify(input.speechBubbles)}`,
         '',
-        'Return ONLY valid JSON:',
-        '{"bubbles":[{"speakerName":"Name","text":"Line","anchorPoint":{"x":72,"y":46},"bubbleRect":{"x":8,"y":8,"width":36,"height":18},"confidence":0.86,"reason":"speaker on right, bubble placed upper left"}]}',
+        'You must independently inspect the actual image provided above for every bubble. Do not reuse any numbers from this instruction text as your answer — every coordinate must be based on where the speaker actually is in this specific image.',
+        'Return ONLY valid JSON in this exact shape (the values below are placeholder types/ranges, not real answers):',
+        '{"bubbles":[{"speakerName":"<name from the requested bubbles>","text":"<text from the requested bubbles>","anchorPoint":{"x":<0-100 based on the actual mouth position you see>,"y":<0-100>},"bubbleRect":{"x":<0-100>,"y":<0-100>,"width":<10-50>,"height":<8-30>},"confidence":<0.0-1.0, your real confidence>,"reason":"<brief reason based on what you actually observed>"}]}',
       ].filter(Boolean).join('\n');
 
       const response = await this.client.chat.completions.create({
@@ -683,7 +706,7 @@ Description to parse:
         messages: [{
           role: 'user',
           content: [
-            { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+            { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
             { type: 'text', text: prompt },
           ],
         }],

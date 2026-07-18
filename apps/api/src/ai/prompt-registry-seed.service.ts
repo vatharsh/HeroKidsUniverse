@@ -192,7 +192,7 @@ storyStateUpdate: required on every page; use empty arrays when nothing changes.
 {{identityBoostLine}}
 {{sceneDescription}}
 If the scene description conflicts with the reference portraits or identity descriptions, ignore the conflicting visual detail and follow the identity descriptions/reference portraits.
-IDENTITY LOCK: do not turn people into generic cartoon archetypes. Do not add glasses, bindis, moustaches, jewellery, white hair, facial hair, or age changes unless the identity description or reference image has them.
+IDENTITY LOCK: preserve face shape, skin tone, hairstyle, eye shape, and age from the reference. Do not add glasses, bindis, moustaches, jewellery, or age changes unless the identity description or reference image has them.
 CAST LOCK: draw only the named characters required by the scene. Do not duplicate a child face for another child. Each named person must remain visually distinct and consistent across pages.
 Child-safe, joyful and adventurous atmosphere. NO text, NO words, NO letters, NO speech bubbles, NO captions, NO written dialogue anywhere in the image. Leave clean visual space where speech bubbles will be overlaid.`,
   },
@@ -206,11 +206,14 @@ Child-safe, joyful and adventurous atmosphere. NO text, NO words, NO letters, NO
     variablesJson: { required: ['heroName'] },
     seedVersion: 2,
     changeNotes: 'Initial seed — extracted from OpenAIImageProvider.checkFaceConsistency(). Code reads this at runtime.',
-    promptText: `Image 1 is the approved cartoon avatar of a child named {{heroName}}. Image 2 is a generated storybook illustration that must depict the same child.
-Compare face identity: face shape, skin tone, hairstyle, hair colour, eye shape, age, glasses/accessories, distinctive features.
-Score consistency 1–10 (10 = near-perfect match, 1 = completely different child).
+    promptText: `Both images are in cartoon/storybook illustration style — that is expected and must NOT lower the score.
+Image 1 is the approved cartoon avatar of a child named {{heroName}}. Image 2 is a generated storybook scene that must depict the same child.
+Judge IDENTITY ONLY: face shape, skin tone, hairstyle, hair colour, eye shape, age appearance, distinctive features (glasses, dimples, etc.), and overall resemblance.
+Ignore differences in background, pose, lighting, and clothing unless they conceal or significantly alter the face.
+Score consistency 1–10 (10 = same child unmistakably, 1 = completely different child).
+Analyse the actual images provided. Do not echo placeholder numbers — every score must reflect what you see.
 Return ONLY valid JSON:
-{"identityScore": 8, "issues": ["hairstyle lengthened"], "recommendation": "accept"}
+{"identityScore": 8, "issues": ["hairstyle lengthened"], "suggestions": [], "recommendation": "accept"}
 recommendation = "accept" when identityScore >= 7; "regenerate" when < 7. issues is empty array if none.`,
   },
 
@@ -270,13 +273,11 @@ Return ONLY valid JSON matching this exact structure (no markdown):
   "neverChangeRules": [
     "Never change the child's hairstyle.",
     "Never change the skin tone.",
-    "Never enlarge the eyes into generic cartoon eyes.",
     "Never change the face shape.",
     "Never make the child look older or younger.",
     "Never add glasses — not present in approved avatar.",
     "Never add facial hair.",
-    "Never remove dimples — present in approved avatar.",
-    "Never make the character look like a generic cartoon child."
+    "Never remove dimples — present in approved avatar."
   ],
   "distinctiveFeatures": ["dimples", "short black fringe"],
   "faceMetrics": {

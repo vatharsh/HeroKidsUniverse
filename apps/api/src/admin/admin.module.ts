@@ -9,6 +9,7 @@ import { CreditsModule } from '../credits/credits.module';
 import { CreditTransaction } from '../credits/credit-transaction.entity';
 import { GenerationJob } from '../generation/generation-job.entity';
 import { Hero } from '../heroes/hero.entity';
+import { HeroesModule } from '../heroes/heroes.module';
 import { InfluencersModule } from '../influencers/influencers.module';
 import { InfluencerReferral } from '../influencers/influencer-referral.entity';
 import { Influencer } from '../influencers/influencer.entity';
@@ -31,6 +32,7 @@ import { PromptRegistryController } from './prompt-registry.controller';
 @Module({
   imports: [
     AIQualityAssuranceModule,
+    HeroesModule,
     PromptRegistryModule,
     MerchandiseModule,
     PaymentsModule,
