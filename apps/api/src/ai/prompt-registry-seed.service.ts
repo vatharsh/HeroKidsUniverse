@@ -19,6 +19,8 @@ const SEED_PROMPTS: Array<{
   promptText: string;
   variablesJson?: object;
   changeNotes: string;
+  /** Bump this integer to force a new DB version on the next server restart. */
+  seedVersion: number;
 }> = [
   {
     promptKey: 'story_generation',
@@ -30,6 +32,7 @@ const SEED_PROMPTS: Array<{
       required: ['heroName', 'heroAge', 'heroGender', 'heroRef', 'pageCount', 'sceneCount', 'climaxPage', 'supportingCharactersLine', 'visualIdentityLines', 'sceneEntries'],
       optional: ['customStoryDirective', 'themeDescriptionLine', 'universeSection', 'visualStateSection', 'storySourceLine'],
     },
+    seedVersion: 2,
     changeNotes: 'v2 — full prompt template with {{variable}} placeholders; code injects all dynamic values, DB controls all rules and structure.',
     promptText: `You are a creative children's storybook author for HeroKids Universe.
 {{customStoryDirective}}
@@ -176,6 +179,7 @@ storyStateUpdate: required on every page; use empty arrays when nothing changes.
       required: ['style', 'heroIdentityLine', 'sceneDescription'],
       optional: ['referenceOrderLine', 'storyStateLockLine', 'castLine', 'characterDirectionLine', 'cameraLine', 'faceVisibilityLine', 'identityBoostLine'],
     },
+    seedVersion: 2,
     changeNotes: 'v2 — full prompt template with {{variable}} placeholders; code injects all computed blocks, DB controls structure and rules.',
     promptText: `{{style}}
 {{referenceOrderLine}}
@@ -200,6 +204,7 @@ Child-safe, joyful and adventurous atmosphere. NO text, NO words, NO letters, NO
     provider: 'openai',
     defaultModel: 'gpt-4o-mini',
     variablesJson: { required: ['heroName'] },
+    seedVersion: 2,
     changeNotes: 'Initial seed — extracted from OpenAIImageProvider.checkFaceConsistency(). Code reads this at runtime.',
     promptText: `Image 1 is the approved cartoon avatar of a child named {{heroName}}. Image 2 is a generated storybook illustration that must depict the same child.
 Compare face identity: face shape, skin tone, hairstyle, hair colour, eye shape, age, glasses/accessories, distinctive features.
@@ -216,6 +221,7 @@ recommendation = "accept" when identityScore >= 7; "regenerate" when < 7. issues
     provider: 'openai',
     defaultModel: 'gpt-4o-mini',
     variablesJson: { required: ['avatarDescription'] },
+    seedVersion: 2,
     changeNotes: 'Initial seed — extracted from CharacterCanonService.generateCanonFromAvatar(). Code reads this at runtime.',
     promptText: `You are analyzing a children's storybook avatar to extract a detailed character canon for consistent future illustration.
 
@@ -304,6 +310,7 @@ qualityScore guidelines (0–100):
     provider: 'openai',
     defaultModel: 'gpt-4o-mini',
     variablesJson: { required: ['imageUrl'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — used by OpenAIImageProvider.describeCharacterAppearanceFromUrl().',
     promptText: `Describe the character's physical appearance in this image for storybook illustration consistency.
 Focus on: face shape, skin tone, hairstyle, hair colour, eye shape, age appearance, distinctive features, clothing style.
@@ -318,6 +325,7 @@ Return a single dense paragraph (60–100 words). Do not use bullet points.`,
     provider: 'openai',
     defaultModel: 'gpt-4o-mini-tts',
     variablesJson: { required: ['pageText'], optional: ['voice', 'speedRatio', 'accentStyle', 'tone'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — TTS instructions managed via platform settings (TTS_VOICE, TTS_SPEED_RATIO, TTS_ACCENT_STYLE, TTS_TONE).',
     promptText: `[TTS INSTRUCTIONS — v1.0]
 Voice: {{voice}} (OpenAI TTS voice name)
@@ -343,6 +351,7 @@ Delivery guidelines:
     provider: 'openai',
     defaultModel: 'gpt-image-1',
     variablesJson: { required: ['heroName', 'heroAge', 'heroDescription'], optional: ['themeDescription', 'superpower'] },
+    seedVersion: 2,
     changeNotes: 'Initial seed — prompt built dynamically by OpenAIImageProvider. Generation logic stays in code.',
     promptText: `[CODE_MANAGED — prompt built by OpenAIImageProvider.generateAvatar()]
 
@@ -361,6 +370,7 @@ No text, no speech bubbles, no UI elements.`,
     provider: 'openai',
     defaultModel: 'gpt-image-1',
     variablesJson: { required: ['heroName', 'heroAge', 'canonSummary', 'regenerationNote'], optional: ['previousIssues'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — regeneration prompt built by OpenAIImageProvider.',
     promptText: `[CODE_MANAGED — prompt built by OpenAIImageProvider.regenerateAvatar()]
 
@@ -381,6 +391,7 @@ Format: circular portrait, head and shoulders, centred. No text, no speech bubbl
     provider: 'openai',
     defaultModel: 'gpt-image-1',
     variablesJson: { required: ['illustrationBrief', 'heroName', 'heroAge'], optional: ['heroCanonSummary', 'storyVisualState', 'supportingCharacters'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — scene prompt built by generation pipeline. Uses same rules as image_generation.',
     promptText: `[CODE_MANAGED — scene prompt built by generation pipeline, follows image_generation rules]
 
@@ -398,6 +409,7 @@ No text or UI visible in image.`,
     provider: 'gemini',
     defaultModel: 'gemini-2.5-flash-lite',
     variablesJson: { required: ['pageText', 'characters', 'dialogue'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — speech bubble placement managed by generation pipeline.',
     promptText: `[CODE_MANAGED — speech bubble layout computed by generation pipeline]
 
@@ -422,6 +434,7 @@ Return ONLY valid JSON array of speech bubble objects. Max 2 bubbles per page.`,
     provider: 'gemini',
     defaultModel: 'gemini-2.5-flash-lite',
     variablesJson: {},
+    seedVersion: 1,
     changeNotes: 'Initial seed — Story QA is algorithmic (no LLM call). Scoring rules documented here for reference.',
     promptText: `[ALGORITHMIC — no LLM call. Scoring logic in AIQualityAssuranceService.scoreStory()]
 
@@ -447,6 +460,7 @@ Checks performed:
     provider: 'gemini',
     defaultModel: 'gemini-2.5-flash-lite',
     variablesJson: {},
+    seedVersion: 1,
     changeNotes: 'Initial seed — Expression QA is algorithmic (no LLM call). Scoring rules documented here.',
     promptText: `[ALGORITHMIC — no LLM call. Scoring logic in AIQualityAssuranceService.scoreExpression()]
 
@@ -473,6 +487,7 @@ Emotion → expression mapping:
     provider: 'gemini',
     defaultModel: 'gemini-2.5-flash-lite',
     variablesJson: {},
+    seedVersion: 1,
     changeNotes: 'Initial seed — Dialogue QA is algorithmic (no LLM call). Scoring rules documented here.',
     promptText: `[ALGORITHMIC — no LLM call. Scoring logic in AIQualityAssuranceService.scoreDialogue()]
 
@@ -492,6 +507,7 @@ Dialogue validity scoring rules (0–10):
     provider: 'openai',
     defaultModel: 'gpt-4o-mini',
     variablesJson: { required: ['imageUrl'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — Composition QA via vision model. Currently a placeholder; full vision analysis pending.',
     promptText: `[VISION QA — currently returns placeholder score of 8. Full implementation pending.]
 
@@ -515,6 +531,7 @@ recommendation = "accept" when compositionScore >= 6; "flag" when < 6.`,
     provider: 'gemini',
     defaultModel: 'gemini-2.5-flash-lite',
     variablesJson: {},
+    seedVersion: 1,
     changeNotes: 'Initial seed — Confidence Engine is fully algorithmic. Formula documented here.',
     promptText: `[ALGORITHMIC — no LLM call. Confidence formula in AIQualityAssuranceService.calculateConfidence()]
 
@@ -548,6 +565,7 @@ Status thresholds: pass ≥ 90, pass_with_warning ≥ 70, fail < 70`,
     provider: 'openai',
     defaultModel: 'gpt-image-1',
     variablesJson: { required: ['heroName', 'heroCanonSummary', 'productType', 'designBrief'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — merchandise preview prompt for physical product mockups.',
     promptText: `Generate a children's merchandise product mockup featuring {{heroName}}.
 Product type: {{productType}}
@@ -566,6 +584,7 @@ No text overlays unless part of the product design. High contrast, cheerful colo
     provider: 'openai',
     defaultModel: 'gpt-image-1',
     variablesJson: { required: ['companionName', 'companionType', 'universeTheme', 'heroName'] },
+    seedVersion: 1,
     changeNotes: 'Initial seed — companion avatar generation prompt.',
     promptText: `Generate a children's storybook avatar for {{heroName}}'s companion named {{companionName}} ({{companionType}}).
 Universe theme: {{universeTheme}}
@@ -629,18 +648,23 @@ export class PromptRegistrySeedService implements OnModuleInit {
     }
   }
 
+  /** Parse [sv:N] from changeNotes — returns 0 if not found (pre-seedVersion era). */
+  private parseSeedVersion(changeNotes: string | null | undefined): number {
+    if (!changeNotes) return 0;
+    const m = changeNotes.match(/\[sv:(\d+)\]/);
+    return m ? parseInt(m[1], 10) : 0;
+  }
+
   async seed() {
     for (const seed of SEED_PROMPTS) {
       try {
         const existing = await this.registry.getActivePrompt(seed.promptKey);
-        const isLegacy = !existing ||
-          existing.promptText === PLACEHOLDER_TEXT ||
-          existing.promptText.startsWith('[CODE_MANAGED') ||
-          existing.promptText.startsWith('[Prompt text managed in code') ||
-          existing.promptText.startsWith('[TTS INSTRUCTIONS') ||
-          existing.promptText.startsWith('[ALGORITHMIC') ||
-          existing.promptText.startsWith('[VISION QA');
-        if (!isLegacy) continue;
+        const dbSv = this.parseSeedVersion(existing?.changeNotes);
+
+        if (dbSv >= seed.seedVersion) {
+          this.logger.debug(`Prompt ${seed.promptKey} is up to date (db sv:${dbSv} >= code sv:${seed.seedVersion})`);
+          continue;
+        }
 
         // Find or create the canonical template for this key
         let template = await this.tplRepo.findOne({ where: { promptKey: seed.promptKey, isDeleted: false } });
@@ -654,28 +678,29 @@ export class PromptRegistrySeedService implements OnModuleInit {
           });
         }
 
-        // Find a unique version name
+        // Find a unique version name for this seedVersion
         const existingVersions = await this.verRepo.find({
           where: { promptTemplateId: template.id, isDeleted: false },
           select: ['version'],
         });
         const takenNames = new Set(existingVersions.map(v => v.version));
-        let versionName = 'v1.0.0';
+        let versionName = `v${seed.seedVersion}.0.0`;
         let suffix = 1;
         while (takenNames.has(versionName)) {
-          versionName = `v1.0.${suffix}`;
+          versionName = `v${seed.seedVersion}.0.${suffix}`;
           suffix += 1;
         }
 
+        const changeNotesWithSv = `[sv:${seed.seedVersion}] ${seed.changeNotes}`;
         const version = await this.registry.createVersion(template.id, {
           version: versionName,
           promptText: seed.promptText,
           variablesJson: seed.variablesJson,
-          changeNotes: seed.changeNotes,
+          changeNotes: changeNotesWithSv,
         }, null);
 
         await this.registry.activateVersion(version.id, null);
-        this.logger.log(`Seeded prompt: ${seed.promptKey} @ ${versionName}`);
+        this.logger.log(`Seeded prompt: ${seed.promptKey} @ ${versionName} (sv:${seed.seedVersion})`);
       } catch (error) {
         this.logger.warn(`Prompt seed skipped for ${seed.promptKey}: ${error instanceof Error ? error.message : String(error)}`);
       }

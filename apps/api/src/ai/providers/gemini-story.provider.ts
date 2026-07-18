@@ -22,22 +22,19 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
   private readonly logger = new Logger(GeminiStoryProvider.name);
   private readonly genAI: GoogleGenerativeAI;
   private readonly model: string;
-  private cachedStoryPromptVersion: PromptTemplateVersion | null | undefined = undefined;
 
   constructor(
     private readonly config: ConfigService,
     private readonly promptRegistry: PromptRegistryService,
   ) {
     const apiKey = this.config.get<string>('GEMINI_API_KEY') ?? '';
-    this.model = this.config.get<string>('GEMINI_MODEL') ?? 'gemini-2.5-flash-lite';
+    this.model = this.config.get<string>('GEMINI_MODEL') ?? 'gemini-2.5-flash';
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
   async generateStory(input: StoryGenerationInput): Promise<StoryGenerationOutput> {
-    const prompt = await this.buildPrompt(input);
-    // cachedStoryPromptVersion is set inside buildPrompt → getActiveStoryVersion
-    const activePromptVersion = (this.cachedStoryPromptVersion !== undefined ? this.cachedStoryPromptVersion : null);
-    const modelNames = [this.model, 'gemini-flash-lite-latest', 'gemini-2.0-flash'];
+    const { prompt, activePromptVersion } = await this.buildPrompt(input);
+    const modelNames = [this.model, 'gemini-2.5-flash', 'gemini-2.0-flash'];
     const maxRetries = 3;
     let lastError: Error = new Error('All Gemini models failed');
 
@@ -83,30 +80,26 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
     throw lastError;
   }
 
-  private async getActiveStoryVersion(): Promise<PromptTemplateVersion | null> {
+  private async buildPrompt(input: StoryGenerationInput): Promise<{ prompt: string; activePromptVersion: PromptTemplateVersion | null }> {
+    const vars = this.computePromptVariables(input);
+    let dbVersion: PromptTemplateVersion | null = null;
     try {
-      this.cachedStoryPromptVersion = await this.promptRegistry.getActivePrompt('story_generation');
+      dbVersion = await this.promptRegistry.getActivePrompt('story_generation');
     } catch (error) {
       this.logger.warn(`Prompt registry story_generation fallback: ${error instanceof Error ? error.message : String(error)}`);
-      this.cachedStoryPromptVersion = null;
     }
-    return this.cachedStoryPromptVersion ?? null;
-  }
-
-  private async buildPrompt(input: StoryGenerationInput): Promise<string> {
-    const vars = this.computePromptVariables(input);
-    const dbVersion = await this.getActiveStoryVersion();
 
     if (dbVersion && !isLegacyPromptText(dbVersion.promptText)) {
-      this.logger.log(`Using DB prompt story_generation v${dbVersion.version} (promptTemplateVersionId=${dbVersion.id})`);
-      return [
+      this.logger.log(`[PROMPT] story_generation v${dbVersion.version} (id=${dbVersion.id}) — DB version active`);
+      const prompt = [
         this.promptRegistry.renderPrompt(dbVersion.promptText, vars),
         this.buildRuntimeQualityContract(),
       ].join('\n\n');
+      return { prompt, activePromptVersion: dbVersion };
     }
 
-    this.logger.warn(`Using hardcoded story prompt fallback — DB version: ${dbVersion ? 'legacy' : 'not found'}, promptRegistry: ${this.promptRegistry ? 'injected' : 'null'}`);
-    return this.buildHardcodedPrompt(vars);
+    this.logger.warn(`[PROMPT] story_generation — using hardcoded fallback (DB: ${dbVersion ? `legacy v${dbVersion.version}` : 'not found'})`);
+    return { prompt: this.buildHardcodedPrompt(vars), activePromptVersion: null };
   }
 
   private buildRuntimeQualityContract(): string {
