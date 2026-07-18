@@ -666,22 +666,27 @@ export class PromptRegistrySeedService implements OnModuleInit {
         const existing = await this.registry.getActivePrompt(seed.promptKey);
         const dbSv = this.parseSeedVersion(existing?.changeNotes);
 
+        // Always sync defaultModel on the template, even when the prompt text is current.
+        // This lets a model upgrade take effect without bumping the seedVersion.
+        const existingTemplate = await this.tplRepo.findOne({ where: { promptKey: seed.promptKey, isDeleted: false } });
+        if (existingTemplate && existingTemplate.defaultModel !== seed.defaultModel) {
+          await this.tplRepo.update(existingTemplate.id, { defaultModel: seed.defaultModel });
+          this.logger.log(`Updated defaultModel for ${seed.promptKey}: ${existingTemplate.defaultModel} → ${seed.defaultModel}`);
+        }
+
         if (dbSv >= seed.seedVersion) {
           this.logger.debug(`Prompt ${seed.promptKey} is up to date (db sv:${dbSv} >= code sv:${seed.seedVersion})`);
           continue;
         }
 
         // Find or create the canonical template for this key
-        let template = await this.tplRepo.findOne({ where: { promptKey: seed.promptKey, isDeleted: false } });
-        if (!template) {
-          template = await this.registry.createTemplate({
-            promptKey: seed.promptKey,
-            name: seed.name,
-            promptType: seed.promptType,
-            provider: seed.provider,
-            defaultModel: seed.defaultModel,
-          });
-        }
+        let template = existingTemplate ?? await this.registry.createTemplate({
+          promptKey: seed.promptKey,
+          name: seed.name,
+          promptType: seed.promptType,
+          provider: seed.provider,
+          defaultModel: seed.defaultModel,
+        });
 
         // Find a unique version name for this seedVersion
         const existingVersions = await this.verRepo.find({

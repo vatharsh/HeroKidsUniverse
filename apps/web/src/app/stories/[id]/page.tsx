@@ -1028,7 +1028,7 @@ export default function StoryReaderPage() {
                     src={story.hero.avatarUrl}
                     alt={story.hero.name ?? "Hero"}
                     className="absolute z-20 object-contain drop-shadow-2xl"
-                    style={{ bottom: "0%", left: "50%", transform: "translateX(-50%)", height: "72%", width: "auto", maxWidth: "60%" }}
+                    style={{ bottom: `${HERO_OVERLAY_BOTTOM_PCT}%`, left: "50%", transform: "translateX(-50%)", height: `${HERO_OVERLAY_HEIGHT_PCT}%`, width: "auto", maxWidth: "60%" }}
                   />
                 )}
               </>

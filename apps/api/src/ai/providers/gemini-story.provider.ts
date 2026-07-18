@@ -397,9 +397,9 @@ SPEECH BUBBLE RULES:
 - speechBubbles carries the structured rendering metadata — the frontend places them; they are NEVER baked into the AI image.
 - Also populate the dialogue array (legacy) with the same lines for backward compatibility.
 - REQUIRED FIELDS: speakerName, text, bubbleStyle, preferredPosition, tailDirection.
-- Also include anchorTarget: "mouth" or "lower_face".
+- Also include anchorTarget: "mouth" or "lower_face" for dialogue; "forehead" for bubbleStyle "thinking".
 - speakerName: MUST be the exact name of a character who appears on that page.
-- text: short child-friendly spoken line, max 12 words. Must be dialogue, not narration.
+- text: short child-friendly line, max 12 words. For bubbleStyle "thinking": first-person internal thought (e.g. "I wonder if the key is hidden here…"), max 10 words. For all other styles: spoken dialogue only.
 - bubbleStyle: "normal" | "excited" | "whisper" | "thinking" | "surprised"
 - preferredPosition: where the bubble should float — pick based on where the character stands:
     Character on LEFT → "bottom-left"
@@ -413,7 +413,7 @@ SPEECH BUBBLE RULES:
     Bubble top-right, character below-left → "down-left"
 - avoidCovering: list body parts to avoid: ["face"] always, add "hands" if the character's hands are in focus.
 - maxWidthPercent: 44 (leave the other half of the image clear).
-- Max 2 speechBubbles per page. Set speechBubbles to [] if no one speaks. Do NOT invent dialogue.
+- Max 2 speechBubbles per page; at most 1 may have bubbleStyle "thinking" per page. Set speechBubbles to [] if no one speaks. Do NOT invent dialogue.
 
 STORY STATE UPDATE RULES:
 - storyStateUpdate must be present on every page, even if all arrays are empty.
@@ -452,7 +452,7 @@ newPowers and newQuests may be empty arrays if none were earned/opened.
 background: one sentence, specific location + time of day + lighting mood
 camera: choose from: wide angle, medium shot, close-up on face, low angle looking up, bird's eye view, over-the-shoulder
 characters: EVERY named character visible in the scene must appear with expression + pose
-dialogue: only lines that are spoken aloud (not thoughts); omit if no one speaks; max 2 dialogues per page
+dialogue: spoken lines or internal thoughts (bubbleStyle "thinking"); omit if no one speaks; max 2 dialogues per page
 storyVisualState: for universe stories this reflects the hero's current look; for standalone stories design it to match the theme.
 characterDirections: required for every page; at minimum include the hero with expression and pose.
 speechBubbles: structured dialogue metadata; also echo in dialogue array for backward compat.

@@ -11,10 +11,11 @@ describe('GeminiStoryProvider prompt registry wiring', () => {
           version: 'v9',
           promptText: 'REGISTRY RULE: use moon crystals.',
         }),
+        renderPrompt: jest.fn((text: string) => text),
       } as any,
     );
 
-    const prompt = await (provider as any).buildPrompt({
+    const { prompt } = await (provider as any).buildPrompt({
       heroName: 'Siddhant',
       heroAge: 8,
       heroGender: 'boy',
@@ -23,7 +24,7 @@ describe('GeminiStoryProvider prompt registry wiring', () => {
       supportingCharacters: [],
     });
 
-    expect(prompt).toContain('ACTIVE PROMPT REGISTRY RULES');
+    expect(prompt).toContain('RUNTIME QUALITY CONTRACT');
     expect(prompt).toContain('REGISTRY RULE: use moon crystals.');
   });
 
@@ -33,7 +34,7 @@ describe('GeminiStoryProvider prompt registry wiring', () => {
       { getActivePrompt: jest.fn().mockResolvedValue(null) } as any,
     );
 
-    const prompt = await (provider as any).buildPrompt({
+    const { prompt } = await (provider as any).buildPrompt({
       heroName: 'Siddhant',
       heroAge: 8,
       heroGender: 'boy',
@@ -43,7 +44,7 @@ describe('GeminiStoryProvider prompt registry wiring', () => {
     });
 
     expect(prompt).toContain('Respond with ONLY valid JSON');
-    expect(prompt).not.toContain('ACTIVE PROMPT REGISTRY RULES');
+    expect(prompt).not.toContain('RUNTIME QUALITY CONTRACT');
   });
 });
 
@@ -55,13 +56,13 @@ describe('GeminiStoryProvider prompt caching fix', () => {
 
     const provider = new GeminiStoryProvider(
       { get: jest.fn((key: string) => key === 'GEMINI_API_KEY' ? 'test-key' : undefined) } as any,
-      { getActivePrompt } as any,
+      { getActivePrompt, renderPrompt: jest.fn((text: string) => text) } as any,
     );
 
     const input = { heroName: 'Arjun', heroAge: 7, heroGender: 'boy', themeDescription: 'ninja', pageCount: 4, supportingCharacters: [] };
 
-    const prompt1 = await (provider as any).buildPrompt(input);
-    const prompt2 = await (provider as any).buildPrompt(input);
+    const { prompt: prompt1 } = await (provider as any).buildPrompt(input);
+    const { prompt: prompt2 } = await (provider as any).buildPrompt(input);
 
     expect(getActivePrompt).toHaveBeenCalledTimes(2);
     expect(prompt1).toContain('Rule A.');
@@ -75,15 +76,15 @@ describe('GeminiStoryProvider prompt caching fix', () => {
 
     const provider = new GeminiStoryProvider(
       { get: jest.fn((key: string) => key === 'GEMINI_API_KEY' ? 'test-key' : undefined) } as any,
-      { getActivePrompt } as any,
+      { getActivePrompt, renderPrompt: jest.fn((text: string) => text) } as any,
     );
 
     const input = { heroName: 'Arjun', heroAge: 7, heroGender: 'boy', themeDescription: 'ninja', pageCount: 4, supportingCharacters: [] };
 
     await (provider as any).buildPrompt(input); // loads v1
-    const prompt2 = await (provider as any).buildPrompt(input); // should NOT use v1
+    const { prompt: prompt2 } = await (provider as any).buildPrompt(input); // should NOT use v1
 
     expect(prompt2).not.toContain('Rule A.');
-    expect(prompt2).not.toContain('ACTIVE PROMPT REGISTRY RULES');
+    expect(prompt2).not.toContain('RUNTIME QUALITY CONTRACT');
   });
 });
