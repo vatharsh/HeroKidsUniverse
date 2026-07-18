@@ -101,6 +101,11 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   QA_IMAGE_PROMPT_VERSION:          { value: '1.0',         type: 'string',  description: 'Image prompt version tag.' },
   QA_VERSION:                       { value: '1.0',         type: 'string',  description: 'QA engine version tag.' },
 
+  // ── Image pipeline ────────────────────────────────────────────────────────────
+  IMAGE_GENERATION_MODE:                    { value: 'full_generation', type: 'string',  description: 'Image generation scope: full_generation | story_plus_cover | story_only | avatar_only | background_only. Controls how many images are generated per story.' },
+  OPENAI_IMAGE_QUALITY:                     { value: 'medium',          type: 'string',  description: 'OpenAI image quality: low | medium | high. Higher quality is slower and costs more per image.' },
+  OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK:{ value: 'false',           type: 'boolean', description: 'Allow image generation without reference photos. If false, hero avatar references are required.' },
+
   // ── Preset & mode ─────────────────────────────────────────────────────────────
   QA_PRESET:                        { value: 'balanced',    type: 'string',  description: 'Active QA configuration preset (development/balanced/strict/cost_optimized/custom).' },
   QA_RETRY_STRATEGY:                { value: 'page_only',   type: 'string',  description: 'Retry strategy: never / page_only / scene / story.' },

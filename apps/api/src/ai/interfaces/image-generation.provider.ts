@@ -23,6 +23,8 @@ export interface ImageGenerationInput {
   camera?: string;
   identityBoostMode?: boolean; // regeneration pass after a failed face consistency check
   backgroundOnlyMode?: boolean; // generate scene/environment only — hero avatar will be overlaid by frontend
+  quality?: string;             // image quality override: 'low' | 'medium' | 'high' (resolved from DB settings by caller)
+  allowReferenceless?: boolean; // allow generation without reference photos (resolved from DB settings by caller)
   heroCanonSummary?: string;
   heroNeverChangeRules?: string[];
   heroFaceMetrics?: string;

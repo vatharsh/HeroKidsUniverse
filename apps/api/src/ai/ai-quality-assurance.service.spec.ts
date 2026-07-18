@@ -251,7 +251,7 @@ describe('AIQualityAssuranceService', () => {
       expect(result.avgIdentityScore).toBe(0);
     });
 
-    it('falls back to identity=7 when checkFaceConsistencyFromUrl returns null', async () => {
+    it('falls back to identity=5 when checkFaceConsistencyFromUrl returns null', async () => {
       const { service } = await buildModule({
         imageProviderOverrides: { checkFaceConsistencyFromUrl: jest.fn().mockResolvedValue(null) },
       });
@@ -259,10 +259,10 @@ describe('AIQualityAssuranceService', () => {
         story: makeStory(), hero: makeHero(), heroCanon: null,
         pages: makePages(1), storyVisualState: null,
       });
-      expect(result.avgIdentityScore).toBe(7);
+      expect(result.avgIdentityScore).toBe(5);
     });
 
-    it('falls back to identity=7 when checkFaceConsistencyFromUrl throws', async () => {
+    it('falls back to identity=5 when checkFaceConsistencyFromUrl throws', async () => {
       const { service } = await buildModule({
         imageProviderOverrides: {
           checkFaceConsistencyFromUrl: jest.fn().mockRejectedValue(new Error('OpenAI timeout')),
@@ -272,7 +272,7 @@ describe('AIQualityAssuranceService', () => {
         story: makeStory(), hero: makeHero(), heroCanon: null,
         pages: makePages(1), storyVisualState: null,
       });
-      expect(result.avgIdentityScore).toBe(7);
+      expect(result.avgIdentityScore).toBe(5);
     });
   });
 
@@ -309,7 +309,8 @@ describe('AIQualityAssuranceService', () => {
       const spokenLine = 'I found the golden compass in the ancient cave forever!';
       const { service } = await buildModule();
       const pages = [makePage(1, {
-        text: `Siddhant said "${spokenLine}" and ran ahead.`,
+        // Narration contains the spoken line twice — triggers the "more than once" check.
+        text: `Siddhant said "${spokenLine}" then again: "${spokenLine}"`,
         speechBubbles: [{ speakerName: 'Siddhant', text: spokenLine, bubbleStyle: 'normal' as const }],
       })];
       const result = await service.runStoryQA({

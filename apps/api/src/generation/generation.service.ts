@@ -584,7 +584,9 @@ export class GenerationService implements OnModuleInit {
     characterCanonSummaries?: string[],
     onPageDone?: (pageNum: number, total: number) => Promise<void>,
   ): Promise<{ pages: StoryPage[]; totalCostUsd: number }> {
-    const mode = this.config.get<string>('IMAGE_GENERATION_MODE') ?? 'full_generation';
+    const mode = await this.getStringSetting('IMAGE_GENERATION_MODE', 'full_generation');
+    const imageQuality = await this.getStringSetting('OPENAI_IMAGE_QUALITY', 'medium');
+    const allowReferenceless = await this.getBooleanSetting('OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK', false);
     const pages: StoryPage[] = [];
     const total = generated.pages.length;
     let totalCostUsd = 0;
@@ -675,6 +677,8 @@ export class GenerationService implements OnModuleInit {
             storyStateBlock: pageStateBlockMap.get(page.pageNumber) ?? undefined,
             characterDirections: page.characterDirections,
             backgroundOnlyMode: isBackgroundOnly,
+            quality: imageQuality,
+            allowReferenceless,
           };
           let imageOutput = await this.generateImageWithRetry(imageInput);
 
@@ -828,10 +832,12 @@ export class GenerationService implements OnModuleInit {
     );
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
     const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
+    const imageQuality = await this.getStringSetting('OPENAI_IMAGE_QUALITY', 'medium');
+    const allowReferenceless = await this.getBooleanSetting('OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK', false);
     let totalCostUsd = 0;
     let settled = 0;
 
-    const mode = this.config.get<string>('IMAGE_GENERATION_MODE') ?? 'full_generation';
+    const mode = await this.getStringSetting('IMAGE_GENERATION_MODE', 'full_generation');
 
     if (mode === 'avatar_only') {
       const avatarUrl = hero.avatarUrl ?? null;
@@ -907,6 +913,8 @@ export class GenerationService implements OnModuleInit {
         storyStateBlock: sceneStateBlockMap.get(scene.sceneId) ?? undefined,
         characterDirections: firstPage?.characterDirections,
         backgroundOnlyMode: isBackgroundOnly,
+        quality: imageQuality,
+        allowReferenceless,
       };
     };
 

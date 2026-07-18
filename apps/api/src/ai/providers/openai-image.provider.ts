@@ -101,8 +101,8 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
 
     const hasRef = files.length > 0;
     const expectedRefs = refSpecs.length > 0;
-    const allowReferenceFallback = this.config.get<string>('OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK') === 'true';
-    const imageQuality = this.config.get<string>('OPENAI_IMAGE_QUALITY') ?? 'low';
+    const allowReferenceFallback = input.allowReferenceless ?? (this.config.get<string>('OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK') === 'true');
+    const imageQuality = input.quality ?? this.config.get<string>('OPENAI_IMAGE_QUALITY') ?? 'low';
     const dbImageTemplate = await this.getActiveImageTemplate();
 
     const styleRefIndex = input.heroAvatarUrl
@@ -324,7 +324,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
    * The hero avatar is composited over this by the frontend.
    */
   private async generateBackgroundScene(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
-    const imageQuality = this.config.get<string>('OPENAI_IMAGE_QUALITY') ?? 'low';
+    const imageQuality = input.quality ?? this.config.get<string>('OPENAI_IMAGE_QUALITY') ?? 'low';
     const styleDefault = input.style ?? BACKGROUND_SCENE_STYLE;
 
     // Only pass supporting character avatar references — not the hero
