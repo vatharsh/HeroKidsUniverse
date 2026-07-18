@@ -27,13 +27,13 @@ const SEED_PROMPTS: Array<{
     name: 'Story Generation',
     promptType: 'story_generation',
     provider: 'gemini',
-    defaultModel: 'gemini-2.5-flash-lite',
+    defaultModel: 'gemini-2.5-flash',
     variablesJson: {
       required: ['heroName', 'heroAge', 'heroGender', 'heroRef', 'pageCount', 'sceneCount', 'climaxPage', 'supportingCharactersLine', 'visualIdentityLines', 'sceneEntries'],
       optional: ['customStoryDirective', 'themeDescriptionLine', 'universeSection', 'visualStateSection', 'storySourceLine'],
     },
-    seedVersion: 2,
-    changeNotes: 'v2 — full prompt template with {{variable}} placeholders; code injects all dynamic values, DB controls all rules and structure.',
+    seedVersion: 3,
+    changeNotes: 'v3 — thought bubbles allowed (bubbleStyle: thinking, max 1 per page, max 10 words, first person); defaultModel upgraded to gemini-2.5-flash.',
     promptText: `You are a creative children's storybook author for HeroKids Universe.
 {{customStoryDirective}}
 Hero details:
@@ -53,17 +53,19 @@ Do NOT invent new facial features, glasses, bindis, moustaches, hairstyles, age 
 Each named character should appear as the same person on every page. If the scene has multiple children, do not duplicate one child's face for another child.
 {{visualStateSection}}
 
-Rules:
-- Each page: 2-3 short sentences (max 40 words per page) suitable for age {{heroAge}}
-- Use simple, exciting language kids love
-- Include dialogue and warm emotion
-- Build to a joyful climax on page {{climaxPage}}
-- Page {{pageCount}}: resolve happily — end with a soft sentence hinting at the next adventure
-- The hero always succeeds through kindness, courage, or cleverness — never violence
+STORYTELLING RULES:
+- Each page: 2-3 short punchy sentences (max 55 words), written for a {{heroAge}}-year-old reader
+- Language: vivid, age-appropriate, Indian English warmth — conversational, not foreign-formal
+- Page 1: MUST open with a hook sentence that immediately pulls the child in (action, mystery, or a funny moment — NOT "Once upon a time")
+- Antagonist: include a real, named obstacle or villain (not a vague "challenge") by page 2 — something the hero must genuinely overcome
+- Emotional low: around page {{climaxPage}} - 1, things must look hard or scary for the hero — earn the victory
+- Climax on page {{climaxPage}}: concrete triumph — name exactly HOW the hero succeeds (kindness, courage, cleverness, or a specific action — never violence)
+- Page {{pageCount}}: resolve with ONE warm concluding sentence + ONE hint sentence about what might come next. Do NOT leave the story open-ended.
+- Dialogue in speech bubbles must sound like a real child speaks — short, natural, with personality. No stiff or formal English.
 {{storySourceLine}}
 - In every sceneDescription: explicitly name the costume, companion, and weapon from the Story Visual State — do not leave them out
 - In characters: always describe the expression and pose for the main hero on every page
-- Speech bubbles: only add dialogue if it adds to the scene; avoid generic exclamations
+- Thought bubbles (bubbleStyle: "thinking"): use sparingly — max 1 per story — for a moment of genuine inner emotion or decision
 
 CRITICAL SCENE DESCRIPTION RULE:
 Each sceneDescription must describe EVERY character who appears with their FULL visual identity locked in parentheses — age, skin tone, hair, clothing, and current expression. Use the canonical identity above. Repeat the full description every time a character appears (even if they appeared on previous pages) — the illustrator sees only one page at a time.
@@ -110,23 +112,25 @@ SPEECH BUBBLE RULES:
 - speechBubbles carries the structured rendering metadata — the frontend places them; they are NEVER baked into the AI image.
 - Also populate the dialogue array (legacy) with the same lines for backward compatibility.
 - REQUIRED FIELDS: speakerName, text, bubbleStyle, preferredPosition, tailDirection.
-- Also include anchorTarget: "mouth" or "lower_face".
+- Also include anchorTarget: "mouth" for spoken lines, "forehead" for thought bubbles.
 - speakerName: MUST be the exact name of a character who appears on that page.
-- text: short child-friendly spoken line, max 12 words. Must be dialogue, not narration.
+- text: short child-friendly line, max 12 words. Spoken dialogue OR an internal thought in first person.
 - bubbleStyle: "normal" | "excited" | "whisper" | "thinking" | "surprised"
+  - Use "thinking" for internal thoughts (rendered as a cloud/dots bubble). Max 1 thinking bubble per page, max 10 words, first person (e.g. "I hope this works…").
+  - Use other styles for spoken dialogue.
 - preferredPosition: where the bubble should float — pick based on where the character stands:
     Character on LEFT → "bottom-left"
     Character on RIGHT → "bottom-right"
     Character at top of frame → "top-left" or "top-right"
     Default: "bottom-left" for first speaker, "bottom-right" for second speaker.
-- tailDirection: direction the tail points FROM the bubble TOWARD the speaker's mouth:
+- tailDirection: direction the tail points FROM the bubble TOWARD the speaker's mouth (or head for thoughts):
     Bubble bottom-left, character above-right → "up-right"
     Bubble bottom-right, character above-left → "up-left"
     Bubble top-left, character below-right → "down-right"
     Bubble top-right, character below-left → "down-left"
 - avoidCovering: list body parts to avoid: ["face"] always, add "hands" if the character's hands are in focus.
 - maxWidthPercent: 44 (leave the other half of the image clear).
-- Max 2 speechBubbles per page. Set speechBubbles to [] if no one speaks. Do NOT invent dialogue.
+- Max 2 speechBubbles per page (at most 1 may be "thinking"). Set speechBubbles to [] if no one speaks. Do NOT invent dialogue.
 
 STORY STATE UPDATE RULES:
 - storyStateUpdate must be present on every page, even if all arrays are empty.
@@ -162,7 +166,7 @@ newPowers and newQuests may be empty arrays if none were earned/opened.
 background: one sentence, specific location + time of day + lighting mood
 camera: choose from: wide angle, medium shot, close-up on face, low angle looking up, bird's eye view, over-the-shoulder
 characters: EVERY named character visible in the scene must appear with expression + pose
-dialogue: only lines that are spoken aloud (not thoughts); omit if no one speaks; max 2 dialogues per page
+dialogue: spoken lines or internal thoughts (use "thinking" bubbleStyle for thoughts); omit if no one speaks or thinks; max 2 per page
 storyVisualState: for universe stories this reflects the hero's current look; for standalone stories design it to match the theme.
 characterDirections: required for every page; at minimum include the hero with expression and pose.
 speechBubbles: structured dialogue metadata; also echo in dialogue array for backward compat.

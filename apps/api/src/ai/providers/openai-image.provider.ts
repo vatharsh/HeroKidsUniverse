@@ -11,8 +11,6 @@ import {
   ImageGenerationInput,
   ImageGenerationOutput,
   ImageGenerationProvider,
-  SpeechBubbleLayoutInput,
-  SpeechBubbleLayoutResult,
 } from '../interfaces/image-generation.provider';
 import type { CharacterIdentity } from '../../heroes/hero.entity';
 import { PromptRegistryService } from '../prompt-registry.service';
@@ -659,89 +657,6 @@ Description to parse:
       return result;
     } catch (err) {
       this.logger.warn(`checkFaceConsistency failed: ${err instanceof Error ? err.message : String(err)}`);
-      return null;
-    }
-  }
-
-  async locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null> {
-    if (!input.speechBubbles.length) return { bubbles: [] };
-
-    try {
-      let imageUrl: string | undefined;
-      if (input.imageBase64) {
-        imageUrl = `data:image/png;base64,${input.imageBase64}`;
-      } else if (input.imageUrl) {
-        // OpenAI vision cannot fetch localhost URLs — resolve to base64 via local disk read
-        const loaded = await this.urlToBuffer(input.imageUrl);
-        if (loaded) {
-          imageUrl = `data:${loaded.contentType};base64,${loaded.buffer.toString('base64')}`;
-        } else {
-          imageUrl = input.imageUrl; // last resort: pass URL directly (works for R2/CDN)
-        }
-      }
-      if (!imageUrl) return null;
-
-      const prompt = [
-        'You are a comic layout assistant. Inspect the story illustration and place speech bubbles.',
-        'Return normalized percentage coordinates from 0 to 100 relative to the full image.',
-        'For each requested bubble, find the speaker character and estimate the mouth or lower-face anchor point.',
-        'Then choose a safe bubble rectangle that stays inside the image, is near the speaker, does not cover eyes/mouth/face/hands/main action, and has room for readable text.',
-        'The bubble tail will be drawn by the app from the bubble edge to anchorPoint.',
-        'If exact mouth is hard to see, use the lower-face/head center fallback and reduce confidence.',
-        'Do not invent extra bubbles. Return one result per requested bubble in the same order.',
-        '',
-        `Page: ${input.pageNumber}`,
-        input.sceneDescription ? `Scene: ${input.sceneDescription}` : '',
-        `Character directions: ${JSON.stringify(input.characterDirections ?? [])}`,
-        `Requested bubbles: ${JSON.stringify(input.speechBubbles)}`,
-        '',
-        'You must independently inspect the actual image provided above for every bubble. Do not reuse any numbers from this instruction text as your answer — every coordinate must be based on where the speaker actually is in this specific image.',
-        'Return ONLY valid JSON in this exact shape (the values below are placeholder types/ranges, not real answers):',
-        '{"bubbles":[{"speakerName":"<name from the requested bubbles>","text":"<text from the requested bubbles>","anchorPoint":{"x":<0-100 based on the actual mouth position you see>,"y":<0-100>},"bubbleRect":{"x":<0-100>,"y":<0-100>,"width":<10-50>,"height":<8-30>},"confidence":<0.0-1.0, your real confidence>,"reason":"<brief reason based on what you actually observed>"}]}',
-      ].filter(Boolean).join('\n');
-
-      const response = await this.client.chat.completions.create({
-        model: this.config.get<string>('OPENAI_VISION_LAYOUT_MODEL') ?? 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
-            { type: 'text', text: prompt },
-          ],
-        }],
-        max_tokens: 500,
-      });
-
-      const content = response.choices[0]?.message?.content?.trim();
-      if (!content) return null;
-
-      const parsed = JSON.parse(content) as SpeechBubbleLayoutResult;
-      const clamp = (value: unknown, min: number, max: number, fallback: number) => {
-        const n = Number(value);
-        return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
-      };
-
-      return {
-        bubbles: (parsed.bubbles ?? []).slice(0, input.speechBubbles.length).map((bubble, index) => ({
-          speakerName: bubble.speakerName || input.speechBubbles[index]?.speakerName || '',
-          text: bubble.text || input.speechBubbles[index]?.text || '',
-          anchorPoint: {
-            x: clamp(bubble.anchorPoint?.x, 3, 97, 50),
-            y: clamp(bubble.anchorPoint?.y, 3, 97, 50),
-          },
-          bubbleRect: {
-            x: clamp(bubble.bubbleRect?.x, 2, 82, 8),
-            y: clamp(bubble.bubbleRect?.y, 2, 82, 8),
-            width: clamp(bubble.bubbleRect?.width, 24, 48, 36),
-            height: clamp(bubble.bubbleRect?.height, 10, 28, 16),
-          },
-          confidence: clamp(bubble.confidence, 0, 1, 0.5),
-          reason: bubble.reason,
-        })),
-      };
-    } catch (err) {
-      this.logger.warn(`locateSpeechBubbleAnchors failed: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
   }

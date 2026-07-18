@@ -139,10 +139,6 @@ function getSpeechBubbles(page: StoryPage): Array<{
   return [];
 }
 
-function hasPreciseBubbleLayout(page: StoryPage | undefined): boolean {
-  return !!page?.speechBubbles?.some((bubble) => bubble.anchorPoint && bubble.bubbleRect);
-}
-
 // Convert structured preferredPosition + tailDirection into CSS layout.
 // Falls back to deterministic index-based split when structured metadata is absent.
 function findSpeakerDirection(page: StoryPage, speakerName?: string): PageCharacterDirection | undefined {
@@ -154,99 +150,93 @@ function findSpeakerDirection(page: StoryPage, speakerName?: string): PageCharac
   });
 }
 
+// Shared constants for hero avatar overlay positioning — used by both the avatar
+// img element and the bubble tail math so they always agree.
+const HERO_OVERLAY_HEIGHT_PCT = 72;  // avatar height as % of container
+const HERO_OVERLAY_BOTTOM_PCT = 0;   // avatar bottom edge at 0% from container bottom
+// Hero head is roughly at the top 15% of the avatar image; in container coordinates:
+//   top of avatar = 100% - HERO_OVERLAY_HEIGHT_PCT = 28% from container top
+//   head centre ≈ 28% + 8% (≈ top 15% of avatar) = 36%
+const HERO_HEAD_Y_PCT = 100 - HERO_OVERLAY_HEIGHT_PCT + 8; // ≈ 36% from top
+const HERO_HEAD_X_PCT = 50; // centred
+
 function inferComicPlacement(
   page: StoryPage,
   bubble: { speakerName?: string; preferredPosition?: string; tailDirection?: string; placementHint?: string } | undefined,
   index: number,
+  usedCorners: Set<string>,
 ): { preferredPosition: string; tailDirection: string } {
   if (bubble?.preferredPosition && bubble.tailDirection) {
-    return { preferredPosition: bubble.preferredPosition, tailDirection: bubble.tailDirection };
+    // Collision check: if the Gemini-assigned corner is already used, flip horizontal
+    const preferred = bubble.preferredPosition;
+    if (!usedCorners.has(preferred)) return { preferredPosition: preferred, tailDirection: bubble.tailDirection };
+    // Flip to opposite horizontal side
+    const flipped = preferred.endsWith("right")
+      ? preferred.replace("right", "left")
+      : preferred.replace("left", "right");
+    const flippedTail = bubble.tailDirection.endsWith("right")
+      ? bubble.tailDirection.replace("right", "left")
+      : bubble.tailDirection.replace("left", "right");
+    return { preferredPosition: flipped, tailDirection: flippedTail };
   }
 
   const speaker = findSpeakerDirection(page, bubble?.speakerName);
   const position = speaker?.position ?? (index % 2 === 0 ? "left" : "right");
 
-  if (position === "right") return { preferredPosition: "top-left", tailDirection: "down-right" };
-  if (position === "center" || position === "foreground") {
-    return index % 2 === 0
-      ? { preferredPosition: "top-left", tailDirection: "down-right" }
-      : { preferredPosition: "top-right", tailDirection: "down-left" };
-  }
-  return { preferredPosition: "top-right", tailDirection: "down-left" };
+  const candidates: Array<{ preferredPosition: string; tailDirection: string }> =
+    position === "right"
+      ? [{ preferredPosition: "top-left", tailDirection: "down-right" }, { preferredPosition: "top-right", tailDirection: "down-left" }]
+      : position === "center" || position === "foreground"
+        ? [{ preferredPosition: "top-right", tailDirection: "down-left" }, { preferredPosition: "top-left", tailDirection: "down-right" }]
+        : [{ preferredPosition: "top-right", tailDirection: "down-left" }, { preferredPosition: "top-left", tailDirection: "down-right" }];
+
+  return candidates.find(c => !usedCorners.has(c.preferredPosition)) ?? candidates[0];
 }
 
 function parsePlacementHint(
   page: StoryPage,
-  bubble: { speakerName?: string; preferredPosition?: string; tailDirection?: string; placementHint?: string; maxWidthPercent?: number; bubbleRect?: { x: number; y: number; width: number; height: number } } | undefined,
+  bubble: { speakerName?: string; preferredPosition?: string; tailDirection?: string; placementHint?: string; maxWidthPercent?: number } | undefined,
   index: number,
   _total: number,
+  usedCorners: Set<string>,
+  isOverlayMode: boolean,
 ): { posStyle: React.CSSProperties; tailUp: boolean; tailOnRight: boolean } {
-  if (bubble?.bubbleRect) {
-    const rect = bubble.bubbleRect;
-    return {
-      posStyle: {
-        position: "absolute",
-        left: `${rect.x}%`,
-        top: `${rect.y}%`,
-        width: `${rect.width}%`,
-        maxWidth: `${rect.width}%`,
-        zIndex: 25,
-      },
-      tailUp: false,
-      tailOnRight: false,
-    };
-  }
+  const inferred = inferComicPlacement(page, bubble, index, usedCorners);
+  const pos = bubble?.preferredPosition && !usedCorners.has(bubble.preferredPosition)
+    ? bubble.preferredPosition
+    : inferred.preferredPosition;
+  const tail = inferred.tailDirection;
+  usedCorners.add(pos); // mark corner as used so the next bubble avoids it
 
-  const inferred = inferComicPlacement(page, bubble, index);
-  const pos = bubble?.preferredPosition ?? inferred.preferredPosition;
-  const tail = bubble?.tailDirection ?? inferred.tailDirection;
-
-  // Vertical axis
-  const isTop = pos ? pos.startsWith("top") : false;
-  // Horizontal axis: prefer explicit position; fall back to index split
-  const isRight = pos ? pos.endsWith("right") : index === 1;
+  const isTop = pos ? pos.startsWith("top") : true;
+  const isRight = pos ? pos.endsWith("right") : index !== 0;
 
   const maxWidth = Math.min(46, Math.max(32, bubble?.maxWidthPercent ?? 40));
   const posStyle: React.CSSProperties = { position: "absolute", maxWidth: `${maxWidth}%`, zIndex: 25 };
   if (isTop) { posStyle.top = "7%"; } else { posStyle.bottom = "10%"; }
   if (isRight) { posStyle.right = "6%"; } else { posStyle.left = "6%"; }
 
-  // Tail direction — use explicit field if present, otherwise infer
-  let tailUp: boolean;
-  let tailOnRight: boolean;
-  if (tail) {
-    tailUp = tail.startsWith("up");
-    tailOnRight = tail.endsWith("right");
-  } else {
-    // Bubble at bottom → character above → tail points up; mirror horizontally
-    tailUp = !isTop;
-    tailOnRight = isRight;
+  // Overlay mode: for hero-speaker bubbles, tail points toward hero head position
+  if (isOverlayMode) {
+    const speaker = findSpeakerDirection(page, bubble?.speakerName);
+    const isHeroSpeaker = !speaker || speaker.role === "hero";
+    if (isHeroSpeaker) {
+      // Hero head is at approximately (HERO_HEAD_X_PCT, HERO_HEAD_Y_PCT) in container coords
+      // Bubble is at top-left or top-right, so tail always points down toward hero
+      return {
+        posStyle,
+        tailUp: false, // tail points downward toward the hero
+        tailOnRight: !isRight, // tail on right side when bubble is on left, and vice versa
+      };
+    }
   }
+
+  const tailUp = tail ? tail.startsWith("up") : !isTop;
+  const tailOnRight = tail ? tail.endsWith("right") : isRight;
 
   return { posStyle, tailUp, tailOnRight };
 }
 
-function getPreciseTailPoints(
-  bubble: { anchorPoint?: { x: number; y: number }; bubbleRect?: { x: number; y: number; width: number; height: number } },
-): { start: { x: number; y: number }; end: { x: number; y: number } } | null {
-  if (!bubble.anchorPoint || !bubble.bubbleRect) return null;
-  const rect = bubble.bubbleRect;
-  const anchor = bubble.anchorPoint;
-  const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  const dx = anchor.x - center.x;
-  const dy = anchor.y - center.y;
-
-  let start = { x: center.x, y: center.y };
-  if (Math.abs(dx) > Math.abs(dy)) {
-    start.x = dx > 0 ? rect.x + rect.width : rect.x;
-    start.y = Math.min(rect.y + rect.height - 3, Math.max(rect.y + 3, anchor.y));
-  } else {
-    start.y = dy > 0 ? rect.y + rect.height : rect.y;
-    start.x = Math.min(rect.x + rect.width - 4, Math.max(rect.x + 4, anchor.x));
-  }
-
-  return { start, end: anchor };
-}
 
 interface BubbleProps {
   speakerName?: string;
@@ -254,10 +244,9 @@ interface BubbleProps {
   bubbleStyle: BubbleStyle;
   tailUp?: boolean;
   tailOnRight?: boolean;
-  hideTail?: boolean;
 }
 
-function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRight = false, hideTail = false }: BubbleProps) {
+function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRight = false }: BubbleProps) {
   const borderColor = bubbleStyle === "whisper" ? "#555" : "#000";
   const fillColor   = bubbleStyle === "surprised" ? "#fff9c4" : bubbleStyle === "whisper" ? "#f0f0f0" : "#fff";
 
@@ -287,13 +276,13 @@ function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRi
   return (
     <div className="relative flex flex-col" style={{ display: "inline-flex", flexDirection: "column" }}>
       {/* Upward tail sits ABOVE the box — rendered before so it's visually behind */}
-      {!hideTail && tailUp && bubbleStyle !== "thinking" && (
+      {!false && tailUp && bubbleStyle !== "thinking" && (
         <>
           <div className="absolute w-0 h-0" style={{ top: -10, left: tailLeft, right: tailRight, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: `11px solid ${borderColor}` }} />
           <div className="absolute w-0 h-0" style={{ top: -7, left: innerLeft, right: innerRight, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: `9px solid ${fillColor}` }} />
         </>
       )}
-      {!hideTail && tailUp && bubbleStyle === "thinking" && (
+      {!false && tailUp && bubbleStyle === "thinking" && (
         <div className="absolute flex gap-0.5" style={{ top: -14, left: tailLeft, right: tailRight }}>
           {[3, 4, 6].map((size, idx) => (
             <div key={idx} className="rounded-full bg-white border-[2px] border-black" style={{ width: size, height: size }} />
@@ -315,13 +304,13 @@ function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRi
       </div>
 
       {/* Downward tail */}
-      {!hideTail && !tailUp && bubbleStyle !== "thinking" && (
+      {!false && !tailUp && bubbleStyle !== "thinking" && (
         <>
           <div className="absolute w-0 h-0" style={{ bottom: -10, left: tailLeft, right: tailRight, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `11px solid ${borderColor}` }} />
           <div className="absolute w-0 h-0" style={{ bottom: -7, left: innerLeft, right: innerRight, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `9px solid ${fillColor}` }} />
         </>
       )}
-      {!hideTail && !tailUp && bubbleStyle === "thinking" && (
+      {!false && !tailUp && bubbleStyle === "thinking" && (
         <div className="absolute flex gap-0.5" style={{ bottom: -14, left: tailLeft, right: tailRight }}>
           {[6, 4, 3].map((size, idx) => (
             <div key={idx} className="rounded-full bg-white border-[2px] border-black" style={{ width: size, height: size }} />
@@ -868,46 +857,24 @@ export default function StoryReaderPage() {
                 {/* Speech bubbles overlay for print */}
                 {bubbles.length > 0 && (
                   <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-                    {bubbles.map((bubble, i) => {
-                      const { posStyle, tailUp, tailOnRight } = parsePlacementHint(pg, bubble, i, bubbles.length);
-                      const preciseTail = getPreciseTailPoints(bubble);
-                      return (
-                        <div key={i}>
-                          {preciseTail && (
-                            <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible", zIndex: 24 }}>
-                              <line
-                                x1={`${preciseTail.start.x}%`}
-                                y1={`${preciseTail.start.y}%`}
-                                x2={`${preciseTail.end.x}%`}
-                                y2={`${preciseTail.end.y}%`}
-                                stroke="#000"
-                                strokeWidth="3"
-                                strokeLinecap="round"
-                              />
-                              <line
-                                x1={`${preciseTail.start.x}%`}
-                                y1={`${preciseTail.start.y}%`}
-                                x2={`${preciseTail.end.x}%`}
-                                y2={`${preciseTail.end.y}%`}
-                                stroke="#fff"
-                                strokeWidth="1.5"
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                          )}
-                          <div style={posStyle}>
+                    {(() => {
+                      const usedCorners = new Set<string>();
+                      const isOverlayMode = !!pg.backgroundUrl;
+                      return bubbles.map((bubble, i) => {
+                        const { posStyle, tailUp, tailOnRight } = parsePlacementHint(pg, bubble, i, bubbles.length, usedCorners, isOverlayMode);
+                        return (
+                          <div key={i} style={posStyle}>
                             <SpeechBubble
                               speakerName={bubble.speakerName}
                               text={bubble.text}
                               bubbleStyle={bubble.bubbleStyle}
                               tailUp={tailUp}
                               tailOnRight={tailOnRight}
-                              hideTail={!!preciseTail}
                             />
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>
@@ -1074,7 +1041,7 @@ export default function StoryReaderPage() {
                   src={currentPage.imageUrl}
                   alt={`Page ${page + 1}`}
                   className="absolute inset-0 w-full h-full object-contain z-10 transition-all duration-500"
-                  style={hasPreciseBubbleLayout(currentPage) ? {} : getCropStyle(currentPage.cropHint)}
+                  style={getCropStyle(currentPage.cropHint)}
                 />
               </>
             ) : (
@@ -1107,45 +1074,21 @@ export default function StoryReaderPage() {
             {currentPage && (() => {
               const bubbles = getSpeechBubbles(currentPage);
               if (bubbles.length === 0) return null;
+              const usedCorners = new Set<string>();
+              const isOverlayMode = !!currentPage.backgroundUrl;
               return (
                 <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 20 }}>
                   {bubbles.map((bubble, i) => {
-                    const { posStyle, tailUp, tailOnRight } = parsePlacementHint(currentPage, bubble, i, bubbles.length);
-                    const preciseTail = getPreciseTailPoints(bubble);
+                    const { posStyle, tailUp, tailOnRight } = parsePlacementHint(currentPage, bubble, i, bubbles.length, usedCorners, isOverlayMode);
                     return (
-                      <div key={i}>
-                        {preciseTail && (
-                          <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ zIndex: 24 }}>
-                            <line
-                              x1={`${preciseTail.start.x}%`}
-                              y1={`${preciseTail.start.y}%`}
-                              x2={`${preciseTail.end.x}%`}
-                              y2={`${preciseTail.end.y}%`}
-                              stroke="#000"
-                              strokeWidth="3"
-                              strokeLinecap="round"
-                            />
-                            <line
-                              x1={`${preciseTail.start.x}%`}
-                              y1={`${preciseTail.start.y}%`}
-                              x2={`${preciseTail.end.x}%`}
-                              y2={`${preciseTail.end.y}%`}
-                              stroke="#fff"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                        )}
-                        <div style={posStyle}>
-                          <SpeechBubble
-                            speakerName={bubble.speakerName}
-                            text={bubble.text}
-                            bubbleStyle={bubble.bubbleStyle}
-                            tailUp={tailUp}
-                            tailOnRight={tailOnRight}
-                            hideTail={!!preciseTail}
-                          />
-                        </div>
+                      <div key={i} style={posStyle}>
+                        <SpeechBubble
+                          speakerName={bubble.speakerName}
+                          text={bubble.text}
+                          bubbleStyle={bubble.bubbleStyle}
+                          tailUp={tailUp}
+                          tailOnRight={tailOnRight}
+                        />
                       </div>
                     );
                   })}

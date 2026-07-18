@@ -73,7 +73,7 @@ export class CharactersService {
     });
 
     if (photo) {
-      character.photoUrl = await this.uploadService.uploadCharacterPhoto(userId, photo);
+      // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
       const result = await this.generateAvatar(userId, createCharacterDto.name, createCharacterDto.role, photo);
       character.avatarUrl = result.avatarUrl;
       character.avatarDescription = result.avatarDescription;
@@ -131,7 +131,7 @@ export class CharactersService {
 
     if (photo) {
       await this.consumeAvatarRefresh(userId, character.id);
-      character.photoUrl = await this.uploadService.uploadCharacterPhoto(userId, photo);
+      // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
       const result = await this.generateAvatar(userId, character.name, character.role, photo);
       character.avatarUrl = result.avatarUrl;
       character.avatarDescription = result.avatarDescription;
@@ -152,7 +152,7 @@ export class CharactersService {
     const character = await this.findOne(userId, id);
 
     const avatarRefreshTokens = await this.consumeAvatarRefresh(userId, character.id);
-    character.photoUrl = await this.uploadService.uploadCharacterPhoto(userId, photo);
+    // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
     const result = await this.generateAvatar(userId, character.name, character.role, photo, adjustmentHint);
     character.avatarUrl = result.avatarUrl;
     character.avatarDescription = result.avatarDescription;

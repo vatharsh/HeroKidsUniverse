@@ -248,7 +248,6 @@ function CreatePageInner() {
   const stepLabels = stepSequence.map(s => STEP_LABELS[s]);
   const selectedThemeData = THEMES.find(t => t.value === selectedTheme);
 
-  // Reset theme when switching to freeform; fetch last story for continue_arc
   const isUniverseMode = (mode: string) => ["new_adventure", "continue_arc", "new_arc"].includes(mode);
 
   function handleModeSelect(mode: string) {
@@ -259,22 +258,29 @@ function CreatePageInner() {
     } else if (universes.length === 1) {
       setSelectedUniverseId(universes[0].id);
     }
-    if (mode === "continue_arc" && !lastStory && !lastStoryLoading) {
-      setLastStoryLoading(true);
-      const token = localStorage.getItem("hvu_access");
-      const univId = preselectedUniverseId ?? (universes.length === 1 ? universes[0].id : null);
-      const url = univId ? `${BASE}/stories?universeId=${univId}` : `${BASE}/stories`;
-      fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json())
-        .then(({ data }) => {
-          const stories: LastStory[] = Array.isArray(data) ? data : [];
-          const completed = stories.find((s: any) => s.status === "completed");
-          setLastStory(completed ?? null);
-        })
-        .catch(() => {})
-        .finally(() => setLastStoryLoading(false));
-    }
   }
+
+  // Re-fetch lastStory whenever mode is continue_arc OR the active universe changes
+  useEffect(() => {
+    if (storyMode !== "continue_arc") {
+      setLastStory(null);
+      return;
+    }
+    const univId = preselectedUniverseId ?? selectedUniverseId ?? null;
+    setLastStory(null);
+    setLastStoryLoading(true);
+    const token = localStorage.getItem("hvu_access");
+    const url = univId ? `${BASE}/stories?universeId=${univId}` : `${BASE}/stories`;
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(({ data }) => {
+        const stories: LastStory[] = Array.isArray(data) ? data : [];
+        const completed = stories.find((s: any) => s.status === "completed");
+        setLastStory(completed ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setLastStoryLoading(false));
+  }, [storyMode, selectedUniverseId, preselectedUniverseId]);
 
   // When freeform is selected and theme step disappears, keep step index valid
   useEffect(() => {

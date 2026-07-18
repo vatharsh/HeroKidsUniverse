@@ -757,15 +757,6 @@ export class GenerationService implements OnModuleInit {
           }`,
         );
       }
-      const speechBubbles = await this.enrichSpeechBubbleLayout({
-        pageNumber: page.pageNumber,
-        imageUrl,
-        imageBase64: imageOutput.imageBase64,
-        sceneDescription: page.sceneDescription,
-        characterDirections: page.characterDirections,
-        speechBubbles: page.speechBubbles,
-      });
-
       pages.push({
         pageNumber: page.pageNumber,
         text: page.text,
@@ -780,7 +771,7 @@ export class GenerationService implements OnModuleInit {
         cropHint: page.cropHint,
         sceneId: page.sceneId,
         background: page.background,
-        speechBubbles,
+        speechBubbles: page.speechBubbles,
         storyStateSnapshot: pageStateSnapshotMap.get(page.pageNumber),
         characterDirections: page.characterDirections,
         storyStateUpdate: page.storyStateUpdate,
@@ -1109,15 +1100,6 @@ export class GenerationService implements OnModuleInit {
           }
         }
 
-        const speechBubbles = await this.enrichSpeechBubbleLayout({
-          pageNumber: page.pageNumber,
-          imageUrl: pageImageUrl,
-          imageBase64: pageImageBase64,
-          sceneDescription: page.sceneDescription,
-          characterDirections: page.characterDirections,
-          speechBubbles: page.speechBubbles,
-        });
-
         pages.push({
           pageNumber: page.pageNumber,
           text: page.text,
@@ -1132,7 +1114,7 @@ export class GenerationService implements OnModuleInit {
           cropHint: page.cropHint,
           sceneId: scene.sceneId,
           background: page.background,
-          speechBubbles,
+          speechBubbles: page.speechBubbles,
           storyStateSnapshot: pageStateSnapshotMap.get(page.pageNumber),
           characterDirections: page.characterDirections,
           storyStateUpdate: page.storyStateUpdate,
@@ -1163,59 +1145,6 @@ export class GenerationService implements OnModuleInit {
     }
 
     throw lastError instanceof Error ? lastError : new Error('Image generation failed');
-  }
-
-  private async enrichSpeechBubbleLayout(params: {
-    pageNumber: number;
-    imageUrl?: string;
-    imageBase64?: string;
-    sceneDescription?: string;
-    characterDirections?: StoryPage['characterDirections'];
-    speechBubbles?: StoryPage['speechBubbles'];
-  }): Promise<StoryPage['speechBubbles']> {
-    const bubbles = params.speechBubbles ?? [];
-    if (!bubbles.length || (!params.imageUrl && !params.imageBase64)) return bubbles;
-
-    try {
-      const layout = await this.imageProvider.locateSpeechBubbleAnchors({
-        imageUrl: params.imageUrl,
-        imageBase64: params.imageBase64,
-        pageNumber: params.pageNumber,
-        sceneDescription: params.sceneDescription,
-        characterDirections: params.characterDirections,
-        speechBubbles: bubbles.map((bubble) => ({
-          speakerName: bubble.speakerName,
-          text: bubble.text,
-          preferredPosition: bubble.preferredPosition,
-          tailDirection: bubble.tailDirection,
-        })),
-      });
-
-      if (!layout?.bubbles?.length) return bubbles;
-
-      const MIN_LAYOUT_CONFIDENCE = 0.35;
-      return bubbles.map((bubble, index) => {
-        const placed = layout.bubbles[index];
-        if (!placed) return bubble;
-        // A low-confidence anchor/rect guess is worse than the frontend's position-based heuristic fallback — drop it.
-        if (placed.confidence < MIN_LAYOUT_CONFIDENCE) {
-          return { ...bubble, layoutConfidence: placed.confidence };
-        }
-        return {
-          ...bubble,
-          anchorPoint: placed.anchorPoint,
-          bubbleRect: placed.bubbleRect,
-          layoutConfidence: placed.confidence,
-        };
-      });
-    } catch (err) {
-      this.logger.warn(
-        `Speech bubble layout failed for page ${params.pageNumber}: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-      return bubbles;
-    }
   }
 
   private async mapWithConcurrency<T, R>(

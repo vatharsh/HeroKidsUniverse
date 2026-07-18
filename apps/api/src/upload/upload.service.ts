@@ -92,36 +92,6 @@ export class UploadService {
     return `http://localhost:3000/api/upload/files/audio/${filename}`;
   }
 
-  async uploadCharacterPhoto(userId: string, file: Express.Multer.File): Promise<string> {
-    if (!file) throw new BadRequestException('Photo is required');
-    if (!ALLOWED_MIME.includes(file.mimetype)) throw new BadRequestException('Invalid file type');
-    if (file.size > 5 * 1024 * 1024) throw new BadRequestException('File too large');
-
-    const ext = file.mimetype.split('/')[1] ?? 'jpg';
-    return this.uploadBuffer({
-      userId,
-      folder: 'characters',
-      filename: `photo-${randomUUID()}.${ext}`,
-      buffer: file.buffer,
-      contentType: file.mimetype,
-    });
-  }
-
-  async uploadHeroPhoto(userId: string, file: Express.Multer.File): Promise<string> {
-    if (!file) throw new BadRequestException('Photo is required');
-    if (!ALLOWED_MIME.includes(file.mimetype)) throw new BadRequestException('Invalid file type');
-    if (file.size > 5 * 1024 * 1024) throw new BadRequestException('File too large');
-
-    const ext = file.mimetype.split('/')[1] ?? 'jpg';
-    return this.uploadBuffer({
-      userId,
-      folder: 'heroes',
-      filename: `photo-${randomUUID()}.${ext}`,
-      buffer: file.buffer,
-      contentType: file.mimetype,
-    });
-  }
-
   async uploadCharacterAvatar(userId: string, imageBase64: string): Promise<string> {
     return this.uploadBuffer({
       userId,

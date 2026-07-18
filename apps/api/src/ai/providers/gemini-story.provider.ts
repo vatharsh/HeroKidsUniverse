@@ -106,7 +106,7 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
     return `RUNTIME QUALITY CONTRACT — MUST FOLLOW EVEN IF EARLIER PROMPT TEXT CONFLICTS:
 - speechBubbles are metadata only. Never ask image generation to draw text or bubbles.
 - Each speechBubble must include speakerName, text, emotion, bubbleStyle, preferredPosition, tailDirection, anchorTarget.
-- anchorTarget must be "mouth" or "lower_face".
+- anchorTarget: "mouth" or "lower_face" for spoken dialogue; "forehead" for bubbleStyle "thinking".
 - Place bubbles near speaker: speaker LEFT -> preferredPosition "top-right", tailDirection "down-left"; speaker RIGHT -> "top-left", tailDirection "down-right"; speaker CENTER -> alternate top-left/top-right.
 - Every speaking character must have characterDirections with position, expression, expressionDetails.eyes, expressionDetails.mouth, expressionDetails.eyebrows, expressionDetails.gaze, expressionDetails.headTilt, pose, action, lookingAt, mouthState "speaking", isSpeaking true.
 - Non-speaking visible characters must have reaction expressions and mouthState "closed", "smiling", or "surprised".
