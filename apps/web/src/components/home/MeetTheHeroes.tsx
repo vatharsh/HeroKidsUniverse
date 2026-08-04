@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import arjunImg from "../../../../../Arjun_Transparent.png";
 
 const TRANSFORMATIONS = [
   {
@@ -24,7 +23,7 @@ const TRANSFORMATIONS = [
     afterContent: (
       <div className="w-full h-full relative flex items-center justify-center">
         <Image
-          src={arjunImg}
+          src="/arjun.png"
           alt="Arjun — storybook hero"
           fill
           className="object-contain drop-shadow-xl"

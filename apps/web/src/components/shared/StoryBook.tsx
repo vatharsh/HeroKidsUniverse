@@ -4,26 +4,16 @@ import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import cover from "../../../../../Arjun_Story_9_Images_No_Border/cover.png";
-import p1 from "../../../../../Arjun_Story_9_Images_No_Border/page_1.png";
-import p2 from "../../../../../Arjun_Story_9_Images_No_Border/page_2.png";
-import p3 from "../../../../../Arjun_Story_9_Images_No_Border/page_3.png";
-import p4 from "../../../../../Arjun_Story_9_Images_No_Border/page_4.png";
-import p5 from "../../../../../Arjun_Story_9_Images_No_Border/page_5.png";
-import p6 from "../../../../../Arjun_Story_9_Images_No_Border/page_6.png";
-import p7 from "../../../../../Arjun_Story_9_Images_No_Border/page_7.png";
-import p8 from "../../../../../Arjun_Story_9_Images_No_Border/page_8.png";
-
 const PANELS = [
-  { src: cover, alt: "Cover — Arjun and the Starlight Mission" },
-  { src: p1, alt: "Arjun loved looking at the stars from his room. One night, something magical happened." },
-  { src: p2, alt: "A star from the Starlight Cluster has lost its shine. Without it, the Galaxy will be sad and dark." },
-  { src: p3, alt: "They zoomed past sparkling asteroids and twinkling planets. It was an exciting journey!" },
-  { src: p4, alt: "They landed on Glimmeria, a colorful planet. The cute Glimmas were worried." },
-  { src: p5, alt: "Arjun and Nova followed the trail and found the Shadow Swirl — a cloud that loved darkness." },
-  { src: p6, alt: "Arjun didn't give up. Even darkness is beautiful, but light brings hope." },
-  { src: p7, alt: "The star sparkled again! Glimmeria shined bright. Arjun and Nova returned home." },
-  { src: p8, alt: "Arjun looked at the stars and smiled. He knew many more adventures were waiting. ★ THE END ★" },
+  { src: "/story-demo/cover.png", alt: "Cover — Arjun and the Starlight Mission" },
+  { src: "/story-demo/page_1.png", alt: "Arjun loved looking at the stars from his room. One night, something magical happened." },
+  { src: "/story-demo/page_2.png", alt: "A star from the Starlight Cluster has lost its shine. Without it, the Galaxy will be sad and dark." },
+  { src: "/story-demo/page_3.png", alt: "They zoomed past sparkling asteroids and twinkling planets. It was an exciting journey!" },
+  { src: "/story-demo/page_4.png", alt: "They landed on Glimmeria, a colorful planet. The cute Glimmas were worried." },
+  { src: "/story-demo/page_5.png", alt: "Arjun and Nova followed the trail and found the Shadow Swirl — a cloud that loved darkness." },
+  { src: "/story-demo/page_6.png", alt: "Arjun didn't give up. Even darkness is beautiful, but light brings hope." },
+  { src: "/story-demo/page_7.png", alt: "The star sparkled again! Glimmeria shined bright. Arjun and Nova returned home." },
+  { src: "/story-demo/page_8.png", alt: "Arjun looked at the stars and smiled. He knew many more adventures were waiting. ★ THE END ★" },
 ];
 
 function PageView({ idx, priority = false }: { idx: number; priority?: boolean }) {
@@ -35,7 +25,7 @@ function PageView({ idx, priority = false }: { idx: number; priority?: boolean }
         <div
           className="absolute inset-0 scale-110"
           style={{
-            backgroundImage: `url(${panel.src.src})`,
+            backgroundImage: `url(${panel.src})`,
             backgroundSize: "cover",
             backgroundPosition: "center",
             filter: "blur(14px) brightness(0.4)",

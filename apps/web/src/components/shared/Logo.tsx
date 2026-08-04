@@ -1,5 +1,4 @@
 import Image from "next/image";
-import logoSrc from "../../../../../Hero-Kids-Universe-1.png";
 
 import { cn } from "@/lib/utils";
 
@@ -32,7 +31,7 @@ export function LogoMark({
       <span className="absolute left-2 right-2 top-1 h-3 rounded-full bg-white/15 blur-sm" />
       <span className="relative z-10 h-full w-full overflow-hidden rounded-full flex items-center justify-center">
         <Image
-          src={logoSrc}
+          src="/logo.png"
           alt="Hero Kids Universe logo"
           width={1254}
           height={1254}
