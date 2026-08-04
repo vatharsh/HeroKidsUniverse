@@ -1,0 +1,58 @@
+services:
+  hku-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: heroverse
+      POSTGRES_USER: hku
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - hku_postgres_data:/var/lib/postgresql/data
+    networks:
+      - herokids
+
+  hku-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - hku_redis_data:/data
+    networks:
+      - herokids
+
+  hku-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DATABASE_URL: postgresql://hku:${DB_PASSWORD}@hku-postgres:5432/heroverse
+      REDIS_URL: redis://hku-redis:6379
+    depends_on:
+      - hku-postgres
+      - hku-redis
+    networks:
+      - herokids
+
+  hku-web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.herokidsuniverse.com
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: https://api.herokidsuniverse.com
+    depends_on:
+      - hku-api
+    networks:
+      - herokids
+
+volumes:
+  hku_postgres_data:
+  hku_redis_data:
+
+networks:
+  herokids:
+    name: herokids
