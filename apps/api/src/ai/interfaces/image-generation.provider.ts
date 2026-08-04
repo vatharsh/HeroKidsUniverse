@@ -17,6 +17,7 @@ export interface ImageGenerationInput {
     weapon: string | null;
     powers: string[];
     inventory: string[];
+    characterOutfits?: Record<string, string>;
   } | null;
   dialogue?: Array<{ speaker: string; text: string; emotion?: string }>;
   characters?: Array<{ name: string; expression?: string; pose?: string }>;
@@ -29,6 +30,8 @@ export interface ImageGenerationInput {
   heroNeverChangeRules?: string[];
   heroFaceMetrics?: string;
   characterCanonSummaries?: string[];
+  characterNeverChangeRules?: (string[] | null)[]; // one entry per supporting character, same order
+  characterBibles?: string[]; // one entry per supporting character — user-authored CHARACTER BIBLE block
   storyStateBlock?: string;
   characterDirections?: Array<{
     name: string;
@@ -61,6 +64,36 @@ export interface FaceConsistencyResult {
   recommendation: 'accept' | 'regenerate';
 }
 
+export interface SpeechBubbleLayoutInput {
+  imageUrl?: string;
+  imageBase64?: string;
+  pageNumber: number;
+  sceneDescription?: string;
+  characterDirections?: Array<{
+    name: string;
+    position?: 'left' | 'center' | 'right' | 'foreground' | 'background';
+    isSpeaking?: boolean;
+    mouthState?: 'speaking' | 'closed' | 'smiling' | 'surprised';
+  }>;
+  speechBubbles: Array<{
+    speakerName: string;
+    text: string;
+    preferredPosition?: string;
+    tailDirection?: string;
+  }>;
+}
+
+export interface SpeechBubbleLayoutResult {
+  bubbles: Array<{
+    speakerName: string;
+    text: string;
+    anchorPoint: { x: number; y: number };
+    bubbleRect: { x: number; y: number; width: number; height: number };
+    confidence: number;
+    reason?: string;
+  }>;
+}
+
 export interface AvatarGenerationInput {
   name: string;
   role?: string;
@@ -77,4 +110,5 @@ export interface ImageGenerationProvider {
   extractStructuredIdentity(description: string): Promise<import('../../heroes/hero.entity').CharacterIdentity | null>;
   checkFaceConsistency(heroAvatarUrl: string, generatedImageBase64: string, heroName: string): Promise<FaceConsistencyResult | null>;
   checkFaceConsistencyFromUrl(heroAvatarUrl: string, generatedImageUrl: string, heroName: string): Promise<FaceConsistencyResult | null>;
+  locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null>;
 }

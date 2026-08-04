@@ -13,7 +13,10 @@ import { PromptRegistryService } from '../prompt-registry.service';
 export class OpenAITTSProvider implements NarrationProvider {
   private readonly client: OpenAI;
   private readonly model: string;
+  // Cached template: string = fetched OK; null = confirmed not in DB; undefined = not yet fetched / fetch failed
   private cachedNarrationTemplate: string | null | undefined = undefined;
+  // Timestamp of last failed fetch — retry after 5 minutes instead of caching null forever
+  private lastFetchFailedAt: number | null = null;
 
   constructor(
     private readonly config: ConfigService,
@@ -26,26 +29,32 @@ export class OpenAITTSProvider implements NarrationProvider {
 
   private async getNarrationInstructions(input: NarrationInput): Promise<string> {
     const fallback =
-      'Narrate in clear neutral Indian English, like a warm Indian parent or grandparent telling a bedtime story. ' +
-      'Use natural Indian pronunciation, Indian English rhythm, and familiar conversational warmth. ' +
-      'Keep the tone gentle, friendly, expressive, and easy for children aged 5-12 to understand. ' +
-      'Speak medium-slow, with clear syllables and soft excitement during action moments. ' +
-      'Avoid American audiobook style, American vowel sounds, British documentary style, and over-dramatic Western narration.';
+      'Speak with a warm, natural Indian English accent — the kind you would hear from a loving Indian parent or grandparent telling a bedtime story to a young child.\n' +
+      'Accent: Indian English throughout — slightly syllable-timed rhythm, gentle rising-and-falling intonation at sentence ends, pure vowels (avoid American diphthong drawl), crisp consonants.\n' +
+      'Pace: medium-slow, every word lands clearly for a child aged 5 to 12.\n' +
+      'Tone: warm, friendly, soothing but animated — gently stress character names and exciting action words, pause briefly after commas and full stops.\n' +
+      'Avoid entirely: American accent, American r-coloured vowels, British RP, over-dramatic Western audiobook style.';
 
-    if (this.cachedNarrationTemplate === undefined) {
+    // Retry if previously failed (don't cache null forever — retry after 5 min)
+    const shouldFetch =
+      this.cachedNarrationTemplate === undefined ||
+      (this.cachedNarrationTemplate === null && this.lastFetchFailedAt !== null && Date.now() - this.lastFetchFailedAt > 5 * 60 * 1000);
+
+    if (shouldFetch) {
       try {
         const version = this.promptRegistry ? await this.promptRegistry.getActivePrompt('narration') : null;
         this.cachedNarrationTemplate = version?.promptText ?? null;
+        if (this.cachedNarrationTemplate === null) {
+          this.lastFetchFailedAt = null; // DB says no active version — don't retry aggressively
+        }
       } catch {
         this.cachedNarrationTemplate = null;
+        this.lastFetchFailedAt = Date.now(); // transient error — retry in 5 min
       }
     }
 
     return this.cachedNarrationTemplate && this.promptRegistry
       ? this.promptRegistry.renderPrompt(this.cachedNarrationTemplate, {
-          pageText: input.text,
-          voice: input.voice ?? 'nova',
-          speedRatio: String(input.speed ?? 0.9),
           accentStyle: input.accent ?? 'natural Indian English',
           tone: input.tone ?? 'warm bedtime storyteller',
         })

@@ -129,6 +129,7 @@ interface LastStory {
   cliffhanger: string | null;
   theme: string | null;
   createdAt: string;
+  universeId: string | null;
 }
 
 interface Universe {
@@ -141,7 +142,7 @@ function CreatePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedUniverseId = searchParams.get("universeId");
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   // Hero state
   const [hero, setHero]               = useState<ExistingHero | null>(null);
@@ -156,10 +157,17 @@ function CreatePageInner() {
   // Characters state
   const [characters, setCharacters]           = useState<Character[]>([]);
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>([]);
+  const [companionIncluded, setCompanionIncluded] = useState(true);
   const [showCharForm, setShowCharForm]       = useState(false);
   const [charName, setCharName]               = useState("");
   const [charRole, setCharRole]               = useState<CharRole>("friend");
   const [charDob, setCharDob]                 = useState("");
+  const [charRelationship, setCharRelationship] = useState("");
+  const [charAlwaysWears, setCharAlwaysWears]   = useState("");
+  const [charHair, setCharHair]                 = useState("");
+  const [charSkin, setCharSkin]                 = useState("");
+  const [charOtherTraits, setCharOtherTraits]   = useState("");
+  const [showBioFields, setShowBioFields]       = useState(false);
   const [charPhotoFile, setCharPhotoFile]     = useState<File | null>(null);
   const [charPhotoPreview, setCharPhotoPreview] = useState<string | null>(null);
   const [charPresetAvatar, setCharPresetAvatar] = useState<string | null>(null);
@@ -179,10 +187,12 @@ function CreatePageInner() {
   const [selectedTheme, setSelectedTheme] = useState("");
   const [storyContext, setStoryContext] = useState("");
 
-  // Companion state
+  // Companion state — new companion being created
   const [companionType, setCompanionType]   = useState<string | null>(null);
   const [companionName, setCompanionName]   = useState("");
   const [companionPetId, setCompanionPetId] = useState<string | null>(null);
+  // Existing universe companion (fetched when universe is known)
+  const [existingCompanion, setExistingCompanion] = useState<{ id: string; name: string; type: string; avatarUrl?: string } | null>(null);
 
   // Last story for "Continue Adventure" context
   const [lastStory, setLastStory]             = useState<LastStory | null>(null);
@@ -209,7 +219,10 @@ function CreatePageInner() {
       storiesUrl
         ? fetch(storiesUrl, { headers: h }).then(r => r.json()).catch(() => ({ data: [] }))
         : Promise.resolve({ data: [] }),
-    ]).then(([heroRes, charRes, univRes, storiesRes]) => {
+      preselectedUniverseId
+        ? fetch(`${BASE}/companions/universe/${preselectedUniverseId}`, { headers: h }).then(r => r.json()).catch(() => ({ data: null }))
+        : Promise.resolve({ data: null }),
+    ]).then(([heroRes, charRes, univRes, storiesRes, companionRes]) => {
       if (Array.isArray(heroRes.data) && heroRes.data.length > 0) {
         setHero(heroRes.data[0] as ExistingHero);
       }
@@ -225,8 +238,22 @@ function CreatePageInner() {
         const stories = Array.isArray(storiesRes.data) ? storiesRes.data : [];
         setUniverseHasStories(stories.length > 0);
       }
+      if (companionRes.data?.id) {
+        setExistingCompanion(companionRes.data);
+      }
     }).finally(() => setHeroLoading(false));
   }, []);
+
+  // Re-fetch companion when universe selection changes (general path)
+  useEffect(() => {
+    if (!selectedUniverseId || selectedUniverseId === preselectedUniverseId) return;
+    const token = localStorage.getItem("hvu_access");
+    if (!token) return;
+    fetch(`${BASE}/companions/universe/${selectedUniverseId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(({ data }) => { setExistingCompanion(data?.id ? data : null); setCompanionIncluded(true); })
+      .catch(() => {});
+  }, [selectedUniverseId, preselectedUniverseId]);
 
   const hasHero = !!hero;
 
@@ -238,11 +265,11 @@ function CreatePageInner() {
     if (!(preselectedUniverseId && universeHasStories === false)) arr.push("mode");
     if (storyMode !== "freeform") arr.push("theme");
     arr.push("characters");
-    arr.push("companion");
+    if (["new_adventure", "continue_arc", "new_arc"].includes(storyMode) && !existingCompanion) arr.push("companion");
     arr.push("context");
     arr.push("generate");
     return arr;
-  }, [hasHero, storyMode, preselectedUniverseId, universeHasStories]);
+  }, [hasHero, storyMode, preselectedUniverseId, universeHasStories, existingCompanion]);
 
   const stepType = stepSequence[step] ?? "generate";
   const stepLabels = stepSequence.map(s => STEP_LABELS[s]);
@@ -277,6 +304,10 @@ function CreatePageInner() {
         const stories: LastStory[] = Array.isArray(data) ? data : [];
         const completed = stories.find((s: any) => s.status === "completed");
         setLastStory(completed ?? null);
+        // On general path (no URL universe), auto-select the universe the story belongs to
+        if (!preselectedUniverseId && completed?.universeId) {
+          setSelectedUniverseId(completed.universeId);
+        }
       })
       .catch(() => {})
       .finally(() => setLastStoryLoading(false));
@@ -308,6 +339,12 @@ function CreatePageInner() {
     setCharName("");
     setCharRole("friend");
     setCharDob("");
+    setCharRelationship("");
+    setCharAlwaysWears("");
+    setCharHair("");
+    setCharSkin("");
+    setCharOtherTraits("");
+    setShowBioFields(false);
     setCharPhotoFile(null);
     setCharPhotoPreview(null);
     setCharPresetAvatar(null);
@@ -323,6 +360,7 @@ function CreatePageInner() {
       form.append("name", charName.trim());
       form.append("role", charRole);
       if (charDob) form.append("dob", charDob);
+      if (charRelationship.trim()) form.append("relationship", charRelationship.trim());
       if (charPhotoFile) form.append("photo", charPhotoFile);
       else if (charPresetAvatar) form.append("avatarUrl", charPresetAvatar);
 
@@ -342,6 +380,21 @@ function CreatePageInner() {
         };
         setCharacters(prev => [...prev, newChar]);
         setSelectedCharIds(prev => [...prev, newChar.id]);
+
+        // Save visual profile if any bio fields were filled in
+        const hasProfile = charAlwaysWears.trim() || charHair.trim() || charSkin.trim() || charOtherTraits.trim();
+        if (hasProfile) {
+          const profile: Record<string, string> = {};
+          if (charAlwaysWears.trim()) profile.costumeDescription = charAlwaysWears.trim();
+          if (charHair.trim()) profile.hairDescription = charHair.trim();
+          if (charSkin.trim()) profile.skinTone = charSkin.trim();
+          if (charOtherTraits.trim()) profile.doNotChangeRules = charOtherTraits.trim();
+          await fetch(`${BASE}/characters/${data.id}/profile`, {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify(profile),
+          }).catch(() => {/* non-critical */});
+        }
       }
       resetCharForm();
     } catch {
@@ -424,6 +477,7 @@ function CreatePageInner() {
           characterIds: selectedCharIds.length > 0 ? selectedCharIds : undefined,
           ...(effectiveUniverseId ? { universeId: effectiveUniverseId } : {}),
           ...(companionType ? { companionType, companionName: companionName.trim() || undefined, companionPetId: companionPetId ?? undefined } : {}),
+          ...(existingCompanion ? { skipCompanion: !companionIncluded } : {}),
         }),
       });
       if (!storyRes.ok) throw new ApiError(storyRes.status, await storyRes.json());
@@ -441,13 +495,22 @@ function CreatePageInner() {
     setStep(s => s + 1);
   }
 
-  if (heroLoading) {
+  // Redirect unauthenticated users before they can start the flow
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace("/login?redirect=/create");
+    }
+  }, [authLoading, user, router]);
+
+  if (heroLoading || authLoading) {
     return (
       <div className="min-h-screen bg-space-gradient flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-white animate-spin" />
       </div>
     );
   }
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-cream flex flex-col">
@@ -840,6 +903,39 @@ function CreatePageInner() {
               </div>
             </div>
 
+            {/* Universe companion — optional per episode */}
+            {existingCompanion && isUniverseMode(storyMode) && (
+              <div className="mb-5">
+                <p className="text-ink-muted text-xs font-semibold uppercase tracking-wide mb-2">Universe Companion</p>
+                <button
+                  type="button"
+                  onClick={() => setCompanionIncluded(v => !v)}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-all text-left",
+                    companionIncluded
+                      ? "bg-amber-50 border-amber-300"
+                      : "bg-white border-ink/10 hover:border-amber-200",
+                  )}
+                >
+                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
+                    {existingCompanion.avatarUrl
+                      ? <img src={existingCompanion.avatarUrl} alt={existingCompanion.name} className="w-full h-full object-cover" />
+                      : <span>🐾</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-ink text-sm font-semibold">{existingCompanion.name}</p>
+                    <p className="text-ink-muted text-xs capitalize">{existingCompanion.type} · tap to include / exclude</p>
+                  </div>
+                  <div className={cn(
+                    "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all",
+                    companionIncluded ? "border-amber-400 bg-amber-400" : "border-ink/20",
+                  )}>
+                    {companionIncluded && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                </button>
+              </div>
+            )}
+
             {/* Existing characters */}
             {characters.length > 0 && (
               <div className="mb-5">
@@ -942,13 +1038,60 @@ function CreatePageInner() {
                 </div>
 
                 {/* DOB */}
-                <div className="mb-4">
+                <div className="mb-3">
                   <label className="text-ink-mid text-xs font-medium block mb-1">
                     Date of Birth <span className="text-ink-muted font-normal">— optional</span>
                   </label>
                   <input type="date" value={charDob} onChange={(e) => setCharDob(e.target.value)}
                     max={new Date().toISOString().split("T")[0]}
                     className="w-full px-3 py-2.5 rounded-xl border border-ink/15 bg-cream text-ink text-sm focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                </div>
+
+                {/* Relationship with main character */}
+                <div className="mb-3">
+                  <label className="text-ink-mid text-xs font-medium block mb-1">
+                    Relationship with main character <span className="text-ink-muted font-normal">— e.g. "elder brother", "grandmother"</span>
+                  </label>
+                  <input type="text" value={charRelationship} onChange={(e) => setCharRelationship(e.target.value)}
+                    placeholder="e.g. elder brother, grandfather, best friend"
+                    className="w-full px-3 py-2.5 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                </div>
+
+                {/* Appearance bio — collapsible */}
+                <div className="mb-4">
+                  <button type="button" onClick={() => setShowBioFields(v => !v)}
+                    className="flex items-center gap-1.5 text-ink-mid hover:text-brand text-xs font-semibold transition mb-2">
+                    <span>{showBioFields ? "▾" : "▸"}</span>
+                    Lock appearance for consistency
+                  </button>
+                  {showBioFields && (
+                    <div className="flex flex-col gap-2 pl-3 border-l-2 border-brand/20">
+                      <div>
+                        <label className="text-ink-mid text-[11px] font-medium block mb-1">Always wears</label>
+                        <input type="text" value={charAlwaysWears} onChange={(e) => setCharAlwaysWears(e.target.value)}
+                          placeholder="e.g. rectangular glasses, black hoodie"
+                          className="w-full px-3 py-2 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                      </div>
+                      <div>
+                        <label className="text-ink-mid text-[11px] font-medium block mb-1">Hair</label>
+                        <input type="text" value={charHair} onChange={(e) => setCharHair(e.target.value)}
+                          placeholder="e.g. straight black hair, side-parted"
+                          className="w-full px-3 py-2 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                      </div>
+                      <div>
+                        <label className="text-ink-mid text-[11px] font-medium block mb-1">Skin tone</label>
+                        <input type="text" value={charSkin} onChange={(e) => setCharSkin(e.target.value)}
+                          placeholder="e.g. medium brown"
+                          className="w-full px-3 py-2 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                      </div>
+                      <div>
+                        <label className="text-ink-mid text-[11px] font-medium block mb-1">Other permanent traits</label>
+                        <input type="text" value={charOtherTraits} onChange={(e) => setCharOtherTraits(e.target.value)}
+                          placeholder="e.g. always has bindi, scar on left cheek"
+                          className="w-full px-3 py-2 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <button type="button" onClick={saveCharacter} disabled={!charName.trim() || charSaving}

@@ -372,7 +372,7 @@ export class InfluencersService implements OnModuleInit {
     });
   }
 
-  async listInfluencers(filters: { search?: string; page?: number; limit?: number; status?: string }) {
+  async listInfluencers(filters: { search?: string; page?: number; limit?: number; status?: string; platform?: string }) {
     const page = Math.max(1, filters.page ?? 1);
     const limit = Math.max(1, filters.limit ?? 20);
 
@@ -387,6 +387,9 @@ export class InfluencersService implements OnModuleInit {
     }
     if (filters.status?.trim()) {
       qb.andWhere('influencer.status = :status', { status: filters.status.trim() });
+    }
+    if (filters.platform?.trim()) {
+      qb.andWhere('influencer.platform = :platform', { platform: filters.platform.trim() });
     }
 
     const [influencers, total] = await qb

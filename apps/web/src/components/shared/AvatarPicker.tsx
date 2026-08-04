@@ -3,75 +3,79 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const ADV  = "https://api.dicebear.com/9.x/adventurer/svg";
-const BOT  = "https://api.dicebear.com/9.x/bottts/svg";
+const ADV   = "https://api.dicebear.com/9.x/adventurer/svg";
+const PIXEL = "https://api.dicebear.com/9.x/pixel-art/svg";
 
-function a(seed: string, bg: string, base = ADV) {
-  return `${base}?seed=${encodeURIComponent(seed)}&backgroundColor=${bg}`;
+// DiceBear v9 requires array params as repeated hair[]=val pairs
+const BOY_HAIR_PARAMS  = ["short01","short02","short03","short04","short05"].map(h=>`hair[]=${h}`).join("&");
+const GIRL_HAIR_PARAMS = ["long01","long02","long03","long04","long05","long06"].map(h=>`hair[]=${h}`).join("&");
+
+function a(seed: string, bg: string, base = ADV, extra = "") {
+  return `${base}?seed=${encodeURIComponent(seed)}&backgroundColor=${bg}${extra ? `&${extra}` : ""}`;
 }
 
 const PRESETS = [
   {
     id: "boy", label: "Boy", emoji: "👦",
     items: [
-      a("Arjun",  "b6e3f4"),
-      a("Kai",    "c0aede"),
-      a("Rohan",  "d1d4f9"),
-      a("Oliver", "ffd5dc"),
+      a("Arjun",  "b6e3f4", ADV, BOY_HAIR_PARAMS),
+      a("Kai",    "c0aede", ADV, BOY_HAIR_PARAMS),
+      a("Rohan",  "d1d4f9", ADV, BOY_HAIR_PARAMS),
+      a("Dev",    "ffd5dc", ADV, BOY_HAIR_PARAMS),
     ],
   },
   {
     id: "girl", label: "Girl", emoji: "👧",
     items: [
-      a("Priya",  "ffd5dc"),
-      a("Luna",   "c0aede"),
-      a("Mia",    "b6e3f4"),
-      a("Riya",   "d1ffd6"),
+      a("Priya",  "ffd5dc", ADV, GIRL_HAIR_PARAMS),
+      a("Luna",   "c0aede", ADV, GIRL_HAIR_PARAMS),
+      a("Mia",    "b6e3f4", ADV, GIRL_HAIR_PARAMS),
+      a("Riya",   "d1ffd6", ADV, GIRL_HAIR_PARAMS),
     ],
   },
   {
     id: "man", label: "Man", emoji: "👨",
     items: [
-      a("Papa",   "c0aede"),
-      a("Raja",   "b6e3f4"),
-      a("Victor", "d1d4f9"),
-      a("Baba",   "ffd5dc"),
+      a("Papa",   "c0aede", ADV, BOY_HAIR_PARAMS),
+      a("Raja",   "b6e3f4", ADV, BOY_HAIR_PARAMS),
+      a("Victor", "d1d4f9", ADV, BOY_HAIR_PARAMS),
+      a("Baba",   "ffd5dc", ADV, BOY_HAIR_PARAMS),
     ],
   },
   {
     id: "woman", label: "Woman", emoji: "👩",
     items: [
-      a("Mama",   "ffd5dc"),
-      a("Auntie", "c0aede"),
-      a("Meera",  "d1ffd6"),
-      a("Sofia",  "b6e3f4"),
+      a("Mama",   "ffd5dc", ADV, GIRL_HAIR_PARAMS),
+      a("Auntie", "c0aede", ADV, GIRL_HAIR_PARAMS),
+      a("Meera",  "d1ffd6", ADV, GIRL_HAIR_PARAMS),
+      a("Sofia",  "b6e3f4", ADV, GIRL_HAIR_PARAMS),
     ],
   },
   {
     id: "grandpa", label: "Grandpa", emoji: "👴",
     items: [
-      a("Grandpa", "d1d4f9"),
-      a("Dadu",    "b6e3f4"),
-      a("Nana",    "c0aede"),
-      a("Dada",    "ffd5dc"),
+      a("Dadu",   "d1d4f9", ADV, `${BOY_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
+      a("Nana",   "b6e3f4", ADV, `${BOY_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
+      a("Dada",   "c0aede", ADV, `${BOY_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
+      a("Thatha", "ffd5dc", ADV, `${BOY_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
     ],
   },
   {
     id: "granny", label: "Granny", emoji: "👵",
     items: [
-      a("Granny", "ffd5dc"),
-      a("Nani",   "c0aede"),
-      a("Dadi",   "d1ffd6"),
-      a("Paati",  "d1d4f9"),
+      a("Dadi",  "ffd5dc", ADV, `${GIRL_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
+      a("Nani",  "c0aede", ADV, `${GIRL_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
+      a("Paati", "d1ffd6", ADV, `${GIRL_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
+      a("Nana2", "d1d4f9", ADV, `${GIRL_HAIR_PARAMS}&hairColor[]=b9b9b9&hairColor[]=cdcdcd`),
     ],
   },
   {
     id: "pet", label: "Pet", emoji: "🐾",
     items: [
-      a("Dog",    "ffd5dc", BOT),
-      a("Cat",    "b6e3f4", BOT),
-      a("Bunny",  "d1ffd6", BOT),
-      a("Parrot", "c0aede", BOT),
+      a("fluffy-dog",    "ffd5dc", PIXEL),
+      a("playful-cat",   "b6e3f4", PIXEL),
+      a("cute-bunny",    "d1ffd6", PIXEL),
+      a("happy-parrot",  "c0aede", PIXEL),
     ],
   },
 ];

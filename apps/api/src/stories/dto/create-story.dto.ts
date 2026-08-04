@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 import { StoryMode, StoryTheme } from '../story.entity';
 
@@ -41,4 +41,8 @@ export class CreateStoryDto {
   @IsOptional()
   @IsUUID()
   companionPetId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  skipCompanion?: boolean;
 }

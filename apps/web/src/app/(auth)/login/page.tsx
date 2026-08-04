@@ -1,14 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, type FormEvent, useState } from "react";
 
 import Logo from "@/components/shared/Logo";
 import { ApiError, useAuth } from "@/contexts/AuthContext";
 
-export default function LoginPage() {
+function LoginPageInner() {
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,6 +23,10 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const me = await login(email, password);
+      if (redirectTo && redirectTo.startsWith("/")) {
+        router.push(redirectTo);
+        return;
+      }
       router.push(
         me.role === "admin"
           ? "/admin"
@@ -40,6 +46,7 @@ export default function LoginPage() {
       <a href="/" className="absolute top-6 left-6 text-ink-muted hover:text-brand text-sm transition">
         ← Back to Home
       </a>
+
 
       <div className="bg-white rounded-3xl shadow-card w-full max-w-md p-10">
         <div className="flex justify-center mb-8">
@@ -117,5 +124,13 @@ export default function LoginPage() {
         </form>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

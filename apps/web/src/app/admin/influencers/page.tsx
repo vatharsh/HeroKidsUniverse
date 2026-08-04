@@ -5,7 +5,7 @@ import {
   Search, Tag, Wallet, X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
 
@@ -533,6 +533,18 @@ function NewModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
   );
 }
 
+const PLATFORMS = [
+  { value: "", label: "All Platforms" },
+  { value: "instagram",  label: "Instagram" },
+  { value: "youtube",    label: "YouTube" },
+  { value: "facebook",   label: "Facebook" },
+  { value: "tiktok",     label: "TikTok" },
+  { value: "twitter",    label: "Twitter / X" },
+  { value: "linkedin",   label: "LinkedIn" },
+  { value: "blog",       label: "Blog" },
+  { value: "other",      label: "Other" },
+];
+
 // ── List page ──────────────────────────────────────────────────────────────────
 
 export default function InfluencersPage() {
@@ -541,27 +553,44 @@ export default function InfluencersPage() {
   const [showNew, setShowNew] = useState(false);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [platformFilter, setPlatformFilter] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function fetchData(p = page, q = search, s = statusFilter) {
+  const fetchData = useCallback((p: number, q: string, s: string, pl: string) => {
     const token = getAccessToken();
     if (!token) return;
     setLoading(true);
     const params = new URLSearchParams({ page: String(p), limit: "20" });
     if (q) params.set("search", q);
     if (s) params.set("status", s);
+    if (pl) params.set("platform", pl);
     fetch(`${BASE}/admin/influencers?${params}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(j => setData(j.data ?? j))
       .catch(() => null)
       .finally(() => setLoading(false));
+  }, []);
+
+  // Debounce search input — 350ms after typing stops
+  function handleSearchChange(value: string) {
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value);
+      setPage(1);
+    }, 350);
   }
 
-  useEffect(() => { fetchData(); }, []); // eslint-disable-line
+  // Re-fetch whenever any filter or page changes
+  useEffect(() => {
+    fetchData(page, debouncedSearch, statusFilter, platformFilter);
+  }, [page, debouncedSearch, statusFilter, platformFilter, fetchData]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {showNew && <NewModal onClose={() => setShowNew(false)} onSaved={() => fetchData()} />}
+      {showNew && <NewModal onClose={() => setShowNew(false)} onSaved={() => fetchData(page, debouncedSearch, statusFilter, platformFilter)} />}
 
       <div className="mb-6 flex items-center gap-3">
         <Briefcase className="w-5 h-5 text-amber-600" />
@@ -573,7 +602,7 @@ export default function InfluencersPage() {
           >
             Commission Settings
           </Link>
-          <button onClick={() => fetchData()} className="text-gray-400 hover:text-gray-700 transition p-1.5 rounded-lg hover:bg-gray-100">
+          <button onClick={() => fetchData(page, debouncedSearch, statusFilter, platformFilter)} className="text-gray-400 hover:text-gray-700 transition p-1.5 rounded-lg hover:bg-gray-100">
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
@@ -586,20 +615,41 @@ export default function InfluencersPage() {
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4 items-center">
+        {/* Search */}
         <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
           <Search className="w-3.5 h-3.5 text-gray-400" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") { setPage(1); fetchData(1, search, statusFilter); } }}
-            placeholder="Search name, email, platform…"
-            className="bg-transparent outline-none text-sm text-gray-800 placeholder:text-gray-400 w-60"
+            onChange={e => handleSearchChange(e.target.value)}
+            placeholder="Search name, email, code…"
+            className="bg-transparent outline-none text-sm text-gray-800 placeholder:text-gray-400 w-52"
           />
+          {search && (
+            <button onClick={() => { setSearch(""); setDebouncedSearch(""); setPage(1); }} className="text-gray-300 hover:text-gray-500 transition">
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
+
+        {/* Platform dropdown */}
+        <div className="relative">
+          <select
+            value={platformFilter}
+            onChange={e => { setPlatformFilter(e.target.value); setPage(1); }}
+            className={`appearance-none text-xs pl-3 pr-7 py-2 rounded-xl border font-medium transition cursor-pointer ${
+              platformFilter ? "bg-violet-600 text-white border-violet-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+            }`}
+          >
+            {PLATFORMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+          <ChevronDown className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none ${platformFilter ? "text-white" : "text-gray-400"}`} />
+        </div>
+
+        {/* Status pills */}
         {(["", "active", "inactive", "blocked"] as const).map(s => (
           <button
             key={s || "all"}
-            onClick={() => { setStatusFilter(s); setPage(1); fetchData(1, search, s); }}
+            onClick={() => { setStatusFilter(s); setPage(1); }}
             className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all border ${
               statusFilter === s ? "bg-violet-600 text-white border-violet-600" : "border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
@@ -607,6 +657,16 @@ export default function InfluencersPage() {
             {s || "All"}
           </button>
         ))}
+
+        {/* Clear all filters */}
+        {(search || statusFilter || platformFilter) && (
+          <button
+            onClick={() => { setSearch(""); setDebouncedSearch(""); setStatusFilter(""); setPlatformFilter(""); setPage(1); }}
+            className="text-xs text-gray-400 hover:text-gray-700 underline transition ml-1"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -686,9 +746,9 @@ export default function InfluencersPage() {
         <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
           <span>{data.total} influencers</span>
           <div className="flex gap-2">
-            <button onClick={() => { setPage(p => p - 1); fetchData(page - 1); }} disabled={page === 1} className="px-3 py-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:border-gray-300 transition">Prev</button>
+            <button onClick={() => setPage(p => p - 1)} disabled={page === 1} className="px-3 py-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:border-gray-300 transition">Prev</button>
             <span className="px-3 py-1.5">{page} / {data.totalPages}</span>
-            <button onClick={() => { setPage(p => p + 1); fetchData(page + 1); }} disabled={page === data.totalPages} className="px-3 py-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:border-gray-300 transition">Next</button>
+            <button onClick={() => setPage(p => p + 1)} disabled={page === data.totalPages} className="px-3 py-1.5 rounded-lg border border-gray-200 disabled:opacity-30 hover:border-gray-300 transition">Next</button>
           </div>
         </div>
       )}

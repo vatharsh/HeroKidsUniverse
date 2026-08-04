@@ -9,7 +9,9 @@ import { UploadService } from '../upload/upload.service';
 import { User, UserPlan } from '../users/user.entity';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import { UpdateCharacterDto } from './dto/update-character.dto';
+import { UpsertVisualProfileDto } from './dto/upsert-visual-profile.dto';
 import { Character } from './entities/character.entity';
+import { CharacterVisualProfile } from './entities/character-visual-profile.entity';
 
 @Injectable()
 export class CharactersService {
@@ -18,6 +20,8 @@ export class CharactersService {
   constructor(
     @InjectRepository(Character)
     private readonly charactersRepository: Repository<Character>,
+    @InjectRepository(CharacterVisualProfile)
+    private readonly visualProfileRepository: Repository<CharacterVisualProfile>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     @InjectRepository(CreditTransaction)
@@ -52,6 +56,7 @@ export class CharactersService {
           universeId: null,
           name: createCharacterDto.name,
           role: createCharacterDto.role ?? 'other',
+          relationship: createCharacterDto.relationship ?? null,
           dob: createCharacterDto.dob ?? null,
           photoUrl: null,
           avatarUrl: createCharacterDto.avatarUrl ?? null,
@@ -160,6 +165,42 @@ export class CharactersService {
     await this.charactersRepository.save(character);
 
     return { avatarUrl: character.avatarUrl, avatarRefreshTokens };
+  }
+
+  async getVisualProfile(userId: string, characterId: string): Promise<CharacterVisualProfile | null> {
+    await this.findOne(userId, characterId); // ownership check
+    return this.visualProfileRepository.findOne({ where: { characterId } });
+  }
+
+  async upsertVisualProfile(
+    userId: string,
+    characterId: string,
+    dto: UpsertVisualProfileDto,
+  ): Promise<CharacterVisualProfile> {
+    await this.findOne(userId, characterId); // ownership check
+    let profile = await this.visualProfileRepository.findOne({ where: { characterId } });
+    if (!profile) {
+      profile = this.visualProfileRepository.create({ characterId, universeId: null });
+    }
+    Object.assign(profile, {
+      costumeDescription: dto.costumeDescription ?? profile.costumeDescription,
+      hairDescription: dto.hairDescription ?? profile.hairDescription,
+      faceDescription: dto.faceDescription ?? profile.faceDescription,
+      skinTone: dto.skinTone ?? profile.skinTone,
+      eyeDescription: dto.eyeDescription ?? profile.eyeDescription,
+      accessories: dto.accessories ?? profile.accessories,
+      colors: dto.colors ?? profile.colors,
+      doNotChangeRules: dto.doNotChangeRules ?? profile.doNotChangeRules,
+    });
+    return this.visualProfileRepository.save(profile);
+  }
+
+  async findVisualProfilesByCharacterIds(characterIds: string[]): Promise<Map<string, CharacterVisualProfile>> {
+    if (characterIds.length === 0) return new Map();
+    const profiles = await this.visualProfileRepository.find({
+      where: { characterId: In(characterIds) },
+    });
+    return new Map(profiles.map((p) => [p.characterId, p]));
   }
 
   async remove(userId: string, id: string): Promise<void> {

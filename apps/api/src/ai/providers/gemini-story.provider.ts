@@ -34,7 +34,7 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
 
   async generateStory(input: StoryGenerationInput): Promise<StoryGenerationOutput> {
     const { prompt, activePromptVersion } = await this.buildPrompt(input);
-    const modelNames = [this.model, 'gemini-2.5-flash', 'gemini-2.0-flash'];
+    const modelNames = this.getModelFallbacks();
     const maxRetries = 3;
     let lastError: Error = new Error('All Gemini models failed');
 
@@ -63,12 +63,19 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
           };
         } catch (err) {
           const msg = err instanceof Error ? err.message : '';
-          const isRetryable = msg.includes('503') || msg.includes('overloaded') || msg.includes('high demand');
+          const retryDelayMs = this.getRetryDelayMs(msg, attempt);
+          const isQuota = this.isQuotaError(msg);
+          const isRetryable = isQuota ||
+            msg.includes('503') ||
+            msg.includes('overloaded') ||
+            msg.includes('high demand');
 
           if (isRetryable && attempt < maxRetries - 1) {
-            const delay = 5000 * (attempt + 1);
-            this.logger.warn(`Model ${modelName} busy (attempt ${attempt + 1}), retrying in ${delay / 1000}s`);
-            await new Promise((resolve) => setTimeout(resolve, delay));
+            this.logger.warn(
+              `Model ${modelName} ${isQuota ? 'quota-limited' : 'busy'} ` +
+              `(attempt ${attempt + 1}/${maxRetries}), retrying in ${Math.round(retryDelayMs / 1000)}s`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
           } else {
             lastError = err instanceof Error ? err : new Error(msg);
             break;
@@ -78,6 +85,34 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
     }
 
     throw lastError;
+  }
+
+  private getModelFallbacks(): string[] {
+    const configured = this.config.get<string>('GEMINI_MODEL_FALLBACKS')
+      ?.split(',')
+      .map((model) => model.trim())
+      .filter(Boolean) ?? [];
+
+    const defaults = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash'];
+    return [...new Set([this.model, ...configured, ...defaults])]
+      .filter((model) => model !== 'gemini-2.0-flash');
+  }
+
+  private isQuotaError(message: string): boolean {
+    return message.includes('[429') ||
+      message.includes('429 Too Many Requests') ||
+      message.toLowerCase().includes('quota exceeded') ||
+      message.includes('RetryInfo');
+  }
+
+  private getRetryDelayMs(message: string, attempt: number): number {
+    const retryInfo = message.match(/retryDelay"?:"?(\d+(?:\.\d+)?)s/i);
+    const retryText = message.match(/retry in (\d+(?:\.\d+)?)s/i);
+    const seconds = Number(retryInfo?.[1] ?? retryText?.[1]);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.min(65_000, Math.max(1_000, Math.ceil(seconds * 1000)));
+    }
+    return Math.min(30_000, 5_000 * (attempt + 1));
   }
 
   private async buildPrompt(input: StoryGenerationInput): Promise<{ prompt: string; activePromptVersion: PromptTemplateVersion | null }> {
@@ -105,13 +140,27 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
   private buildRuntimeQualityContract(): string {
     return `RUNTIME QUALITY CONTRACT — MUST FOLLOW EVEN IF EARLIER PROMPT TEXT CONFLICTS:
 - speechBubbles are metadata only. Never ask image generation to draw text or bubbles.
-- Each speechBubble must include speakerName, text, emotion, bubbleStyle, preferredPosition, tailDirection, anchorTarget.
+- Each speechBubble must include speakerName, text, emotion, bubbleStyle, preferredPosition, tailDirection, anchorTarget, anchorPoint, AND faceSide.
 - anchorTarget: "mouth" or "lower_face" for spoken dialogue; "forehead" for bubbleStyle "thinking".
+- anchorPoint: { "x": <0-100>, "y": <0-100> } — the speaker's estimated MOUTH position as a percentage of the image frame. This is used to draw the speech bubble tail directly at the character's face. Rules for estimating:
+  * x from characterDirections position: "left"→22, "center"→50, "right"→76. Adjust ±5 for exact framing.
+  * y from camera: "close-up on face"→34, "medium shot"→42, "wide angle"→48. "low angle"→38.
+  * Foreground character (larger in frame, closer to camera): subtract 5 from y.
+  * Background character (smaller, farther from camera): add 5 to y.
+  * CRITICAL: Every speaker on the same page MUST have a DIFFERENT anchorPoint. Two speakers standing at different positions will NEVER have the same x value. Never copy the same anchorPoint for two different speakers.
+- faceSide: "left" or "right" — which half of the image the speaker's face occupies. Derived from anchorPoint.x: x < 50 → "left", x >= 50 → "right". Used by the frontend to place the bubble on the correct side.
 - Place bubbles near speaker: speaker LEFT -> preferredPosition "top-right", tailDirection "down-left"; speaker RIGHT -> "top-left", tailDirection "down-right"; speaker CENTER -> alternate top-left/top-right.
 - Every speaking character must have characterDirections with position, expression, expressionDetails.eyes, expressionDetails.mouth, expressionDetails.eyebrows, expressionDetails.gaze, expressionDetails.headTilt, pose, action, lookingAt, mouthState "speaking", isSpeaking true.
 - Non-speaking visible characters must have reaction expressions and mouthState "closed", "smiling", or "surprised".
 - Include narrationText on every page. Dialogue may appear in narrationText only once; do not duplicate speech bubble text in narration.
-- text and narrationText must not contain the same dialogue line twice.`;
+- text and narrationText must not contain the same dialogue line twice.
+- Every page must have imageVariant: "reuse" (first page of scene or no visual change from scene base) or "expression" (genuine change in character expression/pose/position). First page of each scene must always be "reuse".
+- Every page must have participationMoment: exactly ONE page must have { type, prompt, hint? }; all others must have null. Participation page should be around page 3-5.
+- Every named supporting character must have at least one speech bubble in the story (enforce engagement rules).
+- COSTUME LOCK: Every character's outfit established on page 1 must remain IDENTICAL across ALL pages of this story. Never change, replace, or vary any character's clothing mid-story. A costume change may ONLY occur if explicitly written into the plot AND reflected in storyStateUpdate.costumeChange. If no costumeChange is declared, the outfit is frozen.
+- HERO OUTFIT LOCK: If the hero has a defined superhero costume, it appears on every page. If not, whatever the hero wears on page 1 is locked for the entire story — never change it.
+- CHARACTER SCALE LOCK: The height and body size of every character relative to the hero must remain IDENTICAL across all pages. If a supporting character is taller or shorter than the hero in page 1, that size ratio is frozen for all subsequent pages. Never shrink or grow any character between scenes.
+- ADVENTURE CLOTHING RULE: The hero's BASE costume stays on at all times — adventure environments only ADD accessories on top (never replace the suit). Space → add helmet + jet boosters + glowing visor. Underwater → add breathing mask + fins + aqua-glow trim. Jungle/expedition → add explorer hat + utility vest + vine accents. Ancient ruins/relic quest → add explorer gear + headlamp + utility belt. Fantasy/castle → add magical armour overlay + enchanted cape. Detective/mystery → add trench coat overlay + badge. Future/cyber → add nano-tech armour panels + holographic visor. Ice world → add frost-resistant armour + icy glow. Volcano/fire → add heat shield plating + lava-resistant trim. Supporting characters MUST wear full environment-appropriate attire in the same adventure — absolutely NO sarees, kurta, jeans, t-shirts, school uniforms, or everyday casual clothes inside active adventure environments (space, ruins, underwater, jungle, volcano, etc). This applies to elderly characters and grandparents too — no exceptions for anyone.`;
   }
 
   private computePromptVariables(input: StoryGenerationInput): Record<string, string> {
@@ -184,7 +233,9 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
               '- If the hero has established powers, they use them during the adventure where it makes sense.',
               "- The hero's companion (if any) may join the adventure.",
               '- Add 1–3 entries to newMemories so this adventure becomes part of universe history.',
-              '- Earn new powers or open new quests via newPowers/newQuests if the story calls for it.',
+              '- If the hero earns a new power, add it to newPowers[] AND add a newMemories entry with type "power_earned".',
+              '- If a villain or antagonist is defeated, add a newMemories entry with type "villain_defeated" and the villain\'s name as title.',
+              '- If a new quest opens, add it to newQuests[] AND add a newMemories entry with type "quest_opened".',
             ].join('\n')
           : [
               `UNIVERSE: ${ctx.universeName}`,
@@ -207,8 +258,9 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
               '- The hero may use existing powers in new ways',
               '- If storyMode is "continue_arc", the story MUST open exactly where the last episode ended — page 1 must directly react to the cliffhanger above',
               '- If storyMode is "new_arc", introduce a fresh threat but keep universe consistent',
-              '- The story may earn the hero a new power or item (you will declare this in extras)',
-              '- The story may open a new quest (you will declare this in extras)',
+              '- If the hero earns a new power in this story, add its name to newPowers[] AND add a newMemories entry with type "power_earned" and the same name as title',
+              '- If a villain, monster, or antagonist is defeated or outsmarted, add a newMemories entry with type "villain_defeated" and the villain\'s name as title',
+              '- The story may open a new quest — add its title to newQuests[] AND add a newMemories entry with type "quest_opened"',
             ].join('\n'))
       : '';
 
@@ -269,6 +321,8 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
             "preferredPosition": "top-right",
             "tailDirection": "down-left",
             "anchorTarget": "lower_face",
+            "anchorPoint": { "x": 22, "y": 42 },
+            "faceSide": "left",
             "avoidCovering": ["face", "hands"],
             "maxWidthPercent": 44
           }
@@ -281,6 +335,8 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
           "locationChange": null,
           "costumeChange": null
         },
+        "imageVariant": "reuse",
+        "participationMoment": null,
         "characters": [{ "name": "${heroRef}", "expression": "excited grin", "pose": "leaning forward" }],
         "dialogue": [{ "speaker": "${heroRef}", "text": "Same line as speechBubbles", "emotion": "excited", "bubbleStyle": "normal" }]
       }`;
@@ -352,6 +408,20 @@ ${v.storySourceLine}
 - In characters: always describe the expression and pose for the main hero on every page
 - Speech bubbles: only add dialogue if it adds to the scene; avoid generic exclamations
 
+ENGAGEMENT RULES:
+- Every named supporting character MUST speak at least ONE line of dialogue in a speech bubble somewhere in the story — no silent extras.
+- Each supporting character must actively contribute to the plot: give a clue, solve a riddle, distract the villain, use a special skill, or help the hero escape.
+- The hero must react to their help with a genuine spoken line or thought bubble.
+- Max 10 pages total. Every page must move the plot forward — no filler pages.
+
+PARTICIPATION MOMENT RULE (REQUIRED):
+- The story MUST contain exactly ONE participation moment — usually on page 3, 4, or 5.
+- A participation moment pauses the action and directly invites the reader to think before the story continues.
+- Types: "riddle" (villain/environment poses a riddle for reader to solve), "predict" (ask what happens next), "guess" (mystery object/clue — reader guesses), "choose" (two paths — reader picks).
+- The page text must weave participation naturally (e.g. "Can YOU figure out the riddle before Arjun does?").
+- On exactly ONE page set "participationMoment": { "type": "...", "prompt": "Direct question ≤ 20 words", "hint": "Optional clue sentence" }.
+- On ALL other pages set "participationMoment": null.
+
 CRITICAL SCENE DESCRIPTION RULE:
 Each sceneDescription must describe EVERY character who appears with their FULL visual identity locked in parentheses — age, skin tone, hair, clothing, and current expression. Use the canonical identity above. Repeat the full description every time a character appears (even if they appeared on previous pages) — the illustrator sees only one page at a time.
 Example: "Siddhant (8-year-old boy, warm brown skin, short straight black hair, black t-shirt, excited wide grin) reaches toward the glowing stone, while his father (40s Indian man, medium brown skin, short black hair with slight grey, white collared shirt, warm proud smile) watches from behind."
@@ -362,6 +432,11 @@ SCENE RULES:
 - Scene 1 must be the most visually striking — it doubles as the story cover.
 - Each scene must look visually DISTINCT from every other scene — different location, lighting, composition, or action.
 - NEVER reuse the same setting, character grouping, or colour palette across two consecutive scenes.
+
+IMAGE VARIANT RULE:
+- Every page must include "imageVariant": "reuse" or "expression".
+- "reuse" — same character positions/expressions as the scene's main illustration; only speech bubbles change. ALWAYS "reuse" for the FIRST page of every scene (it IS the scene image).
+- "expression" — genuine visible change in expression, pose, or position from scene base image. Mark "expression" only when there is a real visual change — be conservative to reduce rendering cost.
 
 ILLUSTRATION BRIEF RULES (for the illustrationBrief field):
 - Start with composition style: "WIDE CINEMATIC:" or "DYNAMIC ACTION:" or "INTIMATE SCENE:" or "CLOSE-UP PORTRAIT:"
@@ -434,10 +509,12 @@ Respond with ONLY valid JSON (no markdown, no code fences):
     "powers": ["Power 1", "Power 2"],
     "inventory": ["Item 1", "Item 2"]
   },
-  "newPowers": [],
-  "newQuests": [],
+  "newPowers": ["Power name if hero earned one — else empty array"],
+  "newQuests": ["Quest title if a new quest opened — else empty array"],
   "newMemories": [
-    { "type": "character_met", "title": "Short label for this memory (required)", "detail": "Optional extra context" }
+    { "type": "power_earned", "title": "Same power name as in newPowers", "detail": "How the hero earned it" },
+    { "type": "villain_defeated", "title": "Villain name", "detail": "How the hero defeated them" },
+    { "type": "character_met", "title": "Character name", "detail": "Who they are" }
   ],
   "scenes": [
 ${v.sceneEntries}
@@ -456,6 +533,8 @@ dialogue: spoken lines or internal thoughts (bubbleStyle "thinking"); omit if no
 storyVisualState: for universe stories this reflects the hero's current look; for standalone stories design it to match the theme.
 characterDirections: required for every page; at minimum include the hero with expression and pose.
 speechBubbles: structured dialogue metadata; also echo in dialogue array for backward compat.
-storyStateUpdate: required on every page; use empty arrays when nothing changes.`;
+storyStateUpdate: required on every page; use empty arrays when nothing changes.
+imageVariant: required on every page — "reuse" (same visual as scene base, only bubbles change) or "expression" (genuine visual change). First page of every scene must be "reuse".
+participationMoment: required on every page — null on most; exactly ONE page must have { "type": "riddle"|"predict"|"guess"|"choose", "prompt": "≤20-word question", "hint": "optional clue" }.`;
   }
 }

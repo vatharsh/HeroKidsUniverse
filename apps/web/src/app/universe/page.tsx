@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Zap, Target, Clock, BookOpen, Trophy, Loader2, ChevronRight, Sword, Pencil, Check, X, Package } from "lucide-react";
 
@@ -87,6 +87,7 @@ export default function UniversePage() {
   const { user, loading: authLoading } = useAuth();
   const { flags } = usePublicPlatformSettings();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [universes, setUniverses]     = useState<Universe[]>([]);
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -94,7 +95,10 @@ export default function UniversePage() {
   const [episodesLoading, setEpisodesLoading] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [episodePage, setEpisodePage] = useState(0);
-  const [activeTab, setActiveTab]     = useState<"episodes" | "timeline" | "quests" | "powers" | "arcs" | "villains">("episodes");
+  const validTabs = ["episodes", "timeline", "quests", "powers", "arcs", "villains"] as const;
+  type TabId = typeof validTabs[number];
+  const initialTab = validTabs.includes(searchParams.get("tab") as TabId) ? (searchParams.get("tab") as TabId) : "episodes";
+  const [activeTab, setActiveTab]     = useState<TabId>(initialTab);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft]   = useState("");
   const [savingTitle, setSavingTitle] = useState(false);
@@ -129,18 +133,28 @@ export default function UniversePage() {
     if (!token) return;
 
     const h = { Authorization: `Bearer ${token}` };
-    fetch(`${BASE}/universes/mine`, { headers: h })
-      .then(async (uRes) => {
-        if (uRes.status === 404) { router.push("/onboarding"); return; }
-        if (!uRes.ok) return;
-        const { data } = await uRes.json();
-        const list = (Array.isArray(data) ? data : [data]) as Universe[];
-        if (list.length === 0) { router.push("/onboarding"); return; }
-        setUniverses(list);
-        setSelectedIdx(0);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+
+    const fetchUniverses = (isInitial = false) => {
+      fetch(`${BASE}/universes/mine`, { headers: h })
+        .then(async (uRes) => {
+          if (uRes.status === 404) { if (isInitial) router.push("/onboarding"); return; }
+          if (!uRes.ok) return;
+          const { data } = await uRes.json();
+          const list = (Array.isArray(data) ? data : [data]) as Universe[];
+          if (list.length === 0) { if (isInitial) router.push("/onboarding"); return; }
+          setUniverses(list);
+          if (isInitial) setSelectedIdx(0);
+        })
+        .catch(() => {})
+        .finally(() => { if (isInitial) setLoading(false); });
+    };
+
+    fetchUniverses(true);
+
+    // Re-fetch when the tab becomes visible so powers/quests stay in sync with the dashboard
+    const onVisibility = () => { if (document.visibilityState === "visible") fetchUniverses(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [user, authLoading, router]);
 
   if (loading || authLoading) {

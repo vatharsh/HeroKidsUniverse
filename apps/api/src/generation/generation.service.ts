@@ -26,6 +26,7 @@ import { BACKGROUND_SCENE_STYLE, STORYBOOK_STYLE } from '../ai/style.constants';
 import { CharacterCanonService } from '../characters/character-canon.service';
 import type { FaceMetricsJson } from '../characters/entities/character-canon.entity';
 import { Character } from '../characters/entities/character.entity';
+import { CharacterVisualProfile } from '../characters/entities/character-visual-profile.entity';
 import { UniverseCompanion } from '../companions/entities/universe-companion.entity';
 import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { Hero } from '../heroes/hero.entity';
@@ -128,6 +129,7 @@ export class GenerationService implements OnModuleInit {
     @InjectRepository(HeroPower) private readonly powersRepo: Repository<HeroPower>,
     @InjectRepository(Quest) private readonly questsRepo: Repository<Quest>,
     @InjectRepository(Character) private readonly charactersRepo: Repository<Character>,
+    @InjectRepository(CharacterVisualProfile) private readonly visualProfilesRepo: Repository<CharacterVisualProfile>,
     @InjectRepository(UniverseCompanion) private readonly companionsRepo: Repository<UniverseCompanion>,
     @InjectRepository(AiUsageLog) private readonly aiUsageLogsRepo: Repository<AiUsageLog>,
     @InjectRepository(StoryGenerationLog) private readonly storyGenerationLogsRepo: Repository<StoryGenerationLog>,
@@ -254,8 +256,10 @@ export class GenerationService implements OnModuleInit {
       if (!hero) return;
 
       const universeContext = story.universeId ? await this.buildUniverseContext(story) : undefined;
+      const isStandalone = story.storyMode === StoryMode.Standalone;
+
       let existingVisualState: StoryVisualState | null = null;
-      if (story.universeId && story.storyMode !== StoryMode.NewAdventure) {
+      if (story.universeId && !isStandalone && story.storyMode !== StoryMode.NewAdventure) {
         const prevStory = await this.storiesRepo.findOne({
           where: { universeId: story.universeId, status: StoryStatus.Completed },
           order: { createdAt: 'DESC' },
@@ -272,9 +276,28 @@ export class GenerationService implements OnModuleInit {
             transformation: null,
           };
         }
+
+        // Seed hero costume from hero profile if no prior story established one
+        if (existingVisualState && !existingVisualState.costume && hero.costumeDescription) {
+          existingVisualState.costume = hero.costumeDescription;
+        } else if (!existingVisualState && hero.costumeDescription) {
+          existingVisualState = {
+            costume: hero.costumeDescription,
+            companion: null,
+            weapon: null,
+            powers: universeContext?.heroPowers ?? [],
+            inventory: [],
+            transformation: null,
+          };
+        }
       }
 
-      const companionLabel = universeContext?.companion
+      // Strip companion from visual state when user opted out for this episode
+      if (story.skipCompanion && existingVisualState) {
+        existingVisualState = { ...existingVisualState, companion: null };
+      }
+
+      const companionLabel = (universeContext?.companion && !story.skipCompanion)
         ? `${universeContext.companion.name} (${universeContext.companion.type} companion)`
         : null;
       await this.ensureHeroAvatarDescription(hero);
@@ -293,9 +316,12 @@ export class GenerationService implements OnModuleInit {
       if (companionLabel) supportingCharLabels.push(companionLabel);
       const supportingCharAvatars = supportingChars.map((c) => c.avatarUrl).filter((u): u is string => !!u);
       const supportingCharDescriptions = supportingChars.map((c) => c.avatarDescription ?? '');
-      const characterCanonSummaries = canonEnabled
-        ? await this.buildCharacterCanonSummaries(story, supportingChars)
-        : supportingChars.map((c) => c.avatarDescription ?? '');
+      const characterCanonData = canonEnabled
+        ? await this.buildCharacterCanonData(story, supportingChars)
+        : { summaries: supportingChars.map((c) => c.avatarDescription ?? ''), neverChangeRules: supportingChars.map(() => null) };
+      const characterCanonSummaries = characterCanonData.summaries;
+      const characterNeverChangeRules = characterCanonData.neverChangeRules;
+      const characterBibles = await this.buildCharacterBibles(supportingChars);
 
       const heroAge = this.computeAge(hero.dob);
       const heroName = hero.name ?? 'Hero';
@@ -321,35 +347,76 @@ export class GenerationService implements OnModuleInit {
         pageCount,
         supportingCharacters: supportingCharLabels,
         supportingCharacterVisualDescriptions: supportingCharDescriptions,
-        universeContext,
+        universeContext: (universeContext && story.skipCompanion)
+          ? { ...universeContext, companion: null }
+          : universeContext,
         storyContext: story.storyContext ?? undefined,
         storyVisualState: existingVisualState,
       });
       const normalizedGenerated = this.normalizeGeneratedStory(generated, heroName, existingVisualState);
 
+      // Build per-character outfit lock from user-authored visual profiles
+      const characterOutfits: Record<string, string> = {};
+      for (const sc of supportingChars) {
+        if (!sc.characterId) continue;
+        const bible = characterBibles[supportingChars.indexOf(sc)];
+        const wears = bible.match(/ALWAYS WEARS: ([^\n]+)/)?.[1]?.trim();
+        if (wears) characterOutfits[sc.label.split('(')[0].trim()] = wears;
+      }
+
+      // hero.costumeDescription is the canonical source — always wins over whatever Gemini describes.
+      // Gemini's storyVisualState.costume reflects what it thinks the hero is wearing (often casual),
+      // which must NOT override the user-authored costume. Only allow Gemini's value as a last resort.
+      const effectiveCostume = isStandalone
+        ? null
+        : (hero.costumeDescription || existingVisualState?.costume || normalizedGenerated.storyVisualState?.costume || null);
+
       let storyVisualState: StoryVisualState | null = null;
       if (normalizedGenerated.storyVisualState) {
         storyVisualState = {
-          costume: normalizedGenerated.storyVisualState.costume,
+          costume: effectiveCostume,
           companion: normalizedGenerated.storyVisualState.companion,
           weapon: normalizedGenerated.storyVisualState.weapon,
           powers: normalizedGenerated.storyVisualState.powers ?? [],
           inventory: normalizedGenerated.storyVisualState.inventory ?? [],
           transformation: null,
+          characterOutfits: Object.keys(characterOutfits).length ? characterOutfits : undefined,
         };
       } else if (universeContext) {
         storyVisualState = {
-          costume: universeContext.visualState?.costume ?? null,
-          companion: universeContext.companion ? `${universeContext.companion.name} (${universeContext.companion.type})` : null,
+          costume: effectiveCostume,
+          companion: (universeContext.companion && !story.skipCompanion) ? `${universeContext.companion.name} (${universeContext.companion.type})` : null,
           weapon: universeContext.visualState?.weapon ?? null,
           powers: universeContext.heroPowers ?? [],
           inventory: universeContext.heroPowers ?? [],
           transformation: null,
+          characterOutfits: Object.keys(characterOutfits).length ? characterOutfits : undefined,
+        };
+      } else if (Object.keys(characterOutfits).length || existingVisualState) {
+        storyVisualState = {
+          costume: effectiveCostume,
+          companion: existingVisualState?.companion ?? null,
+          weapon: existingVisualState?.weapon ?? null,
+          powers: existingVisualState?.powers ?? [],
+          inventory: existingVisualState?.inventory ?? [],
+          transformation: null,
+          characterOutfits: Object.keys(characterOutfits).length ? characterOutfits : existingVisualState?.characterOutfits,
         };
       }
 
       if (storyVisualState) {
         await this.storiesRepo.update(storyId, { storyVisualState });
+      }
+
+      // Persist established costume back to universe so subsequent stories inherit it.
+      // Always update if hero.costumeDescription changed — user-authored value always wins.
+      if (!isStandalone && story.universeId && storyVisualState?.costume) {
+        const universe = await this.universesRepo.findOne({ where: { id: story.universeId } });
+        const costumeChanged = hero.costumeDescription && universe?.visualState?.costume !== hero.costumeDescription;
+        if (universe && (!universe.visualState?.costume || costumeChanged)) {
+          const updatedVisualState = { ...(universe.visualState ?? {}), costume: storyVisualState.costume };
+          await this.universesRepo.update(story.universeId, { visualState: updatedVisualState as typeof universe.visualState });
+        }
       }
 
       const storyCostUsd = await this.logStoryGeneration(storyId, userId, story.universeId ?? null, normalizedGenerated, isSandbox);
@@ -402,6 +469,8 @@ export class GenerationService implements OnModuleInit {
           heroCanon?.neverChangeRulesJson ?? undefined,
           heroCanon?.faceMetricsJson ? this.buildFaceMetricsSummary(heroCanon.faceMetricsJson) : undefined,
           characterCanonSummaries,
+          characterNeverChangeRules,
+          characterBibles,
           async (sceneNum, total) => {
             await updateJob({
               currentStep: `Generating Illustrations (scene ${sceneNum}/${total})`,
@@ -431,6 +500,8 @@ export class GenerationService implements OnModuleInit {
           heroCanon?.neverChangeRulesJson ?? undefined,
           heroCanon?.faceMetricsJson ? this.buildFaceMetricsSummary(heroCanon.faceMetricsJson) : undefined,
           characterCanonSummaries,
+          characterNeverChangeRules,
+          characterBibles,
           async (pageNum, total) => {
             await updateJob({
               currentStep: `Generating Illustrations (${pageNum}/${total})`,
@@ -560,11 +631,17 @@ export class GenerationService implements OnModuleInit {
   }
 
   async getActiveJobs(userId: string): Promise<GenerationJob[]> {
-    return this.jobsRepo.find({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-      take: 20,
-    });
+    return this.jobsRepo
+      .createQueryBuilder('job')
+      .innerJoin('stories', 's', 's.id = job."storyId"')
+      .where('job."userId" = :userId', { userId })
+      .orderBy('job."createdAt"', 'DESC')
+      .limit(20)
+      .getMany();
+  }
+
+  async deleteJobsByStoryId(storyId: string): Promise<void> {
+    await this.jobsRepo.delete({ storyId });
   }
 
   private async generatePageImages(
@@ -582,6 +659,8 @@ export class GenerationService implements OnModuleInit {
     heroNeverChangeRules?: string[],
     heroFaceMetrics?: string,
     characterCanonSummaries?: string[],
+    characterNeverChangeRules?: (string[] | null)[],
+    characterBibles?: string[],
     onPageDone?: (pageNum: number, total: number) => Promise<void>,
   ): Promise<{ pages: StoryPage[]; totalCostUsd: number }> {
     const mode = await this.getStringSetting('IMAGE_GENERATION_MODE', 'full_generation');
@@ -635,8 +714,13 @@ export class GenerationService implements OnModuleInit {
       }
     }
 
-    const imageModel = this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1';
-    const costPerImage = await this.getNumberSetting('OPENAI_IMAGE_COST_PER_IMAGE', Number(SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value));
+    const imageBackend = await this.getStringSetting('IMAGE_GENERATION_BACKEND', 'openai');
+    const imageProvider = imageBackend === 'gemini' ? 'gemini' : 'openai';
+    const imageModel = imageBackend === 'gemini'
+      ? 'gemini-3.1-flash-image'
+      : (this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1');
+    const imageCostKey = imageBackend === 'gemini' ? 'GEMINI_IMAGE_COST_PER_IMAGE' : 'OPENAI_IMAGE_COST_PER_IMAGE';
+    const costPerImage = await this.getNumberSetting(imageCostKey as keyof typeof SETTING_DEFAULTS, Number(SETTING_DEFAULTS[imageCostKey as keyof typeof SETTING_DEFAULTS]?.value ?? SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value));
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
     const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
 
@@ -674,6 +758,8 @@ export class GenerationService implements OnModuleInit {
             heroNeverChangeRules,
             heroFaceMetrics,
             characterCanonSummaries,
+            characterNeverChangeRules,
+            characterBibles,
             storyStateBlock: pageStateBlockMap.get(page.pageNumber) ?? undefined,
             characterDirections: page.characterDirections,
             backgroundOnlyMode: isBackgroundOnly,
@@ -746,7 +832,7 @@ export class GenerationService implements OnModuleInit {
             userId: story.userId,
             storyId: story.id,
             universeId: story.universeId ?? null,
-            provider: 'openai',
+            provider: imageProvider,
             model: imageModel,
             operation: AiOperation.ImageGeneration,
             imagesGenerated: 1,
@@ -822,13 +908,20 @@ export class GenerationService implements OnModuleInit {
     heroNeverChangeRules?: string[],
     heroFaceMetrics?: string,
     characterCanonSummaries?: string[],
+    characterNeverChangeRules?: (string[] | null)[],
+    characterBibles?: string[],
     onPageDone?: (pageNum: number, total: number) => Promise<void>,
   ): Promise<{ pages: StoryPage[]; scenes: StoryScene[]; totalCostUsd: number }> {
     const scenes = generated.scenes ?? [];
-    const imageModel = this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1';
+    const imageBackend = await this.getStringSetting('IMAGE_GENERATION_BACKEND', 'openai');
+    const imageProvider = imageBackend === 'gemini' ? 'gemini' : 'openai';
+    const imageModel = imageBackend === 'gemini'
+      ? 'gemini-3.1-flash-image'
+      : (this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1');
+    const imageCostKey = imageBackend === 'gemini' ? 'GEMINI_IMAGE_COST_PER_IMAGE' : 'OPENAI_IMAGE_COST_PER_IMAGE';
     const costPerImage = await this.getNumberSetting(
-      'OPENAI_IMAGE_COST_PER_IMAGE',
-      Number(SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value),
+      imageCostKey as keyof typeof SETTING_DEFAULTS,
+      Number(SETTING_DEFAULTS[imageCostKey as keyof typeof SETTING_DEFAULTS]?.value ?? SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value),
     );
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
     const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
@@ -910,6 +1003,8 @@ export class GenerationService implements OnModuleInit {
         heroNeverChangeRules,
         heroFaceMetrics,
         characterCanonSummaries,
+        characterNeverChangeRules,
+        characterBibles,
         storyStateBlock: sceneStateBlockMap.get(scene.sceneId) ?? undefined,
         characterDirections: firstPage?.characterDirections,
         backgroundOnlyMode: isBackgroundOnly,
@@ -968,12 +1063,14 @@ export class GenerationService implements OnModuleInit {
     sceneResults.push(...remainingResults);
 
     const sceneIllustrationMap = new Map<string, string | undefined>();
+    const sceneImageBase64Map = new Map<string, string | undefined>();
     const storedScenes: StoryScene[] = [];
 
     for (const { scene, imageOutput, error } of sceneResults) {
       if (!imageOutput) {
         this.logger.warn(`Scene image gen failed for story ${story.id}, scene ${scene.sceneId}: ${error ?? 'Unknown'}`);
         sceneIllustrationMap.set(scene.sceneId, undefined);
+        sceneImageBase64Map.set(scene.sceneId, undefined);
         storedScenes.push({
           sceneId: scene.sceneId,
           title: scene.title,
@@ -997,7 +1094,7 @@ export class GenerationService implements OnModuleInit {
             userId: story.userId,
             storyId: story.id,
             universeId: story.universeId ?? null,
-            provider: 'openai',
+            provider: imageProvider,
             model: imageModel,
             operation: AiOperation.ImageGeneration,
             imagesGenerated: 1,
@@ -1014,6 +1111,7 @@ export class GenerationService implements OnModuleInit {
       }
 
       sceneIllustrationMap.set(scene.sceneId, illustrationUrl);
+      sceneImageBase64Map.set(scene.sceneId, imageOutput.imageBase64);
       storedScenes.push({
         sceneId: scene.sceneId,
         title: scene.title,
@@ -1025,6 +1123,7 @@ export class GenerationService implements OnModuleInit {
 
     for (const scene of remainingScenes) {
       sceneIllustrationMap.set(scene.sceneId, undefined);
+      sceneImageBase64Map.set(scene.sceneId, undefined);
       storedScenes.push({
         sceneId: scene.sceneId,
         title: scene.title,
@@ -1034,15 +1133,21 @@ export class GenerationService implements OnModuleInit {
       });
     }
 
+    const speechBubbleLayoutEnabled = await this.getBooleanSetting('ENABLE_SPEECH_BUBBLE_LAYOUT_QA', false);
+
     const pages: StoryPage[] = [];
     for (const scene of scenes) {
       const sceneImageUrl = sceneIllustrationMap.get(scene.sceneId);
+      const sceneImageBase64 = sceneImageBase64Map.get(scene.sceneId);
       const firstPageNumber = scene.pages[0]?.pageNumber;
 
       for (const page of scene.pages) {
         let pageImageUrl = sceneImageUrl;
-        let pageImageBase64: string | undefined;
+        let pageImageBase64: string | undefined = sceneImageBase64;
+        // Gemini marks 'reuse' when character poses/expressions are essentially unchanged
+        // from the scene base image — only speech bubbles differ, so no new image is needed.
         const needsPageSpecificExpression =
+          page.imageVariant !== 'reuse' &&
           page.pageNumber !== firstPageNumber &&
           ((page.speechBubbles?.length ?? 0) > 0 ||
             page.characterDirections?.some((c) => c.isSpeaking || c.mouthState === 'speaking'));
@@ -1069,6 +1174,8 @@ export class GenerationService implements OnModuleInit {
               heroNeverChangeRules,
               heroFaceMetrics,
               characterCanonSummaries,
+              characterNeverChangeRules,
+              characterBibles,
               storyStateBlock: pageStateBlockMap.get(page.pageNumber) ?? undefined,
               characterDirections: page.characterDirections,
             };
@@ -1091,7 +1198,7 @@ export class GenerationService implements OnModuleInit {
                 userId: story.userId,
                 storyId: story.id,
                 universeId: story.universeId ?? null,
-                provider: 'openai',
+                provider: imageProvider,
                 model: imageModel,
                 operation: AiOperation.ImageGeneration,
                 imagesGenerated: 1,
@@ -1108,6 +1215,17 @@ export class GenerationService implements OnModuleInit {
           }
         }
 
+        const speechBubbles = speechBubbleLayoutEnabled
+          ? await this.enrichSpeechBubbleLayout({
+              pageNumber: page.pageNumber,
+              imageUrl: isBackgroundOnly ? undefined : pageImageUrl,
+              imageBase64: isBackgroundOnly ? undefined : pageImageBase64,
+              sceneDescription: page.sceneDescription,
+              characterDirections: page.characterDirections,
+              speechBubbles: page.speechBubbles,
+            })
+          : page.speechBubbles;
+
         pages.push({
           pageNumber: page.pageNumber,
           text: page.text,
@@ -1122,7 +1240,7 @@ export class GenerationService implements OnModuleInit {
           cropHint: page.cropHint,
           sceneId: scene.sceneId,
           background: page.background,
-          speechBubbles: page.speechBubbles,
+          speechBubbles,
           storyStateSnapshot: pageStateSnapshotMap.get(page.pageNumber),
           characterDirections: page.characterDirections,
           storyStateUpdate: page.storyStateUpdate,
@@ -1155,6 +1273,54 @@ export class GenerationService implements OnModuleInit {
     throw lastError instanceof Error ? lastError : new Error('Image generation failed');
   }
 
+  private async enrichSpeechBubbleLayout(params: {
+    pageNumber: number;
+    imageUrl?: string;
+    imageBase64?: string;
+    sceneDescription?: string;
+    characterDirections?: StoryPage['characterDirections'];
+    speechBubbles?: StoryPage['speechBubbles'];
+  }): Promise<StoryPage['speechBubbles']> {
+    const bubbles = params.speechBubbles ?? [];
+    if (!bubbles.length || (!params.imageUrl && !params.imageBase64)) return bubbles;
+
+    try {
+      const layout = await this.imageProvider.locateSpeechBubbleAnchors({
+        imageUrl: params.imageUrl,
+        imageBase64: params.imageBase64,
+        pageNumber: params.pageNumber,
+        sceneDescription: params.sceneDescription,
+        characterDirections: params.characterDirections,
+        speechBubbles: bubbles.map((bubble) => ({
+          speakerName: bubble.speakerName,
+          text: bubble.text,
+          preferredPosition: bubble.preferredPosition,
+          tailDirection: bubble.tailDirection,
+        })),
+      });
+
+      if (!layout?.bubbles?.length) return bubbles;
+
+      return bubbles.map((bubble, index) => {
+        const placed = layout.bubbles[index];
+        if (!placed) return bubble;
+        return {
+          ...bubble,
+          anchorPoint: placed.anchorPoint,
+          bubbleRect: placed.bubbleRect,
+          layoutConfidence: placed.confidence,
+        };
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Speech bubble layout failed for page ${params.pageNumber}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return bubbles;
+    }
+  }
+
   private async mapWithConcurrency<T, R>(
     items: T[],
     concurrency: number,
@@ -1181,8 +1347,14 @@ export class GenerationService implements OnModuleInit {
   private async generatePageAudio(story: Story, pages: StoryPage[], isSandbox: boolean): Promise<{ pages: StoryPage[]; totalCostUsd: number }> {
     const result: StoryPage[] = [];
     let totalCostUsd = 0;
-    const ttsCostPerChar = await this.getNumberSetting('OPENAI_TTS_COST_PER_CHAR', Number(SETTING_DEFAULTS['OPENAI_TTS_COST_PER_CHAR'].value));
-    const ttsVoice = await this.getStringSetting('TTS_VOICE', 'nova');
+    const ttsProvider = await this.getStringSetting('TTS_PROVIDER', 'gemini');
+    const isGeminiTTS = ttsProvider === 'gemini';
+    const ttsCostPerChar = isGeminiTTS
+      ? await this.getNumberSetting('GEMINI_TTS_COST_PER_CHAR', 0)
+      : await this.getNumberSetting('OPENAI_TTS_COST_PER_CHAR', Number(SETTING_DEFAULTS['OPENAI_TTS_COST_PER_CHAR'].value));
+    const ttsVoice = isGeminiTTS
+      ? await this.getStringSetting('GEMINI_TTS_VOICE', 'Kore')
+      : await this.getStringSetting('TTS_VOICE', 'nova');
     const ttsSpeed = await this.getNumberSetting('TTS_SPEED_RATIO', 0.9);
     const ttsAccentStyle = await this.getStringSetting('TTS_ACCENT_STYLE', 'indian_english');
     const ttsTone = await this.getStringSetting('TTS_TONE', 'warm_bedtime_story');
@@ -1223,8 +1395,8 @@ export class GenerationService implements OnModuleInit {
             userId: story.userId,
             storyId: story.id,
             universeId: story.universeId ?? null,
-            provider: 'openai',
-            model: this.config.get<string>('OPENAI_TTS_MODEL') ?? 'gpt-4o-mini-tts',
+            provider: isGeminiTTS ? 'gemini' : 'openai',
+            model: isGeminiTTS ? 'gemini-2.5-flash-preview-tts' : (this.config.get<string>('OPENAI_TTS_MODEL') ?? 'gpt-4o-mini-tts'),
             operation: AiOperation.Narration,
             audioSeconds: estimatedSeconds,
             estimatedCostUsd: pageCostUsd,
@@ -1499,22 +1671,67 @@ export class GenerationService implements OnModuleInit {
     return parts.join(', ');
   }
 
-  private async buildCharacterCanonSummaries(
+  private async buildCharacterBibles(
+    supportingChars: Array<{ label: string; characterId?: string }>,
+  ): Promise<string[]> {
+    if (supportingChars.length === 0) return [];
+    const charIds = supportingChars.map((c) => c.characterId).filter((id): id is string => !!id);
+    if (charIds.length === 0) return supportingChars.map(() => '');
+
+    const [characters, profiles] = await Promise.all([
+      this.charactersRepo.find({ where: { id: In(charIds) } }),
+      this.visualProfilesRepo.find({ where: { characterId: In(charIds) } }),
+    ]);
+
+    const charMap = new Map(characters.map((c) => [c.id, c]));
+    const profileMap = new Map(profiles.map((p) => [p.characterId, p]));
+
+    return supportingChars.map((sc) => {
+      if (!sc.characterId) return '';
+      const char = charMap.get(sc.characterId);
+      const profile = profileMap.get(sc.characterId);
+      if (!char) return '';
+
+      const lines: string[] = [];
+      const nameUpper = char.name.toUpperCase();
+
+      if (char.relationship) lines.push(`Relationship to main character (the hero): ${char.relationship}`);
+      if (profile?.costumeDescription) lines.push(`ALWAYS WEARS: ${profile.costumeDescription}`);
+      if (profile?.hairDescription) lines.push(`Hair: ${profile.hairDescription}`);
+      if (profile?.skinTone) lines.push(`Skin: ${profile.skinTone}`);
+      if (profile?.eyeDescription) lines.push(`Eyes: ${profile.eyeDescription}`);
+      if (profile?.accessories) lines.push(`Accessories: ${profile.accessories}`);
+      if (profile?.colors) lines.push(`Signature colors: ${profile.colors}`);
+      if (profile?.doNotChangeRules) lines.push(`NEVER CHANGE: ${profile.doNotChangeRules}`);
+
+      if (lines.length === 0) return '';
+      return `${nameUpper} CHARACTER BIBLE:\n${lines.map((l) => `- ${l}`).join('\n')}`;
+    });
+  }
+
+  private async buildCharacterCanonData(
     story: Story,
     supportingChars: Array<{ label: string; characterId?: string; avatarUrl: string | null; avatarDescription: string | null }>,
-  ): Promise<string[]> {
-    return Promise.all(
+  ): Promise<{ summaries: string[]; neverChangeRules: (string[] | null)[] }> {
+    const results = await Promise.all(
       supportingChars.map(async (c) => {
-        if (!c.characterId) return c.avatarDescription ?? '';
+        if (!c.characterId) return { summary: c.avatarDescription ?? '', rules: null };
         const canon = await this.characterCanonService.ensureCanonExists({
           characterId: c.characterId,
           userId: story.userId,
           avatarUrl: c.avatarUrl,
           canonType: 'supporting_character',
         }).catch(() => null);
-        return canon?.appearanceSummary ?? c.avatarDescription ?? '';
+        return {
+          summary: canon?.appearanceSummary ?? c.avatarDescription ?? '',
+          rules: canon?.neverChangeRulesJson ?? null,
+        };
       }),
     );
+    return {
+      summaries: results.map((r) => r.summary),
+      neverChangeRules: results.map((r) => r.rules),
+    };
   }
 
   private precomputePageStateMaps(
@@ -1749,7 +1966,19 @@ export class GenerationService implements OnModuleInit {
       .filter((m): m is NonNullable<typeof m> => m !== null);
     if (memories.length > 0) await this.memoriesRepo.save(memories);
 
-    const powers = (generated.newPowers ?? []).map((name) =>
+    // Collect power names from three sources:
+    // 1. Top-level newPowers[] — the canonical field
+    // 2. power_earned entries in newMemories — Gemini sometimes puts them only here
+    // 3. Per-page storyStateUpdate.newPowers — Gemini sometimes puts them only in page state
+    const powerNamesFromMemories = (generated.newMemories ?? [])
+      .filter((m) => m?.type === MemoryType.PowerEarned && typeof m.title === 'string' && m.title.trim())
+      .map((m) => m.title.trim());
+    const powerNamesFromPages = (generated.pages ?? [])
+      .flatMap((p) => p.storyStateUpdate?.newPowers ?? [])
+      .filter((name): name is string => typeof name === 'string' && name.trim() !== '')
+      .map((name) => name.trim());
+    const allPowerNames = Array.from(new Set([...(generated.newPowers ?? []), ...powerNamesFromMemories, ...powerNamesFromPages]));
+    const powers = allPowerNames.map((name) =>
       this.powersRepo.create({ universeId: story.universeId as string, name, description: null, emoji: null, earnedInStoryId: story.id }),
     );
     if (powers.length > 0) await this.powersRepo.save(powers);

@@ -139,6 +139,7 @@ export class StoriesService {
           status: StoryStatus.Pending,
           pages: [],
           characterIds,
+          skipCompanion: createStoryDto.skipCompanion ?? null,
           creditsUsed: 1,
           isSandbox,
         }),
@@ -237,6 +238,7 @@ export class StoriesService {
 
   async remove(userId: string, id: string): Promise<void> {
     const story = await this.findOne(userId, id);
+    await this.generationService.deleteJobsByStoryId(story.id);
     await this.storiesRepository.remove(story);
   }
 }

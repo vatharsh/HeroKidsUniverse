@@ -15,11 +15,12 @@ import { cn } from "@/lib/utils";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
-type CharRole = "friend" | "sibling" | "pet" | "villain" | "other";
+type CharRole = "friend" | "sibling" | "family" | "pet" | "villain" | "other";
 
 const ROLES: { value: CharRole; label: string; emoji: string }[] = [
   { value: "friend",  label: "Friend",  emoji: "🤝" },
   { value: "sibling", label: "Sibling", emoji: "👫" },
+  { value: "family",  label: "Family",  emoji: "👨‍👩‍👧" },
   { value: "pet",     label: "Pet",     emoji: "🐾" },
   { value: "villain", label: "Villain", emoji: "😈" },
   { value: "other",   label: "Other",   emoji: "⭐" },
@@ -31,6 +32,7 @@ interface Hero {
   dob: string | null;
   gender: string | null;
   avatarUrl: string | null;
+  costumeDescription: string | null;
 }
 
 interface Character {
@@ -38,8 +40,16 @@ interface Character {
   name: string | null;
   role: CharRole | null;
   dob: string | null;
+  relationship: string | null;
   avatarUrl: string | null;
   photoUrl: string | null;
+}
+
+interface VisualProfile {
+  costumeDescription: string | null;
+  hairDescription: string | null;
+  skinTone: string | null;
+  doNotChangeRules: string | null;
 }
 
 interface AvatarStats {
@@ -80,25 +90,44 @@ const DEFAULT_ECONOMY: CharacterEconomy = {
 
 interface FormModalProps {
   existing: Character | null;
+  existingProfile: VisualProfile | null;
   avatarStats: AvatarStats;
   customAvatars: string[];
-  onSave: (data: { name: string; role: CharRole; dob: string; avatarUrl: string | null }) => Promise<void>;
+  onSave: (data: { name: string; role: CharRole; dob: string; relationship: string; avatarUrl: string | null }, profile: Partial<VisualProfile>) => Promise<void>;
   onClose: () => void;
   onAvatarGenerated: (url: string) => void;
 }
 
 function CharacterFormModal({
-  existing, avatarStats, customAvatars, onSave, onClose, onAvatarGenerated,
+  existing, existingProfile, avatarStats, customAvatars, onSave, onClose, onAvatarGenerated,
 }: FormModalProps) {
   const [name, setName]           = useState(existing?.name ?? "");
   const [role, setRole]           = useState<CharRole>(existing?.role ?? "friend");
   const [dob, setDob]             = useState(existing?.dob?.split("T")[0] ?? "");
+  const [relationship, setRelationship] = useState(existing?.relationship ?? "");
+  const [alwaysWears, setAlwaysWears]   = useState(existingProfile?.costumeDescription ?? "");
+  const [hair, setHair]                 = useState(existingProfile?.hairDescription ?? "");
+  const [skin, setSkin]                 = useState(existingProfile?.skinTone ?? "");
+  const [otherTraits, setOtherTraits]   = useState(existingProfile?.doNotChangeRules ?? "");
+  const [showBio, setShowBio]           = useState(!!(existingProfile?.costumeDescription || existingProfile?.hairDescription || existingProfile?.skinTone || existingProfile?.doNotChangeRules));
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(!existing);
   const [saving, setSaving]       = useState(false);
 
   const [generateTarget, setGenerateTarget] = useState<{ file: File; preview: string } | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
+
+  // Sync bio fields when profile loads async after modal mounts
+  useEffect(() => {
+    if (!existingProfile) return;
+    setAlwaysWears(existingProfile.costumeDescription ?? "");
+    setHair(existingProfile.hairDescription ?? "");
+    setSkin(existingProfile.skinTone ?? "");
+    setOtherTraits(existingProfile.doNotChangeRules ?? "");
+    if (existingProfile.costumeDescription || existingProfile.hairDescription || existingProfile.skinTone || existingProfile.doNotChangeRules) {
+      setShowBio(true);
+    }
+  }, [existingProfile]);
 
   const hasChange      = !!selectedAvatar;
   const displayedAvatar = selectedAvatar ?? existing?.avatarUrl ?? null;
@@ -124,7 +153,13 @@ function CharacterFormModal({
   async function handleSubmit() {
     if (!name.trim()) return;
     setSaving(true);
-    await onSave({ name: name.trim(), role, dob, avatarUrl: selectedAvatar });
+    const profile: Partial<VisualProfile> = {
+      costumeDescription: alwaysWears.trim() || null,
+      hairDescription: hair.trim() || null,
+      skinTone: skin.trim() || null,
+      doNotChangeRules: otherTraits.trim() || null,
+    };
+    await onSave({ name: name.trim(), role, dob, relationship: relationship.trim(), avatarUrl: selectedAvatar }, profile);
     setSaving(false);
   }
 
@@ -254,6 +289,53 @@ function CharacterFormModal({
                 className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
             </div>
 
+            <div>
+              <label className="text-ink-mid text-sm font-medium block mb-1.5">
+                Relationship with main character
+                <span className="text-ink-muted font-normal text-xs ml-1">— e.g. "elder brother", "grandmother"</span>
+              </label>
+              <input type="text" value={relationship} onChange={(e) => setRelationship(e.target.value)}
+                placeholder="e.g. elder brother, grandfather, best friend"
+                className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+            </div>
+
+            {/* Appearance — collapsible for locking visual consistency */}
+            <div>
+              <button type="button" onClick={() => setShowBio(v => !v)}
+                className="flex items-center gap-1.5 text-ink-mid hover:text-brand text-sm font-semibold transition mb-2">
+                <span>{showBio ? "▾" : "▸"}</span>
+                Lock appearance for story consistency
+              </button>
+              {showBio && (
+                <div className="flex flex-col gap-3 pl-3 border-l-2 border-brand/20">
+                  <div>
+                    <label className="text-ink-mid text-xs font-medium block mb-1">Always wears</label>
+                    <input type="text" value={alwaysWears} onChange={(e) => setAlwaysWears(e.target.value)}
+                      placeholder="e.g. rectangular glasses, black hoodie"
+                      className="w-full px-3 py-2.5 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                  </div>
+                  <div>
+                    <label className="text-ink-mid text-xs font-medium block mb-1">Hair</label>
+                    <input type="text" value={hair} onChange={(e) => setHair(e.target.value)}
+                      placeholder="e.g. straight black hair, side-parted"
+                      className="w-full px-3 py-2.5 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                  </div>
+                  <div>
+                    <label className="text-ink-mid text-xs font-medium block mb-1">Skin tone</label>
+                    <input type="text" value={skin} onChange={(e) => setSkin(e.target.value)}
+                      placeholder="e.g. medium brown"
+                      className="w-full px-3 py-2.5 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                  </div>
+                  <div>
+                    <label className="text-ink-mid text-xs font-medium block mb-1">Other permanent traits</label>
+                    <input type="text" value={otherTraits} onChange={(e) => setOtherTraits(e.target.value)}
+                      placeholder="e.g. always has bindi, scar on left cheek"
+                      className="w-full px-3 py-2.5 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button type="button" disabled={!canSave} onClick={handleSubmit}
               className="w-full bg-brand disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all enabled:hover:scale-[1.02] shadow-brand flex items-center justify-center gap-2">
               {saving
@@ -269,6 +351,7 @@ function CharacterFormModal({
           photoFile={generateTarget.file}
           photoPreview={generateTarget.preview}
           generateType="character"
+          characterName={name.trim() || undefined}
           generationsUsed={avatarStats.characterGenerationsUsed}
           maxGenerations={avatarStats.characterGenerationsMax}
           onSuccess={handleGenerateSuccess}
@@ -287,10 +370,12 @@ interface HeroEditModalProps {
   hero: Hero;
   avatarStats: AvatarStats;
   customAvatars: string[];
-  onSave: (data: { name: string; dob: string; gender: HeroGender; avatarUrl: string | null }) => Promise<void>;
+  onSave: (data: { name: string; dob: string; gender: HeroGender; avatarUrl: string | null; costumeDescription: string }) => Promise<void>;
   onClose: () => void;
   onAvatarGenerated: (url: string) => void;
 }
+
+const COSTUME_PLACEHOLDER = "e.g. A glowing blue armored suit with a lightning bolt emblem — inspired by a space explorer look";
 
 function HeroEditModal({
   hero, avatarStats, customAvatars, onSave, onClose, onAvatarGenerated,
@@ -298,6 +383,7 @@ function HeroEditModal({
   const [name, setName]             = useState(hero.name ?? "");
   const [dob, setDob]               = useState(hero.dob?.split("T")[0] ?? "");
   const [gender, setGender]         = useState<HeroGender>((hero.gender as HeroGender) ?? "");
+  const [costumeDescription, setCostumeDescription] = useState(hero.costumeDescription ?? "");
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving]         = useState(false);
@@ -329,7 +415,7 @@ function HeroEditModal({
   async function handleSubmit() {
     if (!name.trim()) return;
     setSaving(true);
-    await onSave({ name: name.trim(), dob, gender, avatarUrl: selectedAvatar });
+    await onSave({ name: name.trim(), dob, gender, avatarUrl: selectedAvatar, costumeDescription: costumeDescription.trim() });
     setSaving(false);
   }
 
@@ -456,6 +542,23 @@ function HeroEditModal({
               </div>
             </div>
 
+            <div>
+              <label className="text-ink-mid text-sm font-medium block mb-1">
+                Hero&apos;s signature outfit
+                <span className="text-ink-muted font-normal text-xs ml-1">— used in universe adventures</span>
+              </label>
+              <textarea
+                value={costumeDescription}
+                onChange={(e) => setCostumeDescription(e.target.value)}
+                placeholder={COSTUME_PLACEHOLDER}
+                rows={3}
+                className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none"
+              />
+              <p className="text-ink-muted text-[11px] mt-1">
+                Describe the style — we&apos;ll create an original design. One-off stories won&apos;t use this.
+              </p>
+            </div>
+
             <button type="button" disabled={!canSave} onClick={handleSubmit}
               className="w-full bg-brand disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all enabled:hover:scale-[1.02] shadow-brand flex items-center justify-center gap-2">
               {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : "Save hero"}
@@ -500,6 +603,7 @@ function CharactersPageContent() {
   const [loading, setLoading]           = useState(true);
   const [showForm, setShowForm]         = useState(false);
   const [editing, setEditing]           = useState<Character | null>(null);
+  const [editingProfile, setEditingProfile] = useState<VisualProfile | null>(null);
   const [deleting, setDeleting]         = useState<string | null>(null);
 
   useEffect(() => {
@@ -551,9 +655,10 @@ function CharactersPageContent() {
     }));
   }
 
-  async function handleSave(formData: {
-    name: string; role: CharRole; dob: string; avatarUrl: string | null;
-  }) {
+  async function handleSave(
+    formData: { name: string; role: CharRole; dob: string; relationship: string; avatarUrl: string | null },
+    profile: Partial<VisualProfile>,
+  ) {
     const token = getAccessToken();
     if (!token) return;
 
@@ -562,8 +667,11 @@ function CharactersPageContent() {
       name: formData.name,
       role: formData.role,
       ...(formData.dob && { dob: formData.dob }),
+      ...(formData.relationship && { relationship: formData.relationship }),
       ...(formData.avatarUrl && { avatarUrl: formData.avatarUrl }),
     });
+
+    let savedId: string | null = null;
 
     if (editing) {
       const res = await fetch(`${BASE}/characters/${editing.id}`, {
@@ -572,6 +680,7 @@ function CharactersPageContent() {
       if (res.ok) {
         const { data } = await res.json();
         setCharacters(prev => prev.map(c => c.id === editing.id ? data : c));
+        savedId = editing.id;
       }
     } else {
       const res = await fetch(`${BASE}/characters`, {
@@ -580,6 +689,7 @@ function CharactersPageContent() {
       if (res.ok) {
         const { data } = await res.json();
         setCharacters(prev => [...prev, data]);
+        savedId = data.id;
         setEconomy(prev => ({
           ...prev,
           characterSlotsUsed: prev.characterSlotsUsed + 1,
@@ -590,7 +700,16 @@ function CharactersPageContent() {
       }
     }
 
+    // Save visual profile if any fields were filled
+    if (savedId && Object.values(profile).some(v => v !== null)) {
+      await fetch(`${BASE}/characters/${savedId}/profile`, {
+        method: "PATCH", headers,
+        body: JSON.stringify(profile),
+      }).catch(() => {/* non-critical */});
+    }
+
     setEditing(null);
+    setEditingProfile(null);
     setShowForm(false);
   }
 
@@ -606,18 +725,30 @@ function CharactersPageContent() {
     setDeleting(null);
   }
 
-  function openEdit(char: Character) {
+  async function openEdit(char: Character) {
     setEditing(char);
+    setEditingProfile(null);
     setShowForm(true);
+    const token = getAccessToken();
+    if (token) {
+      const res = await fetch(`${BASE}/characters/${char.id}/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => null);
+      if (res?.ok) {
+        const body = await res.json().catch(() => null);
+        setEditingProfile(body?.data ?? null);
+      }
+    }
   }
 
   function closeForm() {
     setEditing(null);
+    setEditingProfile(null);
     setShowForm(false);
   }
 
   async function handleHeroSave(formData: {
-    name: string; dob: string; gender: HeroGender; avatarUrl: string | null;
+    name: string; dob: string; gender: HeroGender; avatarUrl: string | null; costumeDescription: string;
   }) {
     const token = getAccessToken();
     if (!token || !hero) return;
@@ -633,6 +764,7 @@ function CharactersPageContent() {
         ...(formData.dob && { dob: formData.dob }),
         ...(formData.gender && { gender: formData.gender }),
         ...(formData.avatarUrl && { avatarUrl: formData.avatarUrl }),
+        costumeDescription: formData.costumeDescription || null,
       }),
     });
     if (res.ok) {
@@ -778,6 +910,9 @@ function CharactersPageContent() {
                   {char.name?.trim() || "Character"}
                 </p>
                 <p className="text-ink-muted text-xs">{roleEmoji(char.role)} {roleLabel(char.role)}</p>
+                {char.relationship && (
+                  <p className="text-ink-mid text-[10px] mt-0.5 font-medium">{char.relationship}</p>
+                )}
                 {char.dob && (
                   <p className="text-ink-muted text-[10px] mt-1">
                     🎂 {new Date(char.dob).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
@@ -826,6 +961,7 @@ function CharactersPageContent() {
       {showForm && (
         <CharacterFormModal
           existing={editing}
+          existingProfile={editingProfile}
           avatarStats={avatarStats}
           customAvatars={avatarStats.customAvatars}
           onSave={handleSave}

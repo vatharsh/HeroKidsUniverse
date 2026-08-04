@@ -8,9 +8,10 @@ import { User } from '../users/user.entity';
 import { CharactersController } from './characters.controller';
 import { CharactersService } from './characters.service';
 import { Character } from './entities/character.entity';
+import { CharacterVisualProfile } from './entities/character-visual-profile.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Character, User, CreditTransaction]), UploadModule, AiModule],
+  imports: [TypeOrmModule.forFeature([Character, CharacterVisualProfile, User, CreditTransaction]), UploadModule, AiModule],
   controllers: [CharactersController],
   providers: [CharactersService],
   exports: [CharactersService],

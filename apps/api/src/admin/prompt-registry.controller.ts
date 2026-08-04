@@ -94,6 +94,11 @@ export class PromptRegistryController {
     return this.registry.archiveVersion(versionId);
   }
 
+  @Delete('versions/:versionId')
+  deleteVersion(@Param('versionId') versionId: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.registry.deleteVersion(versionId, user.id);
+  }
+
   @Post('versions/:versionId/duplicate')
   duplicateVersion(@Param('versionId') versionId: string, @CurrentUser() user: CurrentUserPayload) {
     return this.registry.duplicateVersion(versionId, user.id);

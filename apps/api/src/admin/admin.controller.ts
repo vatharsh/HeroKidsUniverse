@@ -10,6 +10,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CharacterCanonService } from '../characters/character-canon.service';
 import { Hero } from '../heroes/hero.entity';
 import { HeroesService } from '../heroes/heroes.service';
+import { HeroPower } from '../powers/hero-power.entity';
 import { OrderV2Service } from '../merchandise/orders/order-v2.service';
 import { Story } from '../stories/story.entity';
 import { AdminService } from './admin.service';
@@ -28,6 +29,7 @@ export class AdminController {
     private readonly qaService: AIQualityAssuranceService,
     @InjectRepository(Story) private readonly storiesRepo: Repository<Story>,
     @InjectRepository(Hero) private readonly heroesRepo: Repository<Hero>,
+    @InjectRepository(HeroPower) private readonly powersRepo: Repository<HeroPower>,
   ) {}
 
   @Get('dashboard')
@@ -62,6 +64,31 @@ export class AdminController {
     @Query('search') search?: string,
   ) {
     return this.adminService.listUniverses(Number(page), Number(limit), search);
+  }
+
+  @Get('universes/:id/powers')
+  async universePowers(@Param('id') id: string) {
+    const powers = await this.powersRepo.find({ where: { universeId: id }, order: { createdAt: 'ASC' } });
+    return { data: powers };
+  }
+
+  @Post('universes/:id/powers')
+  async addPower(@Param('id') id: string, @Body() body: { name: string; emoji?: string; storyId?: string }) {
+    if (!body.name?.trim()) throw new NotFoundException('name is required');
+    const power = await this.powersRepo.save(
+      this.powersRepo.create({ universeId: id, name: body.name.trim(), emoji: body.emoji ?? null, description: null, earnedInStoryId: body.storyId ?? null }),
+    );
+    this.logger.log(`Admin added power "${power.name}" to universe ${id}`);
+    return { data: power };
+  }
+
+  @Delete('universes/:universeId/powers/:powerId')
+  async deletePower(@Param('universeId') universeId: string, @Param('powerId') powerId: string) {
+    const power = await this.powersRepo.findOne({ where: { id: powerId, universeId } });
+    if (!power) throw new NotFoundException('Power not found');
+    await this.powersRepo.remove(power);
+    this.logger.log(`Admin deleted power ${powerId} from universe ${universeId}`);
+    return { data: { deleted: true } };
   }
 
   @Get('stories')

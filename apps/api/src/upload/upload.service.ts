@@ -72,8 +72,14 @@ export class UploadService {
     storyId: string,
     pageNumber: number,
     audioBuffer: Buffer,
+    contentType = 'audio/mpeg',
   ): Promise<string> {
-    const filename = `${storyId}-page-${pageNumber}-${randomUUID()}.mp3`;
+    // WAV files start with the "RIFF" magic bytes; everything else is treated as MP3
+    const isWav = audioBuffer.length >= 4 && audioBuffer.slice(0, 4).toString('ascii') === 'RIFF';
+    const ext = isWav ? 'wav' : 'mp3';
+    const mime = isWav ? 'audio/wav' : contentType;
+
+    const filename = `${storyId}-page-${pageNumber}-${randomUUID()}.${ext}`;
     const key = `audio/${userId}/${filename}`;
 
     if (this.useR2) {
@@ -81,7 +87,7 @@ export class UploadService {
       const publicUrl = this.configService.get<string>('R2_PUBLIC_URL') ?? '';
 
       await this.s3Client!.send(
-        new PutObjectCommand({ Bucket: bucket, Key: key, Body: audioBuffer, ContentType: 'audio/mpeg' }),
+        new PutObjectCommand({ Bucket: bucket, Key: key, Body: audioBuffer, ContentType: mime }),
       );
       return `${publicUrl.replace(/\/$/, '')}/${key}`;
     }

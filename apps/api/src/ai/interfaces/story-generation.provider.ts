@@ -4,6 +4,14 @@ export const STORY_GENERATION_PROVIDER = 'STORY_GENERATION_PROVIDER';
 
 export type SpeechBubbleStyle = 'normal' | 'excited' | 'whisper' | 'thinking' | 'surprised';
 
+export type ImageVariant = 'reuse' | 'expression';
+
+export interface ParticipationMoment {
+  type: 'riddle' | 'predict' | 'guess' | 'choose';
+  prompt: string;
+  hint?: string;
+}
+
 export interface ExpressionDetails {
   eyes?: string;
   mouth?: string;
@@ -108,6 +116,8 @@ export interface SceneOutput {
     characterDirections?: PageCharacterDirection[];
     speechBubbles?: SpeechBubbleMetadata[];
     storyStateUpdate?: PageStoryStateUpdate;
+    imageVariant?: ImageVariant;
+    participationMoment?: ParticipationMoment | null;
   }>;
 }
 
@@ -179,6 +189,8 @@ export interface StoryGenerationOutput {
     characterDirections?: PageCharacterDirection[];
     speechBubbles?: SpeechBubbleMetadata[];
     storyStateUpdate?: PageStoryStateUpdate;
+    imageVariant?: ImageVariant;
+    participationMoment?: ParticipationMoment | null;
   }>;
   provider?: string;
   model?: string;

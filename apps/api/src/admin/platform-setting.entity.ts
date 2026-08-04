@@ -71,8 +71,11 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   GEMINI_OUTPUT_COST_PER_1M_TOKENS: { value: '0.40',     type: 'number', description: 'Gemini output token cost per 1M tokens (USD). Default: Gemini 2.5 Flash Lite.' },
   OPENAI_IMAGE_COST_PER_IMAGE:      { value: '0.011',    type: 'number', description: 'OpenAI image generation cost per image (USD). Default assumes gpt-image-1 low quality for story pages.' },
   OPENAI_TTS_COST_PER_CHAR:         { value: '0.000015', type: 'number', description: 'OpenAI TTS cost per character (USD). Default: gpt-4o-mini-tts at $15/1M chars.' },
+  GEMINI_TTS_COST_PER_CHAR:         { value: '0.000001875', type: 'number', description: 'Gemini TTS cost per character (USD). Default: gemini-2.5-flash-preview-tts at ~$1.875/1M chars.' },
   // TTS voice and narration
-  TTS_VOICE:                        { value: 'nova',   type: 'string',  description: 'OpenAI TTS voice (nova, alloy, echo, fable, onyx, shimmer). Change without redeploy.' },
+  TTS_PROVIDER:                     { value: 'gemini', type: 'string',  description: 'TTS backend: openai (gpt-4o-mini-tts) | gemini (gemini-2.5-flash-preview-tts). Gemini supports true Indian English accent.' },
+  TTS_VOICE:                        { value: 'nova',   type: 'string',  description: 'OpenAI TTS voice (nova, alloy, echo, fable, onyx, shimmer). Used when TTS_PROVIDER=openai.' },
+  GEMINI_TTS_VOICE:                 { value: 'Kore',   type: 'string',  description: 'Gemini TTS voice name (Kore, Puck, Charon, Fenrir, Aoede, Zephyr). Used when TTS_PROVIDER=gemini. Kore = warm female storyteller.' },
   TTS_SPEED_RATIO:                  { value: '0.9',    type: 'number',  description: 'TTS speech rate (0.25–4.0). 0.9 = slightly slower for children.' },
   TTS_ACCENT_STYLE:                 { value: 'indian_english', type: 'string', description: 'Narration accent hint passed to TTS instructions (indian_english, neutral_english).' },
   TTS_TONE:                         { value: 'warm_bedtime_story', type: 'string', description: 'Narration tone hint passed to TTS instructions.' },
@@ -102,9 +105,13 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   QA_VERSION:                       { value: '1.0',         type: 'string',  description: 'QA engine version tag.' },
 
   // ── Image pipeline ────────────────────────────────────────────────────────────
+  IMAGE_GENERATION_BACKEND:                 { value: 'openai',          type: 'string',  description: 'Story image backend: openai (gpt-image-1) | gemini (Nano Banana 2, gemini-3.1-flash-image). Switch without redeploy; takes effect within 30s.' },
+  AVATAR_GENERATION_BACKEND:                { value: 'openai',          type: 'string',  description: 'Avatar generation backend: openai (gpt-image-1) | gemini (gemini-3.1-flash-image). Keep on openai — Gemini produces realistic portraits that break story cartoon consistency. Takes effect within 30s.' },
   IMAGE_GENERATION_MODE:                    { value: 'full_generation', type: 'string',  description: 'Image generation scope: full_generation | story_plus_cover | story_only | avatar_only | background_only. Controls how many images are generated per story.' },
   OPENAI_IMAGE_QUALITY:                     { value: 'medium',          type: 'string',  description: 'OpenAI image quality: low | medium | high. Higher quality is slower and costs more per image.' },
   OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK:{ value: 'false',           type: 'boolean', description: 'Allow image generation without reference photos. If false, hero avatar references are required.' },
+  GEMINI_IMAGE_COST_PER_IMAGE:              { value: '0.039',           type: 'number',  description: 'Gemini image generation cost per image (USD). Default: Nano Banana 2 (gemini-3.1-flash-image) at ~$0.039/image.' },
+  ENABLE_SPEECH_BUBBLE_LAYOUT_QA:          { value: 'false',           type: 'boolean', description: 'Run a GPT-4o-mini vision pass after each page to refine speech bubble anchor positions. Adds ~2-5s per page with speech bubbles. Disable if generation is slow.' },
 
   // ── Preset & mode ─────────────────────────────────────────────────────────────
   QA_PRESET:                        { value: 'balanced',    type: 'string',  description: 'Active QA configuration preset (development/balanced/strict/cost_optimized/custom).' },

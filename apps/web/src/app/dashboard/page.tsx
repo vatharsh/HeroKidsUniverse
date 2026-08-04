@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  BookOpen, ChevronRight, Clock, Globe, Loader2, Package, Plus, RefreshCw, ShoppingCart, Target,
+  BookOpen, ChevronRight, Clock, Globe, Loader2, Package, Plus, RefreshCw, ShoppingCart, Sword, Target,
   Trash2, Users, X, Zap, AlertCircle, Share2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -40,6 +40,7 @@ interface Universe {
   tagline: string | null;
   powers: { id: string; name: string; emoji: string | null }[];
   quests: { id: string; title: string; status: string }[];
+  memories: { id: string; type: string; title: string }[];
 }
 
 interface GenerationJob {
@@ -55,105 +56,187 @@ interface GenerationJob {
 
 // ── Theme meta ────────────────────────────────────────────────────────────────
 
-const THEME_META: Record<string, { emoji: string; label: string; gradient: string }> = {
-  "space-adventure":      { emoji: "🚀", label: "Space Adventure",      gradient: "from-indigo-950 to-purple-900" },
-  "superhero-mission":    { emoji: "⚡", label: "Superhero Mission",    gradient: "from-red-950 to-orange-900"   },
-  "jungle-quest":         { emoji: "🌿", label: "Jungle Quest",         gradient: "from-green-950 to-emerald-800" },
-  "underwater-adventure": { emoji: "🌊", label: "Underwater Adventure", gradient: "from-blue-950 to-cyan-900"   },
-  "detective-mystery":    { emoji: "🔍", label: "Detective Mystery",    gradient: "from-gray-900 to-slate-800"   },
-  "birthday-adventure":   { emoji: "🎂", label: "Birthday Adventure",   gradient: "from-pink-950 to-rose-900"   },
+const THEME_META: Record<string, { emoji: string; label: string; gradient: string; accent: string; bannerColor: string }> = {
+  "space-adventure":      { emoji: "🚀", label: "Space Adventure",      gradient: "from-[#0a0a2e] via-[#1a0a4e] to-[#2d1b69]", accent: "#7c3aed", bannerColor: "bg-purple-700"  },
+  "superhero-mission":    { emoji: "⚡", label: "Superhero Mission",    gradient: "from-[#1a0000] via-[#3d0000] to-[#6b1a1a]", accent: "#dc2626", bannerColor: "bg-red-700"     },
+  "jungle-quest":         { emoji: "🌿", label: "Jungle Quest",         gradient: "from-[#001a0a] via-[#003d1a] to-[#1a5c2a]", accent: "#16a34a", bannerColor: "bg-green-700"  },
+  "underwater-adventure": { emoji: "🌊", label: "Underwater Adventure", gradient: "from-[#00091a] via-[#001a3d] to-[#003366]", accent: "#0284c7", bannerColor: "bg-blue-700"   },
+  "detective-mystery":    { emoji: "🔍", label: "Detective Mystery",    gradient: "from-[#0a0a0a] via-[#1a1a2e] to-[#2d2d40]", accent: "#6b7280", bannerColor: "bg-slate-700"  },
+  "birthday-adventure":   { emoji: "🎂", label: "Birthday Adventure",   gradient: "from-[#1a0010] via-[#3d0025] to-[#6b1a45]", accent: "#db2777", bannerColor: "bg-pink-700"   },
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function EpisodeCard({ story, onDelete }: { story: Story; onDelete: (id: string) => void }) {
-  const meta = (story.theme ? THEME_META[story.theme] : null) ?? { emoji: "✏️", label: "Freeform", gradient: "from-brand to-brand-dark" };
+function EpisodeCard({ story, onDelete, episodeNumber }: { story: Story; onDelete: (id: string) => void; episodeNumber?: number }) {
+  const meta = (story.theme ? THEME_META[story.theme] : null) ?? {
+    emoji: "✏️", label: "Freeform",
+    gradient: "from-[#0a0814] via-[#1a1035] to-[#2d1a5c]",
+    accent: "#7c3aed", bannerColor: "bg-violet-700",
+  };
   const isReady = story.status === "completed";
+  const isFailed = story.status === "failed";
+  const isGenerating = !isReady && !isFailed;
   const [confirming, setConfirming] = useState(false);
   const [copied, setCopied] = useState(false);
 
   function handleShare(e: React.MouseEvent) {
     e.preventDefault();
+    e.stopPropagation();
     navigator.clipboard.writeText(`${window.location.origin}/stories/${story.id}/share`).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   }
 
-  return (
-    <div className="bg-white rounded-2xl shadow-card overflow-hidden flex flex-col group">
-      <div className={`aspect-[4/3] bg-gradient-to-br ${meta.gradient} flex items-center justify-center relative overflow-hidden`}>
-        {story.coverImageUrl ? (
-          <img src={story.coverImageUrl} alt={story.title ?? "Episode"} className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-6xl">{meta.emoji}</span>
-        )}
-        <div className="absolute top-3 right-3">
-          {isReady
-            ? <span className="bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">✓ Ready</span>
-            : story.status === "failed"
-            ? <span className="bg-red-100 text-red-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">✗ Failed</span>
-            : <span className="bg-gold-light/50 text-gold-dark text-xs font-semibold px-2.5 py-0.5 rounded-full animate-pulse">⏳ Generating…</span>
-          }
+  const cardInner = (
+    // Comic book cover — portrait 2:3 ratio, full bleed art, text overlaid
+    <div className={`relative w-full aspect-[2/3] bg-gradient-to-b ${meta.gradient} overflow-hidden flex flex-col select-none transition-all duration-200 group-hover:brightness-110`}
+      style={{ boxShadow: `0 0 0 3px ${meta.accent}40, 0 8px 32px rgba(0,0,0,0.6)` }}>
+
+      {/* ── Cover art / placeholder ── */}
+      {story.coverImageUrl ? (
+        <img
+          src={story.coverImageUrl}
+          alt={story.title ?? "Episode"}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-8xl opacity-20">{meta.emoji}</span>
         </div>
-        {isReady && (
-          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
-            <a href={`/stories/${story.id}`} className="bg-white text-ink font-bold text-sm px-5 py-2 rounded-full hover:bg-gold hover:text-white transition">
-              ▶ Read Episode
-            </a>
+      )}
+
+      {/* ── Dark gradient overlay — bottom-heavy for text readability ── */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/50 pointer-events-none" />
+
+      {/* ── TOP BANNER — publisher strip ── */}
+      <div className="relative z-10 flex items-stretch">
+        {/* Left logo cell */}
+        <div className={`${meta.bannerColor} px-2 py-1 flex flex-col items-center justify-center min-w-[38px] border-r-2 border-black/20`}>
+          <span className="text-white font-black text-[8px] leading-tight text-center tracking-widest uppercase">HERO</span>
+          <span className="text-white font-black text-[8px] leading-tight text-center tracking-widest uppercase">KIDS</span>
+        </div>
+        {/* Banner label */}
+        <div className={`${meta.bannerColor} flex-1 px-2 py-1 flex items-center`}>
+          <span className="text-white font-black text-[9px] tracking-[0.2em] uppercase leading-none">
+            {story.universeId ? "Universe Edition" : "Classic Story"}
+          </span>
+        </div>
+        {/* Episode badge */}
+        {episodeNumber !== undefined && (
+          <div className="bg-yellow-400 px-2 py-1 flex items-center justify-center">
+            <span className="text-black font-black text-[8px] tracking-widest uppercase leading-none whitespace-nowrap">
+              EP {episodeNumber}
+            </span>
           </div>
         )}
       </div>
-      <div className="p-4 flex flex-col flex-1">
-        <h3 className="font-[family-name:var(--font-display)] text-ink text-base mb-1 line-clamp-1">
+
+      {/* ── Status badge — top right ── */}
+      {(isFailed || isGenerating) && (
+        <div className="absolute top-8 right-2 z-20">
+          {isFailed
+            ? <span className="bg-red-600 text-white text-[9px] font-black px-2 py-0.5 uppercase tracking-wider border border-red-400">Failed</span>
+            : <span className="bg-yellow-400 text-black text-[9px] font-black px-2 py-0.5 uppercase tracking-wider animate-pulse">Creating…</span>
+          }
+        </div>
+      )}
+
+      {/* ── BOTTOM CONTENT — title block ── */}
+      <div className="relative z-10 mt-auto px-3 pt-2 pb-3">
+        {/* Theme subtitle line */}
+        <div className="flex items-center gap-1 mb-1">
+          <div className="h-px flex-1" style={{ background: meta.accent }} />
+          <span className="text-[9px] font-black tracking-[0.25em] uppercase leading-none px-1.5"
+            style={{ color: meta.accent }}>
+            {meta.emoji} {meta.label}
+          </span>
+          <div className="h-px flex-1" style={{ background: meta.accent }} />
+        </div>
+
+        {/* Main title — bold like a comic cover */}
+        <h3 className="font-[family-name:var(--font-display)] text-white leading-none mb-1.5 line-clamp-2"
+          style={{
+            fontSize: 'clamp(1rem, 5vw, 1.4rem)',
+            textShadow: '2px 2px 0 rgba(0,0,0,0.8), 0 0 20px rgba(0,0,0,0.5)',
+            WebkitTextStroke: '0.3px rgba(255,255,255,0.2)',
+          }}>
           {story.title ?? (isReady ? "Untitled Episode" : "Generating…")}
         </h3>
-        <span className="bg-brand-50 text-brand text-xs font-semibold px-2 py-0.5 rounded-full w-fit mb-3">
-          {meta.emoji} {meta.label}
-        </span>
+
+        {/* Cliffhanger teaser */}
         {story.cliffhanger && (
-          <p className="text-ink-muted text-xs italic line-clamp-2 mb-3 border-l-2 border-gold/40 pl-2">{story.cliffhanger}</p>
+          <p className="text-white/60 text-[10px] italic line-clamp-1 mb-2 font-medium">
+            "{story.cliffhanger}"
+          </p>
         )}
-        <div className="mt-auto flex items-center gap-2 flex-wrap">
+
+        {/* Action row */}
+        <div className="flex items-center gap-1.5 mt-1">
           {isReady && (
-            <button type="button" onClick={handleShare}
-              className="flex items-center gap-1 text-xs font-semibold bg-ink/5 hover:bg-brand hover:text-white text-ink-mid px-3 py-1.5 rounded-full transition-all">
-              <Share2 className="w-3 h-3" />
-              {copied ? "Copied!" : "Share"}
-            </button>
+            <>
+              <span className="text-[9px] font-black text-white/90 bg-white/10 border border-white/20 px-2 py-1 uppercase tracking-wide">
+                ▶ Read Now
+              </span>
+              <button type="button" onClick={handleShare}
+                className="text-[9px] font-black text-white/70 hover:text-white bg-white/10 hover:bg-white/20 border border-white/20 px-2 py-1 uppercase tracking-wide transition-all ml-auto">
+                {copied ? "✓ Copied" : "↗ Share"}
+              </button>
+            </>
           )}
-          {story.status === "failed" && (
-            <a href="/create" className="text-brand text-xs underline">Retry →</a>
+          {isFailed && (
+            <a href="/create" onClick={e => e.stopPropagation()}
+              className="text-[9px] font-black text-white bg-red-600 hover:bg-red-500 px-2 py-1 uppercase tracking-wide transition-all">
+              Retry →
+            </a>
           )}
-          {!isReady && story.status !== "failed" && (
-            <a href={`/stories/${story.id}`} className="text-brand text-xs underline">View progress →</a>
+          {isGenerating && (
+            <a href={`/stories/${story.id}`} onClick={e => e.stopPropagation()}
+              className="text-[9px] font-black text-black bg-yellow-400 hover:bg-yellow-300 px-2 py-1 uppercase tracking-wide transition-all">
+              View Progress →
+            </a>
           )}
-          <div className="ml-auto">
+
+          {/* Delete */}
+          <div className="ml-auto" onClick={e => e.stopPropagation()}>
             {confirming ? (
               <div className="flex items-center gap-1">
-                <button type="button" onClick={() => onDelete(story.id)} className="text-xs text-red-600 font-semibold hover:underline">Confirm</button>
-                <span className="text-ink-muted text-xs">/</span>
-                <button type="button" onClick={() => setConfirming(false)} className="text-xs text-ink-muted hover:text-ink">Cancel</button>
+                <button type="button" onClick={() => onDelete(story.id)} className="text-[9px] text-red-400 font-black hover:text-red-300 uppercase tracking-wide">Del</button>
+                <button type="button" onClick={() => setConfirming(false)} className="text-[9px] text-white/40 hover:text-white uppercase tracking-wide">✕</button>
               </div>
             ) : (
-              <button type="button" onClick={() => setConfirming(true)} className="text-ink-muted hover:text-red-500 transition p-1 rounded-lg hover:bg-red-50">
-                <Trash2 className="w-3.5 h-3.5" />
+              <button type="button" onClick={() => setConfirming(true)}
+                className="text-white/30 hover:text-red-400 transition p-0.5">
+                <Trash2 className="w-3 h-3" />
               </button>
             )}
           </div>
         </div>
       </div>
+
     </div>
+  );
+
+  return isReady ? (
+    <a href={`/stories/${story.id}`} className="block group">
+      {cardInner}
+    </a>
+  ) : (
+    <div className="block group">{cardInner}</div>
   );
 }
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-2xl shadow-card overflow-hidden animate-pulse">
-      <div className="aspect-[4/3] bg-ink/10" />
-      <div className="p-4 space-y-2">
-        <div className="h-3 bg-ink/10 rounded w-3/4" />
-        <div className="h-2 bg-ink/10 rounded w-1/3" />
+    <div className="bg-[#1a1a2e] overflow-hidden animate-pulse" style={{ boxShadow: '0 0 0 3px rgba(124,58,237,0.2), 0 8px 32px rgba(0,0,0,0.6)' }}>
+      <div className="h-6 bg-purple-900/60" />
+      <div className="aspect-[2/3] bg-ink/20 flex items-end p-3">
+        <div className="w-full space-y-2">
+          <div className="h-2 bg-white/10 rounded w-1/2 mx-auto" />
+          <div className="h-5 bg-white/20 rounded w-3/4" />
+          <div className="h-5 bg-white/20 rounded w-full" />
+          <div className="h-6 bg-white/10 rounded w-24 mt-2" />
+        </div>
       </div>
     </div>
   );
@@ -310,7 +393,7 @@ function WalletBar({ user, onToggleTopUp }: { user: WalletUser; showTopUp?: bool
   );
 }
 
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 4;
 
 function UniverseSection({
   universe,
@@ -386,9 +469,9 @@ function UniverseSection({
         </div>
       ) : (
         <>
-          <div className="ml-11 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-            {visible.map((story) => (
-              <EpisodeCard key={story.id} story={story} onDelete={onDelete} />
+          <div className="ml-11 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+            {visible.map((story, i) => (
+              <EpisodeCard key={story.id} story={story} onDelete={onDelete} episodeNumber={page * PAGE_SIZE + i + 1} />
             ))}
           </div>
           {totalPages > 1 && (
@@ -434,9 +517,9 @@ function StandaloneSection({ stories, onDelete }: { stories: Story[]; onDelete: 
           <Plus className="w-3.5 h-3.5" /> New Story
         </a>
       </div>
-      <div className="ml-11 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {visible.map((story) => (
-          <EpisodeCard key={story.id} story={story} onDelete={onDelete} />
+      <div className="ml-11 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+        {visible.map((story, i) => (
+          <EpisodeCard key={story.id} story={story} onDelete={onDelete} episodeNumber={page * PAGE_SIZE + i + 1} />
         ))}
       </div>
       {totalPages > 1 && (
@@ -564,8 +647,9 @@ export default function DashboardPage() {
           ...(newUnivTagline.trim()   ? { tagline:   newUnivTagline.trim()   } : {}),
         }),
       });
+      if (res.status === 401) { router.push("/login"); return; }
       const { data } = await res.json();
-      if (!res.ok || !data?.id) throw new Error(data?.message ?? "Failed to create universe");
+      if (!res.ok || !data?.id) throw new Error(Array.isArray(data?.message) ? data.message.join(", ") : (data?.message ?? "Failed to create universe"));
       setShowNewUniverse(false);
       setNewUnivName(""); setNewUnivHeroTitle(""); setNewUnivTagline("");
       router.push(`/create?universeId=${data.id}`);
@@ -586,6 +670,7 @@ export default function DashboardPage() {
       return next;
     });
     setStandaloneStories((prev) => prev.filter((s) => s.id !== id));
+    setJobs((prev) => prev.filter((j) => j.storyId !== id));
   }
 
   useEffect(() => {
@@ -607,6 +692,7 @@ export default function DashboardPage() {
 
   const totalEpisodes = allStories.filter((s) => s.status === "completed").length;
   const totalPowers   = universes.reduce((acc, u) => acc + (u.powers?.length ?? 0), 0);
+  const totalVillains = universes.reduce((acc, u) => acc + (u.memories?.filter((m) => m.type === "villain_defeated").length ?? 0), 0);
   const activeJobs    = jobs.filter((j) => !TERMINAL.has(j.status));
 
   return (
@@ -663,11 +749,18 @@ export default function DashboardPage() {
               <span className="font-[family-name:var(--font-display)] text-white text-2xl">{totalEpisodes}</span>
               <span className="text-white/50 text-xs">Episodes</span>
             </div>
-            <div className="flex flex-col items-center gap-1 bg-white/8 border border-white/10 rounded-2xl px-6 py-4 min-w-[90px]">
+            <a href="/universe?tab=powers"
+              className="flex flex-col items-center gap-1 bg-white/8 border border-white/10 rounded-2xl px-6 py-4 min-w-[90px] hover:bg-white/15 hover:border-white/20 transition-colors">
               <Zap className="w-4 h-4 text-gold" />
               <span className="font-[family-name:var(--font-display)] text-white text-2xl">{totalPowers || "—"}</span>
-              <span className="text-white/50 text-xs">Powers</span>
-            </div>
+              <span className="text-white/50 text-xs">Powers →</span>
+            </a>
+            <a href="/universe?tab=villains"
+              className="flex flex-col items-center gap-1 bg-white/8 border border-white/10 rounded-2xl px-6 py-4 min-w-[90px] hover:bg-white/15 hover:border-white/20 transition-colors">
+              <Sword className="w-4 h-4 text-red-400" />
+              <span className="font-[family-name:var(--font-display)] text-white text-2xl">{totalVillains || "—"}</span>
+              <span className="text-white/50 text-xs">Villains →</span>
+            </a>
             <a href="/characters"
               className="flex flex-col items-center gap-1 bg-white/8 border border-white/10 rounded-2xl px-6 py-4 min-w-[90px] hover:bg-white/15 hover:border-white/20 transition-colors">
               <Users className="w-4 h-4 text-brand" />
@@ -697,8 +790,8 @@ export default function DashboardPage() {
       <main className="flex-1 max-w-7xl mx-auto px-6 py-10 w-full">
 
         {fetching ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-            {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
           </div>
         ) : (
           <>

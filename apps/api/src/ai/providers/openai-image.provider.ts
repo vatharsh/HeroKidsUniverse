@@ -11,6 +11,8 @@ import {
   ImageGenerationInput,
   ImageGenerationOutput,
   ImageGenerationProvider,
+  SpeechBubbleLayoutInput,
+  SpeechBubbleLayoutResult,
 } from '../interfaces/image-generation.provider';
 import type { CharacterIdentity } from '../../heroes/hero.entity';
 import { PromptRegistryService } from '../prompt-registry.service';
@@ -62,8 +64,8 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
 
   private getIdentityQaFallback(heroName: string): string {
     return (
-      `Both images are in cartoon/storybook illustration style — that is expected and must NOT lower the score.\n` +
-      `Image 1 is the approved cartoon avatar of a child named ${heroName}. ` +
+      `Both images are in a stylised storybook illustration style — that is expected and must NOT lower the score.\n` +
+      `Image 1 is the approved avatar of a child named ${heroName}. ` +
       `Image 2 is a generated storybook scene that must depict the same child.\n` +
       `Judge IDENTITY ONLY: face shape, skin tone, hairstyle, hair colour, eye shape, age appearance, distinctive features (glasses, dimples, etc.), and overall resemblance.\n` +
       `Ignore differences in background, pose, lighting, and clothing unless they conceal or significantly alter the face.\n` +
@@ -548,23 +550,38 @@ Description to parse:
     const registryRules = await this.getPromptTemplateText('avatar_generation');
 
     const prompt = [
-      `Create a HeroKids storybook avatar portrait in ${AVATAR_STYLE}.`,
-      'IDENTITY PRESERVATION IS THE TOP PRIORITY — the output must be instantly recognisable as the same person, illustrated in cartoon storybook style:',
-      '• Keep the exact face shape, facial proportions, and bone structure.',
-      '• Keep the exact skin tone and complexion.',
-      '• Keep the exact hairstyle, hair colour, hair length, and hair texture — do not alter it in any way.',
-      '• Keep the exact eye shape, eye colour, and gaze direction.',
-      '• Keep the exact facial expression and emotion.',
-      '• Keep any distinctive features: glasses, freckles, dimples, moles, birthmarks, braces.',
-      '• Keep the same age appearance.',
-      'Allowed changes ONLY: apply the cartoon illustration style; replace the background with a clean soft-gradient or neutral studio background.',
+      'TASK: Style-transfer this photo into a cartoon storybook portrait. You are changing the RENDERING STYLE only — not the person, not their face, not any feature. Think of it as painting the same face in a cartoon medium.',
+      '',
+      'FACE GEOMETRY — PRESERVE EXACTLY (do not alter any of these):',
+      '• Face shape and silhouette: oval / round / square / heart / long — keep as-is',
+      '• Facial proportions: face width-to-height ratio, forehead height, jaw width and chin shape',
+      '• Nose: bridge width, tip shape, nostril width — exact',
+      '• Lips: fullness, cupid\'s bow shape, width relative to face — exact',
+      '• Eyes: size, spacing, tilt/slant, corner shape, single/double lid, depth — exact',
+      '• Eyebrows: arch height, thickness, spacing, length — exact',
+      '• Skin tone and undertone — exact same shade',
+      '• Age appearance — do NOT make younger or smoother',
+      '• Any distinctive features: glasses, beard, moustache, freckles, dimples, moles, birthmarks, braces',
+      '',
+      'HAIR — PRESERVE EXACTLY:',
+      '• Hairstyle, parting, volume, length, and texture — exact',
+      '• Hair colour — exact same shade, do NOT lighten or darken',
+      '',
+      'WHAT YOU MAY CHANGE (rendering style only):',
+      '• Apply warm 2D cartoon storybook illustration style',
+      '• Smooth photo-realistic skin texture into clean cartoon shading',
+      '• Replace the background with a soft neutral gradient studio background',
+      '• Add gentle cartoon warmth and brightness to the lighting',
+      '',
+      `STYLE TARGET: ${AVATAR_STYLE}`,
+      '',
+      'DO NOT: normalise, idealise, smooth out, Pixar-ify, or alter the face geometry in any way. If a stranger compared the reference photo and the output side-by-side, they must immediately say "same person."',
       registryRules
-        ? `ACTIVE PROMPT REGISTRY AVATAR RULES:\n${registryRules}`
+        ? `ADDITIONAL RULES FROM ADMIN:\n${registryRules}`
         : '',
-      'The result must serve as the character reference for story page illustrations — same style, so the avatar composites naturally onto story scenes.',
       adjustmentLine,
-      input.role ? `Role context (do not change appearance for this — it is only for subtle heroic confidence in the pose): ${input.role}.` : '',
-      'Single portrait, head and shoulders, no text, no watermark, no border.',
+      input.role ? `Character role (use only for subtle pose confidence — do NOT change any appearance): ${input.role}.` : '',
+      'Output: single portrait, head and shoulders, centred, no text, no watermark, no border.',
     ].filter(Boolean).join('\n');
 
     try {
@@ -657,6 +674,82 @@ Description to parse:
       return result;
     } catch (err) {
       this.logger.warn(`checkFaceConsistency failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
+  async locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null> {
+    if (!input.speechBubbles.length) return { bubbles: [] };
+
+    try {
+      let imageUrl = input.imageUrl;
+      // OpenAI Vision can't fetch localhost URLs in dev — prefer base64 when the URL is local
+      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(imageUrl ?? '');
+      if ((!imageUrl || isLocalhost) && input.imageBase64) {
+        imageUrl = `data:image/png;base64,${input.imageBase64}`;
+      }
+      if (!imageUrl) return null;
+
+      const prompt = [
+        'You are a comic layout assistant. Inspect this story illustration and place speech bubbles accurately.',
+        'Return normalized percentage coordinates from 0 to 100 relative to the full image.',
+        'For each requested bubble, identify the speaker character and estimate the mouth or lower-face anchor point.',
+        'Then choose a safe bubble rectangle that stays inside the image, is close to the speaker, does not cover the speaker face/eyes/mouth/hands or the main action, and leaves the text readable.',
+        'The app will draw the bubble tail from the bubble edge to anchorPoint.',
+        'If the exact mouth is hard to see, use lower-face/head-center fallback and lower confidence.',
+        'Return one result per requested bubble, in the same order. Do not invent extra bubbles.',
+        '',
+        `Page: ${input.pageNumber}`,
+        input.sceneDescription ? `Scene: ${input.sceneDescription}` : '',
+        `Character directions: ${JSON.stringify(input.characterDirections ?? [])}`,
+        `Requested bubbles: ${JSON.stringify(input.speechBubbles)}`,
+        '',
+        'Return ONLY valid JSON:',
+        '{"bubbles":[{"speakerName":"Name","text":"Line","anchorPoint":{"x":72,"y":46},"bubbleRect":{"x":8,"y":8,"width":36,"height":18},"confidence":0.86,"reason":"speaker on right, bubble placed upper left"}]}',
+      ].filter(Boolean).join('\n');
+
+      const response = await this.client.chat.completions.create({
+        model: this.config.get<string>('OPENAI_VISION_LAYOUT_MODEL') ?? 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: imageUrl, detail: 'high' } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+        max_tokens: 500,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return null;
+
+      const parsed = JSON.parse(content) as SpeechBubbleLayoutResult;
+      const clamp = (value: unknown, min: number, max: number, fallback: number) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+      };
+
+      return {
+        bubbles: (parsed.bubbles ?? []).slice(0, input.speechBubbles.length).map((bubble, index) => ({
+          speakerName: bubble.speakerName || input.speechBubbles[index]?.speakerName || '',
+          text: bubble.text || input.speechBubbles[index]?.text || '',
+          anchorPoint: {
+            x: clamp(bubble.anchorPoint?.x, 3, 97, 50),
+            y: clamp(bubble.anchorPoint?.y, 3, 97, 50),
+          },
+          bubbleRect: {
+            x: clamp(bubble.bubbleRect?.x, 2, 82, 8),
+            y: clamp(bubble.bubbleRect?.y, 2, 82, 8),
+            width: clamp(bubble.bubbleRect?.width, 24, 48, 36),
+            height: clamp(bubble.bubbleRect?.height, 10, 28, 16),
+          },
+          confidence: clamp(bubble.confidence, 0, 1, 0.5),
+          reason: bubble.reason,
+        })),
+      };
+    } catch (err) {
+      this.logger.warn(`locateSpeechBubbleAnchors failed: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
   }

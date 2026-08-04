@@ -32,8 +32,8 @@ const SEED_PROMPTS: Array<{
       required: ['heroName', 'heroAge', 'heroGender', 'heroRef', 'pageCount', 'sceneCount', 'climaxPage', 'supportingCharactersLine', 'visualIdentityLines', 'sceneEntries'],
       optional: ['customStoryDirective', 'themeDescriptionLine', 'universeSection', 'visualStateSection', 'storySourceLine'],
     },
-    seedVersion: 3,
-    changeNotes: 'v3 — thought bubbles allowed (bubbleStyle: thinking, max 1 per page, max 10 words, first person); defaultModel upgraded to gemini-2.5-flash.',
+    seedVersion: 4,
+    changeNotes: 'v4 — engagement rules (every supporting character speaks + actively helps); participation moment (1 per story, type riddle/predict/guess/choose); imageVariant per page (reuse vs expression) to reduce rendering cost; max 10 pages enforced.',
     promptText: `You are a creative children's storybook author for HeroKids Universe.
 {{customStoryDirective}}
 Hero details:
@@ -67,6 +67,24 @@ STORYTELLING RULES:
 - In characters: always describe the expression and pose for the main hero on every page
 - Thought bubbles (bubbleStyle: "thinking"): use sparingly — max 1 per story — for a moment of genuine inner emotion or decision
 
+ENGAGEMENT RULES:
+- Every named supporting character MUST speak at least ONE line of dialogue in a speech bubble somewhere in the story — no silent extras.
+- Each supporting character must actively contribute to the plot: give a clue, solve a riddle, distract the villain, use a special skill, or help the hero escape — their presence must matter and be plot-relevant.
+- The hero must react to their help with a genuine spoken line or thought bubble — not just narrative description.
+- Characters created from real photos are the stars; every person added to the story must feel like a participant, not wallpaper.
+- Max 10 pages total. Every single page must move the plot forward — no filler pages showing characters simply walking or talking without plot consequence.
+
+PARTICIPATION MOMENT RULE (REQUIRED):
+- The story MUST contain exactly ONE participation moment — usually on page 3, 4, or 5 (the mid-adventure turning point).
+- A participation moment pauses the action and directly invites the reader to think before the story continues:
+  * type "riddle" — the villain, environment, or magical object presents a riddle; the page text asks the reader to try solving it before turning the page
+  * type "predict" — an uncertain moment; the text asks "What do YOU think will happen?" or "What would you do here?"
+  * type "guess" — a hidden clue or mystery object; the reader guesses what it is before the next page reveals the answer
+  * type "choose" — the hero faces exactly two paths; the reader is invited to pick before the story reveals which the hero chose
+- The page text must weave the participation naturally into narration (e.g. "Can YOU figure out the riddle before Arjun does?").
+- On exactly ONE page set "participationMoment": { "type": "...", "prompt": "Direct question ≤ 20 words aimed at reader", "hint": "Optional one-sentence clue" }.
+- On ALL other pages set "participationMoment": null.
+
 CRITICAL SCENE DESCRIPTION RULE:
 Each sceneDescription must describe EVERY character who appears with their FULL visual identity locked in parentheses — age, skin tone, hair, clothing, and current expression. Use the canonical identity above. Repeat the full description every time a character appears (even if they appeared on previous pages) — the illustrator sees only one page at a time.
 Example: "Siddhant (8-year-old boy, warm brown skin, short straight black hair, black t-shirt, excited wide grin) reaches toward the glowing stone, while his father (40s Indian man, medium brown skin, short black hair with slight grey, white collared shirt, warm proud smile) watches from behind."
@@ -77,6 +95,12 @@ SCENE RULES:
 - Scene 1 must be the most visually striking — it doubles as the story cover.
 - Each scene must look visually DISTINCT from every other scene — different location, lighting, composition, or action.
 - NEVER reuse the same setting, character grouping, or colour palette across two consecutive scenes.
+
+IMAGE VARIANT RULE:
+- Every page must include "imageVariant": either "reuse" or "expression".
+- "reuse" — the characters are in essentially the same positions and expressions as the scene's main illustration; only speech bubbles change. ALWAYS use "reuse" for the FIRST page of every scene (it IS the scene image). Use "reuse" whenever dialogue changes but no significant visual change occurs.
+- "expression" — character expressions, poses, or positions differ noticeably from the scene's main illustration; a new expression-variant image must be rendered.
+- Mark "expression" only when there is a genuine visible change (e.g. a character goes from confident to scared, a new action starts, a character enters or exits the frame). This controls rendering cost — be conservative.
 
 ILLUSTRATION BRIEF RULES (for the illustrationBrief field):
 - Start with composition style: "WIDE CINEMATIC:" or "DYNAMIC ACTION:" or "INTIMATE SCENE:" or "CLOSE-UP PORTRAIT:"
@@ -170,7 +194,9 @@ dialogue: spoken lines or internal thoughts (use "thinking" bubbleStyle for thou
 storyVisualState: for universe stories this reflects the hero's current look; for standalone stories design it to match the theme.
 characterDirections: required for every page; at minimum include the hero with expression and pose.
 speechBubbles: structured dialogue metadata; also echo in dialogue array for backward compat.
-storyStateUpdate: required on every page; use empty arrays when nothing changes.`,
+storyStateUpdate: required on every page; use empty arrays when nothing changes.
+imageVariant: required on every page — "reuse" (same visual as scene base, only bubbles change) or "expression" (genuine visual change, new image needed). First page of every scene must be "reuse".
+participationMoment: required on every page — null on most pages; exactly ONE page must have { "type": "riddle"|"predict"|"guess"|"choose", "prompt": "≤20-word question for reader", "hint": "optional clue" }.`,
   },
 
   {
@@ -208,10 +234,10 @@ Child-safe, joyful and adventurous atmosphere. NO text, NO words, NO letters, NO
     provider: 'openai',
     defaultModel: 'gpt-4o-mini',
     variablesJson: { required: ['heroName'] },
-    seedVersion: 2,
-    changeNotes: 'Initial seed — extracted from OpenAIImageProvider.checkFaceConsistency(). Code reads this at runtime.',
-    promptText: `Both images are in cartoon/storybook illustration style — that is expected and must NOT lower the score.
-Image 1 is the approved cartoon avatar of a child named {{heroName}}. Image 2 is a generated storybook scene that must depict the same child.
+    seedVersion: 3,
+    changeNotes: 'sv3 — removed cartoon language; images are now semi-realistic cinematic 3D (Pixar/DreamWorks style).',
+    promptText: `Both images are in a stylised storybook illustration style — that is expected and must NOT lower the score.
+Image 1 is the approved avatar of a child named {{heroName}}. Image 2 is a generated storybook scene that must depict the same child.
 Judge IDENTITY ONLY: face shape, skin tone, hairstyle, hair colour, eye shape, age appearance, distinctive features (glasses, dimples, etc.), and overall resemblance.
 Ignore differences in background, pose, lighting, and clothing unless they conceal or significantly alter the face.
 Score consistency 1–10 (10 = same child unmistakably, 1 = completely different child).
@@ -329,24 +355,27 @@ Return a single dense paragraph (60–100 words). Do not use bullet points.`,
     promptType: 'narration',
     provider: 'openai',
     defaultModel: 'gpt-4o-mini-tts',
-    variablesJson: { required: ['pageText'], optional: ['voice', 'speedRatio', 'accentStyle', 'tone'] },
-    seedVersion: 1,
-    changeNotes: 'Initial seed — TTS instructions managed via platform settings (TTS_VOICE, TTS_SPEED_RATIO, TTS_ACCENT_STYLE, TTS_TONE).',
-    promptText: `[TTS INSTRUCTIONS — v1.0]
-Voice: {{voice}} (OpenAI TTS voice name)
-Speed: {{speedRatio}}
-Accent style: {{accentStyle}}
-Tone: {{tone}}
+    variablesJson: { required: [], optional: ['voice', 'speedRatio', 'accentStyle', 'tone'] },
+    seedVersion: 2,
+    changeNotes: 'v2 — rewritten as directive Indian English TTS instructions; removed redundant pageText from instructions (text is passed separately as input).',
+    promptText: `Speak with a warm, natural Indian English accent — the kind you would hear from a loving Indian parent or grandparent telling a bedtime story to a young child.
 
-Narration text to synthesise:
-{{pageText}}
+Accent and pronunciation:
+- Indian English accent throughout — clear, slightly syllable-timed rhythm (not stress-timed American English)
+- Gentle rising-and-falling intonation at the end of sentences — not flat or American
+- Pure vowel sounds: open "a", clear "i" and "e" — avoid American diphthong drawl
+- Consonants are crisp and precise, not swallowed
 
-Delivery guidelines:
-- Clear neutral Indian English, like a warm Indian parent or grandparent telling a bedtime story
-- Natural Indian pronunciation and rhythm; avoid American audiobook vowel sounds and British documentary style
-- Medium-slow pace for children aged 5–12, with clear syllables
-- Bedtime story tone: soothing but animated enough to hold a child's attention
-- Emphasise character names and action words with gentle energy`,
+Delivery:
+- Pace: medium-slow — unhurried, every word lands clearly for a child aged 5 to 12
+- Tone: {{tone}} — warm, friendly, soothing but animated enough to hold a child's attention
+- Gently stress character names and exciting action words
+- Pause briefly after commas and full stops to let children follow along
+
+Avoid entirely:
+- American audiobook accent, American "r-coloured" vowels, or flat American intonation
+- British RP or documentary narration style
+- Over-dramatic or theatrical Western storytelling`,
   },
 
   {

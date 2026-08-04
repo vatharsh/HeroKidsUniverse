@@ -1,6 +1,6 @@
 import { IsDateString, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
-export const CHARACTER_ROLES = ['friend', 'sibling', 'pet', 'villain', 'other'] as const;
+export const CHARACTER_ROLES = ['friend', 'sibling', 'family', 'pet', 'villain', 'other'] as const;
 export type CharacterRole = (typeof CHARACTER_ROLES)[number];
 
 export class CreateCharacterDto {
@@ -20,4 +20,8 @@ export class CreateCharacterDto {
   @IsOptional()
   @IsString()
   avatarUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  relationship?: string;
 }

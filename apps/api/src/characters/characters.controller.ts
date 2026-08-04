@@ -19,6 +19,7 @@ import { CharacterCanonService } from './character-canon.service';
 import { CharactersService } from './characters.service';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import { UpdateCharacterDto } from './dto/update-character.dto';
+import { UpsertVisualProfileDto } from './dto/upsert-visual-profile.dto';
 
 @Controller('characters')
 export class CharactersController {
@@ -55,6 +56,20 @@ export class CharactersController {
   @Get(':id/canon')
   getCharacterCanon(@Param('id') id: string) {
     return this.characterCanonService.getCanonForHero(id);
+  }
+
+  @Get(':id/profile')
+  getVisualProfile(@CurrentUser() currentUser: CurrentUserPayload, @Param('id') id: string) {
+    return this.charactersService.getVisualProfile(currentUser.id, id);
+  }
+
+  @Patch(':id/profile')
+  upsertVisualProfile(
+    @CurrentUser() currentUser: CurrentUserPayload,
+    @Param('id') id: string,
+    @Body() dto: UpsertVisualProfileDto,
+  ) {
+    return this.charactersService.upsertVisualProfile(currentUser.id, id, dto);
   }
 
   @Post(':id/avatar/refresh')

@@ -1552,6 +1552,64 @@ const QA_GROUPS: SettingGroup[] = [
   },
 ];
 
+const IMAGE_BACKEND_GROUP: SettingGroup = {
+  title: "Image Generation Backend",
+  description: "Switch image models without redeploying. Changes take effect within 30 seconds.",
+  items: [
+    {
+      key: "IMAGE_GENERATION_BACKEND",
+      label: "Story Image Backend",
+      description: "openai = gpt-image-1 (stable, well-tested) | gemini = Nano Banana 2 / gemini-3.1-flash-image (multi-reference, better face consistency).",
+      type: "string",
+    },
+    {
+      key: "AVATAR_GENERATION_BACKEND",
+      label: "Avatar Generation Backend",
+      description: "openai = gpt-image-1 (default, highest quality) | gemini = Nano Banana 2 / gemini-3.1-flash-image. Independent from story image backend.",
+      type: "string",
+    },
+    {
+      key: "OPENAI_IMAGE_QUALITY",
+      label: "OpenAI Image Quality",
+      description: "low | medium | high — only applies when backend = openai.",
+      type: "string",
+    },
+    {
+      key: "OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK",
+      label: "Allow Referenceless Generation",
+      description: "Generate images even when no avatar references are available.",
+      type: "boolean",
+    },
+    {
+      key: "OPENAI_IMAGE_COST_PER_IMAGE",
+      label: "OpenAI Cost Per Image (USD)",
+      description: "Used for spend tracking when backend = openai.",
+      type: "number",
+    },
+    {
+      key: "GEMINI_IMAGE_COST_PER_IMAGE",
+      label: "Gemini Cost Per Image (USD)",
+      description: "Used for spend tracking when backend = gemini (Nano Banana 2).",
+      type: "number",
+    },
+  ],
+};
+
+const NARRATION_GROUP: SettingGroup = {
+  title: "Narration / TTS",
+  description: "Switch TTS provider and voice without redeploying. Changes take effect within 30 seconds.",
+  items: [
+    { key: "TTS_PROVIDER",     label: "TTS Provider",     description: "openai = gpt-4o-mini-tts | gemini = gemini-2.5-flash-preview-tts. Gemini supports true Indian English accent.", type: "string" },
+    { key: "TTS_VOICE",        label: "OpenAI Voice",     description: "Voice used when TTS_PROVIDER=openai. Options: nova, alloy, echo, fable, onyx, shimmer.", type: "string" },
+    { key: "GEMINI_TTS_VOICE", label: "Gemini Voice",     description: "Voice used when TTS_PROVIDER=gemini. Options: Kore, Puck, Charon, Fenrir, Aoede, Zephyr. Kore = warm female storyteller.", type: "string" },
+    { key: "TTS_SPEED_RATIO",  label: "Speech Speed",     description: "TTS speech rate (0.25–4.0). 0.9 = slightly slower for children.", type: "number" },
+    { key: "TTS_ACCENT_STYLE", label: "Accent Style",     description: "Accent hint: indian_english | neutral_english.", type: "string" },
+    { key: "TTS_TONE",         label: "Narration Tone",   description: "Tone hint: warm_bedtime_story | energetic | calm.", type: "string" },
+    { key: "GEMINI_TTS_COST_PER_CHAR", label: "Gemini TTS Cost Per Char (USD)", description: "Used for spend tracking when TTS_PROVIDER=gemini. Default $0.000001875.", type: "number" },
+    { key: "OPENAI_TTS_COST_PER_CHAR", label: "OpenAI TTS Cost Per Char (USD)", description: "Used for spend tracking when TTS_PROVIDER=openai. Default $0.000015.", type: "number" },
+  ],
+};
+
 const BUDGET_GROUP: SettingGroup = {
   title: "Budget Protection",
   description: "Automatically cap AI spend per story and alert when daily/monthly limits are approached.",
@@ -1583,6 +1641,8 @@ const ADVANCED_GROUP: SettingGroup = {
 
 const ALL_SETTINGS_KEYS = [
   ...QA_GROUPS.flatMap(g => g.items.map(i => i.key)),
+  ...IMAGE_BACKEND_GROUP.items.map(i => i.key),
+  ...NARRATION_GROUP.items.map(i => i.key),
   ...BUDGET_GROUP.items.map(i => i.key),
   ...ADVANCED_GROUP.items.map(i => i.key),
   "QA_PRESET", "QA_RETRY_STRATEGY", "QA_MODE",
@@ -1622,7 +1682,7 @@ function SettingsTab() {
     if (loaded.current) return;
     loaded.current = true;
     setLoading(true);
-    apiFetch("/admin/platform-settings").then((arr: Array<{ key: string; value: string }>) => {
+    apiFetch("/admin/settings").then((arr: Array<{ key: string; value: string }>) => {
       const m: Record<string, string> = {};
       arr.forEach(({ key, value }) => { if (ALL_SETTINGS_KEYS.includes(key)) m[key] = value; });
       setSaved(m);
@@ -1865,6 +1925,12 @@ function SettingsTab() {
           </div>
         )}
       </div>
+
+      {/* ── Image Generation Backend ── */}
+      <SettingGroupCard group={IMAGE_BACKEND_GROUP} />
+
+      {/* ── Narration / TTS ── */}
+      <SettingGroupCard group={NARRATION_GROUP} />
 
       {/* ── Generation Behaviour ── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">

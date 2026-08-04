@@ -58,6 +58,9 @@ export class Hero {
   @Column({ type: 'text', nullable: true })
   characterSheetPrompt!: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  costumeDescription!: string | null;
+
   @Column({ type: 'jsonb', nullable: true })
   characterIdentity!: CharacterIdentity | null;
 

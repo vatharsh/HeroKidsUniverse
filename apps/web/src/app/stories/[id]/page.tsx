@@ -33,6 +33,7 @@ interface SpeechBubbleMeta {
   anchor?: "mouth" | "lower_face" | "head" | "upper_left" | "upper_right";
   anchorTarget?: "mouth" | "lower_face" | "head";
   anchorPoint?: { x: number; y: number };
+  faceSide?: 'left' | 'right';
   bubbleRect?: { x: number; y: number; width: number; height: number };
   layoutConfidence?: number;
   /** Legacy */
@@ -114,27 +115,31 @@ function getSpeechBubbles(page: StoryPage): Array<{
   layoutConfidence?: number;
 }> {
   if (page.speechBubbles && page.speechBubbles.length > 0) {
-    return page.speechBubbles.slice(0, 2).map((b) => ({
-      speakerName: b.speakerName,
-      text: b.text,
-      bubbleStyle: b.bubbleStyle ?? "normal",
-      preferredPosition: b.preferredPosition,
-      tailDirection: b.tailDirection,
-      placementHint: b.placementHint,
-      maxWidthPercent: b.maxWidthPercent,
-      anchorTarget: b.anchorTarget ?? b.anchor,
-      anchorPoint: b.anchorPoint,
-      bubbleRect: b.bubbleRect,
-      layoutConfidence: b.layoutConfidence,
-    }));
+    return page.speechBubbles
+      .filter((b) => b.text && b.text.trim().length > 0)
+      .slice(0, 2).map((b) => ({
+        speakerName: b.speakerName,
+        text: b.text,
+        bubbleStyle: b.bubbleStyle ?? "normal",
+        preferredPosition: b.preferredPosition,
+        tailDirection: b.tailDirection,
+        placementHint: b.placementHint,
+        maxWidthPercent: b.maxWidthPercent,
+        anchorTarget: b.anchorTarget ?? b.anchor,
+        anchorPoint: b.anchorPoint,
+        bubbleRect: b.bubbleRect,
+        layoutConfidence: b.layoutConfidence,
+      }));
   }
   if (page.dialogue && page.dialogue.length > 0) {
-    return page.dialogue.slice(0, 2).map((d) => ({
-      speakerName: d.speaker,
-      text: d.text,
-      bubbleStyle: d.bubbleStyle ?? "normal",
-      placementHint: d.placementHint,
-    }));
+    return page.dialogue
+      .filter((d) => d.text && d.text.trim().length > 0)
+      .slice(0, 2).map((d) => ({
+        speakerName: d.speaker,
+        text: d.text,
+        bubbleStyle: d.bubbleStyle ?? "normal",
+        placementHint: d.placementHint,
+      }));
   }
   return [];
 }
@@ -148,6 +153,59 @@ function findSpeakerDirection(page: StoryPage, speakerName?: string): PageCharac
     const name = c.name.toLowerCase();
     return name === speakerName.toLowerCase() || name.split(/\s+/)[0] === first;
   });
+}
+
+// When Gemini provides anchorPoint (face coordinates) but not bubbleRect, compute bubbleRect
+// here so the SVG connector tail can point from the bubble edge directly to the face.
+function enrichBubbleWithRect<T extends {
+  preferredPosition?: string;
+  maxWidthPercent?: number;
+  anchorPoint?: { x: number; y: number };
+  bubbleRect?: { x: number; y: number; width: number; height: number };
+}>(bubble: T, index: number): T {
+  if (bubble.bubbleRect || !bubble.anchorPoint) return bubble;
+
+  const w = Math.min(46, Math.max(30, bubble.maxWidthPercent ?? 40));
+  const h = 18;       // estimated % height of a rendered bubble
+  const tailGap = 10; // % gap between bubble edge and face — spans by SVG tail
+
+  const pos = bubble.preferredPosition ?? (index % 2 === 0 ? 'top-right' : 'top-left');
+  const isRight = pos.endsWith('right');
+  const isBottom = pos.startsWith('bottom');
+
+  const x = isRight ? Math.max(4, 95 - w) : 5;
+  const y = isBottom
+    ? Math.min(80, bubble.anchorPoint.y + tailGap)
+    : Math.max(4, bubble.anchorPoint.y - h - tailGap);
+
+  return { ...bubble, bubbleRect: { x, y, width: w, height: h } };
+}
+
+function hasPreciseBubbleLayout(page: StoryPage | undefined): boolean {
+  // anchorPoint alone is enough — enrichBubbleWithRect will compute bubbleRect at render time
+  return !!page?.speechBubbles?.some((b) => b.anchorPoint != null);
+}
+
+function getPreciseTailPoints(
+  bubble: { anchorPoint?: { x: number; y: number }; bubbleRect?: { x: number; y: number; width: number; height: number } },
+): { start: { x: number; y: number }; end: { x: number; y: number } } | null {
+  if (!bubble.anchorPoint || !bubble.bubbleRect) return null;
+  const rect = bubble.bubbleRect;
+  const anchor = bubble.anchorPoint;
+  const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  const dx = anchor.x - center.x;
+  const dy = anchor.y - center.y;
+  const start = { x: center.x, y: center.y };
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    start.x = dx > 0 ? rect.x + rect.width : rect.x;
+    start.y = Math.min(rect.y + rect.height - 3, Math.max(rect.y + 3, anchor.y));
+  } else {
+    start.y = dy > 0 ? rect.y + rect.height : rect.y;
+    start.x = Math.min(rect.x + rect.width - 4, Math.max(rect.x + 4, anchor.x));
+  }
+
+  return { start, end: anchor };
 }
 
 // Shared constants for hero avatar overlay positioning — used by both the avatar
@@ -195,17 +253,34 @@ function inferComicPlacement(
 
 function parsePlacementHint(
   page: StoryPage,
-  bubble: { speakerName?: string; preferredPosition?: string; tailDirection?: string; placementHint?: string; maxWidthPercent?: number } | undefined,
+  bubble: { speakerName?: string; preferredPosition?: string; tailDirection?: string; placementHint?: string; maxWidthPercent?: number; bubbleRect?: { x: number; y: number; width: number; height: number } } | undefined,
   index: number,
   _total: number,
   usedCorners: Set<string>,
   isOverlayMode: boolean,
 ): { posStyle: React.CSSProperties; tailUp: boolean; tailOnRight: boolean } {
+  if (bubble?.bubbleRect) {
+    const rect = bubble.bubbleRect;
+    return {
+      posStyle: {
+        position: "absolute",
+        left: `${rect.x}%`,
+        top: `${rect.y}%`,
+        width: `${rect.width}%`,
+        maxWidth: `${rect.width}%`,
+        zIndex: 25,
+      },
+      tailUp: false,
+      tailOnRight: false,
+    };
+  }
+
   const inferred = inferComicPlacement(page, bubble, index, usedCorners);
   const pos = bubble?.preferredPosition && !usedCorners.has(bubble.preferredPosition)
     ? bubble.preferredPosition
     : inferred.preferredPosition;
-  const tail = inferred.tailDirection;
+  // Prefer Gemini's explicit tailDirection over the inferred fallback
+  const tail = bubble?.tailDirection ?? inferred.tailDirection;
   usedCorners.add(pos); // mark corner as used so the next bubble avoids it
 
   const isTop = pos ? pos.startsWith("top") : true;
@@ -213,7 +288,9 @@ function parsePlacementHint(
 
   const maxWidth = Math.min(46, Math.max(32, bubble?.maxWidthPercent ?? 40));
   const posStyle: React.CSSProperties = { position: "absolute", maxWidth: `${maxWidth}%`, zIndex: 25 };
+
   if (isTop) { posStyle.top = "7%"; } else { posStyle.bottom = "10%"; }
+
   if (isRight) { posStyle.right = "6%"; } else { posStyle.left = "6%"; }
 
   // Overlay mode: for hero-speaker bubbles, tail points toward hero head position
@@ -244,9 +321,10 @@ interface BubbleProps {
   bubbleStyle: BubbleStyle;
   tailUp?: boolean;
   tailOnRight?: boolean;
+  hideTail?: boolean;
 }
 
-function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRight = false }: BubbleProps) {
+function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRight = false, hideTail = false }: BubbleProps) {
   const borderColor = bubbleStyle === "whisper" ? "#555" : "#000";
   const fillColor   = bubbleStyle === "surprised" ? "#fff9c4" : bubbleStyle === "whisper" ? "#f0f0f0" : "#fff";
 
@@ -265,26 +343,28 @@ function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRi
     }
   })();
 
-  const speakerColor = bubbleStyle === "surprised" ? "#b45309" : "#7c3aed";
+  const speakerPalette = ["#7c3aed","#dc2626","#16a34a","#2563eb","#d97706","#0891b2","#9333ea","#e11d48"];
+  const nameHash = (speakerName ?? '').split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) & 0xffff, 0);
+  const speakerColor = bubbleStyle === "surprised" ? "#b45309" : (speakerPalette[nameHash % speakerPalette.length] ?? "#7c3aed");
 
   // Shared horizontal position for both outer+inner tail triangles
-  const tailLeft  = tailOnRight ? undefined : 16;
-  const tailRight = tailOnRight ? 16 : undefined;
-  const innerLeft  = tailOnRight ? undefined : 17;
-  const innerRight = tailOnRight ? 17 : undefined;
+  const tailLeft  = tailOnRight ? undefined : 14;
+  const tailRight = tailOnRight ? 14 : undefined;
+  const innerLeft  = tailOnRight ? undefined : 16;
+  const innerRight = tailOnRight ? 16 : undefined;
 
   return (
     <div className="relative flex flex-col" style={{ display: "inline-flex", flexDirection: "column" }}>
       {/* Upward tail sits ABOVE the box — rendered before so it's visually behind */}
-      {!false && tailUp && bubbleStyle !== "thinking" && (
+      {!hideTail && tailUp && bubbleStyle !== "thinking" && (
         <>
-          <div className="absolute w-0 h-0" style={{ top: -10, left: tailLeft, right: tailRight, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: `11px solid ${borderColor}` }} />
-          <div className="absolute w-0 h-0" style={{ top: -7, left: innerLeft, right: innerRight, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: `9px solid ${fillColor}` }} />
+          <div className="absolute w-0 h-0" style={{ top: -16, left: tailLeft, right: tailRight, borderLeft: "12px solid transparent", borderRight: "12px solid transparent", borderBottom: `18px solid ${borderColor}` }} />
+          <div className="absolute w-0 h-0" style={{ top: -12, left: innerLeft, right: innerRight, borderLeft: "10px solid transparent", borderRight: "10px solid transparent", borderBottom: `15px solid ${fillColor}` }} />
         </>
       )}
-      {!false && tailUp && bubbleStyle === "thinking" && (
-        <div className="absolute flex gap-0.5" style={{ top: -14, left: tailLeft, right: tailRight }}>
-          {[3, 4, 6].map((size, idx) => (
+      {!hideTail && tailUp && bubbleStyle === "thinking" && (
+        <div className="absolute flex gap-0.5" style={{ top: -16, left: tailLeft, right: tailRight }}>
+          {[4, 5, 7].map((size, idx) => (
             <div key={idx} className="rounded-full bg-white border-[2px] border-black" style={{ width: size, height: size }} />
           ))}
         </div>
@@ -304,15 +384,15 @@ function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRi
       </div>
 
       {/* Downward tail */}
-      {!false && !tailUp && bubbleStyle !== "thinking" && (
+      {!hideTail && !tailUp && bubbleStyle !== "thinking" && (
         <>
-          <div className="absolute w-0 h-0" style={{ bottom: -10, left: tailLeft, right: tailRight, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `11px solid ${borderColor}` }} />
-          <div className="absolute w-0 h-0" style={{ bottom: -7, left: innerLeft, right: innerRight, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: `9px solid ${fillColor}` }} />
+          <div className="absolute w-0 h-0" style={{ bottom: -16, left: tailLeft, right: tailRight, borderLeft: "12px solid transparent", borderRight: "12px solid transparent", borderTop: `18px solid ${borderColor}` }} />
+          <div className="absolute w-0 h-0" style={{ bottom: -12, left: innerLeft, right: innerRight, borderLeft: "10px solid transparent", borderRight: "10px solid transparent", borderTop: `15px solid ${fillColor}` }} />
         </>
       )}
-      {!false && !tailUp && bubbleStyle === "thinking" && (
-        <div className="absolute flex gap-0.5" style={{ bottom: -14, left: tailLeft, right: tailRight }}>
-          {[6, 4, 3].map((size, idx) => (
+      {!hideTail && !tailUp && bubbleStyle === "thinking" && (
+        <div className="absolute flex gap-0.5" style={{ bottom: -16, left: tailLeft, right: tailRight }}>
+          {[7, 5, 4].map((size, idx) => (
             <div key={idx} className="rounded-full bg-white border-[2px] border-black" style={{ width: size, height: size }} />
           ))}
         </div>
@@ -848,11 +928,11 @@ export default function StoryReaderPage() {
           const bubbles = getSpeechBubbles(pg);
           return (
             <div key={pg.pageNumber} style={{ pageBreakInside: "avoid", marginBottom: 48 }}>
-              {/* Image + speech bubbles container */}
-              <div style={{ position: "relative", display: "inline-block", width: "100%" }}>
+              {/* Image + speech bubbles container — aspect-ratio matches interactive view so bubble % positions land correctly */}
+              <div style={{ position: "relative", width: "100%", aspectRatio: "376/499", borderRadius: 12, overflow: "hidden", marginBottom: 8 }}>
                 {pg.imageUrl && (
                   <img src={pg.imageUrl} alt={`Page ${pg.pageNumber}`}
-                    style={{ width: "100%", maxHeight: 340, objectFit: "contain", borderRadius: 12, display: "block" }} />
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 )}
                 {/* Speech bubbles overlay for print */}
                 {bubbles.length > 0 && (
@@ -861,16 +941,28 @@ export default function StoryReaderPage() {
                       const usedCorners = new Set<string>();
                       const isOverlayMode = !!pg.backgroundUrl;
                       return bubbles.map((bubble, i) => {
-                        const { posStyle, tailUp, tailOnRight } = parsePlacementHint(pg, bubble, i, bubbles.length, usedCorners, isOverlayMode);
+                        const enriched = enrichBubbleWithRect(bubble, i);
+                        const { posStyle, tailUp: fbUp, tailOnRight: fbRight } = parsePlacementHint(pg, enriched, i, bubbles.length, usedCorners, isOverlayMode);
+                        let tailUp = fbUp;
+                        let tailOnRight = fbRight;
+                        if (enriched.anchorPoint && enriched.bubbleRect) {
+                          const bx = enriched.bubbleRect.x + enriched.bubbleRect.width / 2;
+                          const by = enriched.bubbleRect.y + enriched.bubbleRect.height / 2;
+                          tailUp = enriched.anchorPoint.y < by;
+                          tailOnRight = enriched.anchorPoint.x > bx;
+                        }
                         return (
-                          <div key={i} style={posStyle}>
-                            <SpeechBubble
-                              speakerName={bubble.speakerName}
-                              text={bubble.text}
-                              bubbleStyle={bubble.bubbleStyle}
-                              tailUp={tailUp}
-                              tailOnRight={tailOnRight}
-                            />
+                          <div key={i}>
+                            <div style={posStyle}>
+                              <SpeechBubble
+                                speakerName={enriched.speakerName}
+                                text={enriched.text}
+                                bubbleStyle={enriched.bubbleStyle}
+                                tailUp={tailUp}
+                                tailOnRight={tailOnRight}
+                                hideTail={false}
+                              />
+                            </div>
                           </div>
                         );
                       });
@@ -886,8 +978,10 @@ export default function StoryReaderPage() {
       </div>
 
       {/* Top bar */}
-      <header className="no-print flex items-center justify-between px-6 py-4 bg-space/80 backdrop-blur border-b border-white/10">
-        <a href="/dashboard" className="text-white/60 hover:text-white text-sm transition">← My Stories</a>
+      <header className="no-print flex items-center justify-between px-4 py-3 bg-space/80 backdrop-blur border-b border-white/10">
+        <a href="/dashboard" className="flex-shrink-0 flex items-center gap-1 text-xs font-semibold bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-full transition-all">
+          ← Back
+        </a>
         <h1 className="font-[family-name:var(--font-display)] text-white text-lg text-center line-clamp-1 max-w-[180px]">
           {story.title ?? "My Story"}
         </h1>
@@ -1041,7 +1135,7 @@ export default function StoryReaderPage() {
                   src={currentPage.imageUrl}
                   alt={`Page ${page + 1}`}
                   className="absolute inset-0 w-full h-full object-contain z-10 transition-all duration-500"
-                  style={getCropStyle(currentPage.cropHint)}
+                  style={hasPreciseBubbleLayout(currentPage) ? {} : getCropStyle(currentPage.cropHint)}
                 />
               </>
             ) : (
@@ -1079,16 +1173,30 @@ export default function StoryReaderPage() {
               return (
                 <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 20 }}>
                   {bubbles.map((bubble, i) => {
-                    const { posStyle, tailUp, tailOnRight } = parsePlacementHint(currentPage, bubble, i, bubbles.length, usedCorners, isOverlayMode);
+                    const enriched = enrichBubbleWithRect(bubble, i);
+                    const { posStyle, tailUp: fallbackTailUp, tailOnRight: fallbackTailOnRight } = parsePlacementHint(currentPage, enriched, i, bubbles.length, usedCorners, isOverlayMode);
+                    // When anchorPoint is present, compute tail direction geometrically so the CSS
+                    // triangle points toward the face — avoids the giant SVG wedge.
+                    let tailUp = fallbackTailUp;
+                    let tailOnRight = fallbackTailOnRight;
+                    if (enriched.anchorPoint && enriched.bubbleRect) {
+                      const bx = enriched.bubbleRect.x + enriched.bubbleRect.width / 2;
+                      const by = enriched.bubbleRect.y + enriched.bubbleRect.height / 2;
+                      tailUp = enriched.anchorPoint.y < by;
+                      tailOnRight = enriched.anchorPoint.x > bx;
+                    }
                     return (
-                      <div key={i} style={posStyle}>
-                        <SpeechBubble
-                          speakerName={bubble.speakerName}
-                          text={bubble.text}
-                          bubbleStyle={bubble.bubbleStyle}
-                          tailUp={tailUp}
-                          tailOnRight={tailOnRight}
-                        />
+                      <div key={i}>
+                        <div style={posStyle}>
+                          <SpeechBubble
+                            speakerName={enriched.speakerName}
+                            text={enriched.text}
+                            bubbleStyle={enriched.bubbleStyle}
+                            tailUp={tailUp}
+                            tailOnRight={tailOnRight}
+                            hideTail={false}
+                          />
+                        </div>
                       </div>
                     );
                   })}

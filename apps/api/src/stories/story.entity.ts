@@ -164,6 +164,8 @@ export interface StoryVisualState {
   inventory: string[];
   transformation: string | null;
   currentLocation?: string;
+  // Per-character outfit lock: { "Vedant": "black hoodie, jeans", "Daadi": "purple saree" }
+  characterOutfits?: Record<string, string>;
 }
 
 export interface StoryScene {
@@ -226,6 +228,9 @@ export class Story {
 
   @Column({ type: 'jsonb', nullable: true })
   characterIds!: string[] | null;
+
+  @Column({ type: 'boolean', nullable: true, default: null })
+  skipCompanion!: boolean | null;
 
   @Column({ type: 'smallint', default: 1 })
   creditsUsed!: number;

@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Archive, Check, ChevronRight, Copy, Edit3, FileText,
+  Archive, Check, ChevronRight, Clipboard, ClipboardCheck, Copy, Edit3, Eye, FileText,
   Loader2, Plus, RotateCcw, Star, Trash2, X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -52,6 +52,69 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const json = await res.json();
   if (!res.ok) throw new Error(json?.message ?? "Request failed");
   return (json?.data ?? json) as T;
+}
+
+// ─── View prompt text modal ────────────────────────────────────────────────────
+
+function ViewModal({
+  version,
+  onClose,
+  onFork,
+}: {
+  version: PromptVersion;
+  onClose: () => void;
+  onFork: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function copyText() {
+    void navigator.clipboard.writeText(version.promptText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4 flex-shrink-0">
+          <div>
+            <h2 className="font-extrabold text-gray-900">v{version.version} — Prompt Text</h2>
+            {version.changeNotes && (
+              <p className="text-xs text-gray-500 mt-0.5">{version.changeNotes}</p>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 flex-shrink-0"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <pre className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-xl p-4 whitespace-pre-wrap leading-relaxed text-gray-800">
+            {version.promptText}
+          </pre>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0">
+          <p className="text-xs text-gray-400">{version.promptText.length.toLocaleString()} characters</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onFork}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              <Copy className="w-3.5 h-3.5" /> Duplicate as Draft
+            </button>
+            <button
+              onClick={copyText}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold"
+            >
+              {copied
+                ? <><ClipboardCheck className="w-3.5 h-3.5" /> Copied!</>
+                : <><Clipboard className="w-3.5 h-3.5" /> Copy Text</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Version editor modal ──────────────────────────────────────────────────────
@@ -167,6 +230,7 @@ function VersionsPanel({
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editVersion, setEditVersion] = useState<PromptVersion | null>(null);
+  const [viewVersion, setViewVersion] = useState<PromptVersion | null>(null);
   const [actioning, setActioning] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -220,6 +284,16 @@ function VersionsPanel({
     finally { setActioning(null); }
   }
 
+  async function deleteVersion(v: PromptVersion) {
+    if (!confirm(`Permanently delete v${v.version}? This cannot be undone.`)) return;
+    setActioning(v.id);
+    try {
+      await apiFetch(`/admin/ai/prompts/versions/${v.id}`, { method: "DELETE" });
+      await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed to delete"); }
+    finally { setActioning(null); }
+  }
+
   const statusBadge: Record<string, string> = {
     active: "bg-emerald-50 text-emerald-700 border-emerald-200",
     draft: "bg-blue-50 text-blue-700 border-blue-200",
@@ -270,29 +344,46 @@ function VersionsPanel({
                   <p className="text-xs text-gray-400 mt-1 font-mono line-clamp-2">{v.promptText.slice(0, 120)}…</p>
                 </div>
 
-                <div className="flex items-center gap-1.5 flex-shrink-0">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   {actioning === v.id ? (
                     <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
                   ) : (
                     <>
+                      {/* View full text — always visible */}
+                      <button title="View full prompt text" onClick={() => setViewVersion(v)}
+                        className="p-1.5 rounded-lg hover:bg-violet-50 text-violet-500"><Eye className="w-3.5 h-3.5" /></button>
+
+                      {/* Duplicate as draft — always visible */}
+                      <button title="Duplicate as new draft" onClick={() => duplicate(v)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><Copy className="w-3.5 h-3.5" /></button>
+
+                      {/* Draft-only: edit + activate */}
                       {v.status === "draft" && (
                         <>
-                          <button title="Edit" onClick={() => { setEditVersion(v); setShowModal(true); }}
+                          <button title="Edit draft" onClick={() => { setEditVersion(v); setShowModal(true); }}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><Edit3 className="w-3.5 h-3.5" /></button>
-                          <button title="Activate" onClick={() => activate(v)}
+                          <button title="Activate this version" onClick={() => activate(v)}
                             className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600"><Check className="w-3.5 h-3.5" /></button>
                         </>
                       )}
+
+                      {/* Inactive: rollback */}
                       {v.status === "inactive" && (
                         <button title="Rollback to this version" onClick={() => rollback(v)}
                           className="p-1.5 rounded-lg hover:bg-violet-50 text-violet-600"><RotateCcw className="w-3.5 h-3.5" /></button>
                       )}
+
+                      {/* Archive — draft and inactive only (active/current cannot be archived directly) */}
                       {(v.status === "draft" || v.status === "inactive") && !v.isCurrent && (
-                        <button title="Archive" onClick={() => archive(v)}
+                        <button title="Archive this version" onClick={() => archive(v)}
                           className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-500"><Archive className="w-3.5 h-3.5" /></button>
                       )}
-                      <button title="Duplicate as new draft" onClick={() => duplicate(v)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><Copy className="w-3.5 h-3.5" /></button>
+
+                      {/* Delete — archived versions only */}
+                      {v.status === "archived" && (
+                        <button title="Delete archived version" onClick={() => deleteVersion(v)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                      )}
                     </>
                   )}
                 </div>
@@ -308,6 +399,17 @@ function VersionsPanel({
           version={editVersion}
           onClose={() => setShowModal(false)}
           onSaved={load}
+        />
+      )}
+
+      {viewVersion && (
+        <ViewModal
+          version={viewVersion}
+          onClose={() => setViewVersion(null)}
+          onFork={() => {
+            setViewVersion(null);
+            void duplicate(viewVersion);
+          }}
         />
       )}
     </div>

@@ -367,6 +367,19 @@ export class PromptRegistryService {
     return this.versionsRepository.save(version);
   }
 
+  async deleteVersion(versionId: string, userId: string) {
+    const version = await this.getVersion(versionId);
+    if (version.isCurrent) {
+      throw new BadRequestException('Cannot delete the currently active version — deactivate it first');
+    }
+    await this.versionsRepository.update(versionId, {
+      isDeleted: true,
+      deletedAt: new Date(),
+      deletedBy: userId,
+    });
+    return { success: true };
+  }
+
   async duplicateVersion(versionId: string, userId: string) {
     const source = await this.getVersion(versionId);
     let nextVersion = `${source.version}-copy`;

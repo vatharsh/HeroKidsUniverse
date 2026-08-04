@@ -40,12 +40,14 @@ export class AdminInfluencersController {
     @Query('page') page = '1',
     @Query('limit') limit = '20',
     @Query('status') status?: string,
+    @Query('platform') platform?: string,
   ) {
     return this.influencersService.listInfluencers({
       search,
       page: Number(page),
       limit: Number(limit),
       status,
+      platform,
     });
   }
 

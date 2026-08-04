@@ -7,6 +7,7 @@ import { AiUsageLog } from '../ai/entities/ai-usage-log.entity';
 import { StoryGenerationCost } from '../ai/entities/story-generation-cost.entity';
 import { StoryGenerationLog } from '../ai/entities/story-generation-log.entity';
 import { Character } from '../characters/entities/character.entity';
+import { CharacterVisualProfile } from '../characters/entities/character-visual-profile.entity';
 import { UniverseCompanion } from '../companions/entities/universe-companion.entity';
 import { CreditTransaction } from '../credits/credit-transaction.entity';
 import { Hero } from '../heroes/hero.entity';
@@ -39,6 +40,7 @@ import { GenerationService } from './generation.service';
       StoryGenerationLog,
       StoryGenerationCost,
       Character,
+      CharacterVisualProfile,
       UniverseCompanion,
       User,
       StoryArc,
