@@ -5,7 +5,7 @@ import {
   Trash2, Users, X, Zap, AlertCircle, Share2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import Footer from "@/components/layout/Footer";
@@ -545,7 +545,7 @@ function StandaloneSection({ stories, onDelete }: { stories: Story[]; onDelete: 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function DashboardPage() {
+function DashboardPageInner() {
   const { user, loading: authLoading } = useAuth();
   const { flags } = usePublicPlatformSettings();
   const router = useRouter();
@@ -971,4 +971,9 @@ export default function DashboardPage() {
       )}
     </div>
   );
+}
+
+
+export default function DashboardPage() {
+  return <Suspense fallback={null}><DashboardPageInner /></Suspense>;
 }

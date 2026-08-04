@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Zap, Target, Clock, BookOpen, Trophy, Loader2, ChevronRight, Sword, Pencil, Check, X, Package } from "lucide-react";
 
 import Navbar from "@/components/layout/Navbar";
@@ -83,7 +83,7 @@ const EPISODES_PER_PAGE = 8;
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function UniversePage() {
+function UniversePageInner() {
   const { user, loading: authLoading } = useAuth();
   const { flags } = usePublicPlatformSettings();
   const router = useRouter();
@@ -675,4 +675,8 @@ function EmptyState({ icon, title, body, universeId }: { icon: string; title: st
       </a>
     </div>
   );
+}
+
+export default function UniversePage() {
+  return <Suspense fallback={null}><UniversePageInner /></Suspense>;
 }
