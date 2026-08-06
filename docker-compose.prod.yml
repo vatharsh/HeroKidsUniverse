@@ -40,10 +40,10 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: https://api.herokidsuniverse.com
+        NEXT_PUBLIC_API_URL: https://api.herokidsuniverse.com/api
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: https://api.herokidsuniverse.com
+      NEXT_PUBLIC_API_URL: https://api.herokidsuniverse.com/api
     depends_on:
       - hku-api
     networks:
