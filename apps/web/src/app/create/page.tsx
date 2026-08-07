@@ -8,6 +8,7 @@ import Navbar from "@/components/layout/Navbar";
 import AvatarPicker from "@/components/shared/AvatarPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
+import { prepareImageUpload } from "@/lib/image-upload";
 import { cn } from "@/lib/utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -170,24 +171,36 @@ function CropModal({ src, onConfirm, onSkip }: CropModalProps) {
   }
 
   function applyCrop() {
-    const img = imgRef.current;
-    if (!img || !crop) { onSkip(); return; }
-    const sx = img.naturalWidth / img.clientWidth;
-    const sy = img.naturalHeight / img.clientHeight;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 512;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) { onSkip(); return; }
-    ctx.drawImage(img, crop.x * sx, crop.y * sy, crop.size * sx, crop.size * sy, 0, 0, 512, 512);
-    // Use synchronous toDataURL — avoids async blob issues that can produce broken previews
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-    if (!dataUrl || dataUrl === "data:,") { onSkip(); return; }
-    // Convert data URL to File synchronously
-    const byteStr = atob(dataUrl.split(",")[1]);
-    const ab = new ArrayBuffer(byteStr.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
-    onConfirm(new File([ab], "hero-photo.jpg", { type: "image/jpeg" }), dataUrl);
+    if (!crop) { onSkip(); return; }
+    const imgEl = imgRef.current;
+    if (!imgEl) { onSkip(); return; }
+    // Capture display dimensions at click time before any re-render
+    const displayW = imgEl.clientWidth;
+    const displayH = imgEl.clientHeight;
+    // Load a fresh Image from the src data URL — avoids DOM rendering state and canvas taint issues
+    const fresh = new Image();
+    fresh.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 512;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { onSkip(); return; }
+        const sx = fresh.naturalWidth / displayW;
+        const sy = fresh.naturalHeight / displayH;
+        ctx.drawImage(fresh, crop.x * sx, crop.y * sy, crop.size * sx, crop.size * sy, 0, 0, 512, 512);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        if (!dataUrl || dataUrl === "data:,") { onSkip(); return; }
+        const byteStr = atob(dataUrl.split(",")[1]);
+        const ab = new ArrayBuffer(byteStr.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+        onConfirm(new File([ab], "hero-photo.jpg", { type: "image/jpeg" }), dataUrl);
+      } catch {
+        onSkip(); // canvas tainted or other error → use full photo
+      }
+    };
+    fresh.onerror = () => onSkip();
+    fresh.src = src; // src is the data URL prop — no CORS, no DOM state
   }
 
   return (
@@ -426,32 +439,26 @@ function CreatePageInner() {
   }, [stepSequence, step]);
 
   async function handlePhoto(file: File) {
-    let processedFile = file;
-    const isHeic =
-      file.type === "image/heic" ||
-      file.type === "image/heif" ||
-      /\.(heic|heif)$/i.test(file.name);
-    if (isHeic) {
-      try {
-        const heic2any = (await import("heic2any")).default;
-        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-        const blob = Array.isArray(converted) ? converted[0] : converted;
-        processedFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
-      } catch { /* proceed with original */ }
+    setError("");
+    try {
+      const prepared = await prepareImageUpload(file);
+      setPendingPhotoFile(prepared.file);
+      setPendingPhotoDataUrl(prepared.preview);
+      setCropSrc(prepared.preview);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "This photo could not be opened. Please choose another image.");
     }
-    setPendingPhotoFile(processedFile);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      setPendingPhotoDataUrl(dataUrl);
-      setCropSrc(dataUrl);
-    };
-    reader.readAsDataURL(processedFile);
   }
 
-  function handleCharPhoto(file: File) {
-    setCharPhotoFile(file);
-    setCharPhotoPreview(URL.createObjectURL(file));
+  async function handleCharPhoto(file: File) {
+    setError("");
+    try {
+      const prepared = await prepareImageUpload(file);
+      setCharPhotoFile(prepared.file);
+      setCharPhotoPreview(prepared.preview);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "This photo could not be opened. Please choose another image.");
+    }
   }
 
   function toggleCharacter(id: string) {
@@ -735,7 +742,7 @@ function CreatePageInner() {
             </div>
 
             <div className="mb-6">
-              <input type="file" accept="image/*" id="photo-upload" className="hidden"
+              <input type="file" accept="image/*,.heic,.heif" id="photo-upload" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhoto(f); }} />
               {photoPreview ? (
                 <div className="relative w-full rounded-2xl overflow-hidden bg-ink/5 border border-ink/10">
@@ -1161,8 +1168,8 @@ function CreatePageInner() {
                   />
                 </div>
 
-                <input type="file" accept="image/*" ref={charPhotoRef} className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleCharPhoto(f); setCharPresetAvatar(null); } }} />
+                <input type="file" accept="image/*,.heic,.heif" ref={charPhotoRef} className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleCharPhoto(f); setCharPresetAvatar(null); } }} />
                 <button type="button" onClick={() => charPhotoRef.current?.click()}
                   className="w-full text-center text-ink-muted hover:text-brand text-[11px] font-medium transition mb-4">
                   {charPhotoPreview ? "📸 Change photo" : "📸 Upload real photo for custom avatar →"}

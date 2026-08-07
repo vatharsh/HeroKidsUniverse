@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { isHeicFile, releasePreparedImagePreview } from "@/lib/image-upload";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -49,6 +50,13 @@ export default function AvatarGenerateModal({
   // Cropped file replaces the original when sending to the API
   const [croppedFile, setCroppedFile]       = useState<File>(photoFile);
   const [croppedPreview, setCroppedPreview] = useState<string>(photoPreview);
+
+  useEffect(() => {
+    if (isHeicFile(photoFile) || photoPreview.startsWith("data:image/heic") || photoPreview.startsWith("data:image/heif")) {
+      setError("This iPhone HEIC photo could not be converted for preview. Please choose another photo or set iPhone Camera Format to Most Compatible.");
+      setStep("confirm");
+    }
+  }, [photoFile, photoPreview]);
 
   // ── Crop state ─────────────────────────────────────────────────────────────
   const [scale, setScale]   = useState(1);
@@ -216,6 +224,7 @@ export default function AvatarGenerateModal({
   useEffect(() => {
     return () => {
       if (croppedPreview !== photoPreview) URL.revokeObjectURL(croppedPreview);
+      releasePreparedImagePreview(photoPreview);
     };
   }, [croppedPreview, photoPreview]);
 
@@ -264,6 +273,10 @@ export default function AvatarGenerateModal({
                   src={photoPreview}
                   alt="Crop preview"
                   onLoad={onImageLoad}
+                  onError={() => {
+                    setError("This photo could not be displayed. Please choose another image.");
+                    setStep("confirm");
+                  }}
                   draggable={false}
                   style={{
                     position: "absolute",

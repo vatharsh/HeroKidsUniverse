@@ -10,6 +10,7 @@ import AvatarGenerateModal from "@/components/shared/AvatarGenerateModal";
 import Breadcrumb from "@/components/shared/Breadcrumb";
 import AvatarPicker from "@/components/shared/AvatarPicker";
 import { getAccessToken } from "@/lib/api";
+import { prepareImageUpload } from "@/lib/image-upload";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 
@@ -115,6 +116,7 @@ function CharacterFormModal({
   const [saving, setSaving]       = useState(false);
 
   const [generateTarget, setGenerateTarget] = useState<{ file: File; preview: string } | null>(null);
+  const [photoError, setPhotoError] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
 
   // Sync bio fields when profile loads async after modal mounts
@@ -138,23 +140,15 @@ function CharacterFormModal({
   }
 
   async function handlePhotoSelected(file: File) {
-    let processedFile = file;
-    const isHeic = file.type === "image/heic" || file.type === "image/heif" || /\.(heic|heif)$/i.test(file.name);
-    if (isHeic) {
-      try {
-        const heic2any = (await import("heic2any")).default;
-        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-        const blob = Array.isArray(converted) ? converted[0] : converted;
-        processedFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
-      } catch { /* proceed with original */ }
+    setPhotoError("");
+    try {
+      const prepared = await prepareImageUpload(file);
+      setGenerateTarget(prepared);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "This photo could not be opened. Please choose another image.");
+    } finally {
+      if (photoRef.current) photoRef.current.value = "";
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const preview = e.target?.result as string;
-      setGenerateTarget({ file: processedFile, preview });
-    };
-    reader.readAsDataURL(processedFile);
-    if (photoRef.current) photoRef.current.value = "";
   }
 
   function handleGenerateSuccess(avatarUrl: string) {
@@ -241,7 +235,7 @@ function CharacterFormModal({
               </div>
 
               {/* Photo upload area — makes privacy intent crystal-clear */}
-              <input type="file" accept="image/*" ref={photoRef} className="hidden"
+              <input type="file" accept="image/*,.heic,.heif" ref={photoRef} className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoSelected(f); }} />
 
               <button type="button" onClick={() => photoRef.current?.click()}
@@ -263,6 +257,9 @@ function CharacterFormModal({
                   </span>
                 )}
               </button>
+              {photoError && (
+                <p className="mt-3 text-xs text-red-600 font-semibold text-center">{photoError}</p>
+              )}
 
             </div>
           )}
@@ -404,6 +401,7 @@ function HeroEditModal({
   const [saving, setSaving]         = useState(false);
 
   const [generateTarget, setGenerateTarget] = useState<{ file: File; preview: string } | null>(null);
+  const [photoError, setPhotoError] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
 
   const displayedAvatar = selectedAvatar ?? hero.avatarUrl;
@@ -415,23 +413,15 @@ function HeroEditModal({
   }
 
   async function handlePhotoSelected(file: File) {
-    let processedFile = file;
-    const isHeic = file.type === "image/heic" || file.type === "image/heif" || /\.(heic|heif)$/i.test(file.name);
-    if (isHeic) {
-      try {
-        const heic2any = (await import("heic2any")).default;
-        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-        const blob = Array.isArray(converted) ? converted[0] : converted;
-        processedFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
-      } catch { /* proceed with original */ }
+    setPhotoError("");
+    try {
+      const prepared = await prepareImageUpload(file);
+      setGenerateTarget(prepared);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "This photo could not be opened. Please choose another image.");
+    } finally {
+      if (photoRef.current) photoRef.current.value = "";
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const preview = e.target?.result as string;
-      setGenerateTarget({ file: processedFile, preview });
-    };
-    reader.readAsDataURL(processedFile);
-    if (photoRef.current) photoRef.current.value = "";
   }
 
   function handleGenerateSuccess(avatarUrl: string) {
@@ -507,7 +497,7 @@ function HeroEditModal({
                 <div className="flex-1 h-px bg-ink/10" />
               </div>
 
-              <input type="file" accept="image/*" ref={photoRef} className="hidden"
+              <input type="file" accept="image/*,.heic,.heif" ref={photoRef} className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoSelected(f); }} />
 
               <button type="button" onClick={() => photoRef.current?.click()}
@@ -533,6 +523,9 @@ function HeroEditModal({
                   </span>
                 )}
               </button>
+              {photoError && (
+                <p className="mt-3 text-xs text-red-600 font-semibold text-center">{photoError}</p>
+              )}
             </div>
           )}
 
