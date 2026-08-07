@@ -141,7 +141,7 @@ interface Universe {
 // ── Crop Modal ───────────────────────────────────────────────────────────────
 
 interface CropState { x: number; y: number; size: number }
-interface CropModalProps { src: string; onConfirm: (file: File) => void; onSkip: () => void }
+interface CropModalProps { src: string; onConfirm: (file: File, preview: string) => void; onSkip: () => void }
 
 function CropModal({ src, onConfirm, onSkip }: CropModalProps) {
   const imgRef = useRef<HTMLImageElement>(null);
@@ -179,10 +179,15 @@ function CropModal({ src, onConfirm, onSkip }: CropModalProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) { onSkip(); return; }
     ctx.drawImage(img, crop.x * sx, crop.y * sy, crop.size * sx, crop.size * sy, 0, 0, 512, 512);
-    canvas.toBlob(blob => {
-      if (!blob) { onSkip(); return; }
-      onConfirm(new File([blob], "hero-photo.jpg", { type: "image/jpeg" }));
-    }, "image/jpeg", 0.9);
+    // Use synchronous toDataURL — avoids async blob issues that can produce broken previews
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    if (!dataUrl || dataUrl === "data:,") { onSkip(); return; }
+    // Convert data URL to File synchronously
+    const byteStr = atob(dataUrl.split(",")[1]);
+    const ab = new ArrayBuffer(byteStr.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteStr.length; i++) ia[i] = byteStr.charCodeAt(i);
+    onConfirm(new File([ab], "hero-photo.jpg", { type: "image/jpeg" }), dataUrl);
   }
 
   return (
@@ -621,9 +626,9 @@ function CreatePageInner() {
       {cropSrc && (
         <CropModal
           src={cropSrc}
-          onConfirm={(file) => {
+          onConfirm={(file, preview) => {
             setPhotoFile(file);
-            setPhotoPreview(URL.createObjectURL(file));
+            setPhotoPreview(preview); // data URL — reliable cross-browser preview
             setConsented(false);
             setCropSrc(null);
             setPendingPhotoFile(null);
