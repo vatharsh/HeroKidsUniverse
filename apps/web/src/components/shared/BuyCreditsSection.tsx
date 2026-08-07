@@ -192,7 +192,7 @@ export default function BuyCreditsSection({ onPurchased }: BuyCreditsSectionProp
       // 3. Open Razorpay checkout (shows UPI, cards, netbanking, wallets — all natively)
       const rzp = new window.Razorpay({
         key: keyId,
-        amount,
+        amount: Math.round(amount * 100), // Razorpay expects paise
         currency,
         name: "HeroKids Universe",
         description: pack.name,
