@@ -1347,7 +1347,7 @@ export class GenerationService implements OnModuleInit {
   private async generatePageAudio(story: Story, pages: StoryPage[], isSandbox: boolean): Promise<{ pages: StoryPage[]; totalCostUsd: number }> {
     const result: StoryPage[] = [];
     let totalCostUsd = 0;
-    const ttsProvider = await this.getStringSetting('TTS_PROVIDER', 'gemini');
+    const ttsProvider = await this.getStringSetting('TTS_PROVIDER', 'openai');
     const isGeminiTTS = ttsProvider === 'gemini';
     const ttsCostPerChar = isGeminiTTS
       ? await this.getNumberSetting('GEMINI_TTS_COST_PER_CHAR', 0)

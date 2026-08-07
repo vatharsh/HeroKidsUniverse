@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import OpenAI from 'openai';
 import { Repository } from 'typeorm';
 
 import { IMAGE_GENERATION_PROVIDER } from '../ai/interfaces/image-generation.provider';
@@ -29,6 +31,8 @@ type BackfillResult = {
 export class CharacterCanonService {
   private readonly logger = new Logger(CharacterCanonService.name);
 
+  private readonly openai: OpenAI;
+
   constructor(
     @InjectRepository(CharacterCanon) private readonly canonRepo: Repository<CharacterCanon>,
     @InjectRepository(Hero) private readonly heroesRepo: Repository<Hero>,
@@ -37,7 +41,11 @@ export class CharacterCanonService {
     @Inject(IMAGE_GENERATION_PROVIDER) private readonly imageProvider: ImageGenerationProvider,
     @Optional() private readonly promptRegistry: PromptRegistryService | null,
     @InjectRepository(PlatformSetting) private readonly settingsRepo: Repository<PlatformSetting>,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    const apiKey = this.config.get<string>('OPEN_AI_API_KEY') ?? this.config.get<string>('OPENAI_API_KEY') ?? '';
+    this.openai = new OpenAI({ apiKey });
+  }
 
   private async getMinQualityScore(): Promise<number> {
     const row = await this.settingsRepo.findOne({ where: { key: 'CHARACTER_CANON_MIN_QUALITY' } });
@@ -75,14 +83,9 @@ export class CharacterCanonService {
         return await this.canonRepo.save(canon);
       }
 
-      const client = (this.imageProvider as any).client;
-      if (!client) {
-        throw new Error('OpenAI client unavailable on image provider');
-      }
-
       const model = 'gpt-4o-mini';
       const canonPrompt = await this.getCharacterCanonPrompt(rawDescription);
-      const response = await client.chat.completions.create({
+      const response = await this.openai.chat.completions.create({
         model,
         response_format: { type: 'json_object' },
         messages: [{
