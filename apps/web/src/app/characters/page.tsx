@@ -137,9 +137,23 @@ function CharacterFormModal({
     if (existing) setShowPicker(false);
   }
 
-  function handlePhotoSelected(file: File) {
-    const preview = URL.createObjectURL(file);
-    setGenerateTarget({ file, preview });
+  async function handlePhotoSelected(file: File) {
+    let processedFile = file;
+    const isHeic = file.type === "image/heic" || file.type === "image/heif" || /\.(heic|heif)$/i.test(file.name);
+    if (isHeic) {
+      try {
+        const heic2any = (await import("heic2any")).default;
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        processedFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
+      } catch { /* proceed with original */ }
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const preview = e.target?.result as string;
+      setGenerateTarget({ file: processedFile, preview });
+    };
+    reader.readAsDataURL(processedFile);
     if (photoRef.current) photoRef.current.value = "";
   }
 
@@ -400,9 +414,23 @@ function HeroEditModal({
     setShowPicker(false);
   }
 
-  function handlePhotoSelected(file: File) {
-    const preview = URL.createObjectURL(file);
-    setGenerateTarget({ file, preview });
+  async function handlePhotoSelected(file: File) {
+    let processedFile = file;
+    const isHeic = file.type === "image/heic" || file.type === "image/heif" || /\.(heic|heif)$/i.test(file.name);
+    if (isHeic) {
+      try {
+        const heic2any = (await import("heic2any")).default;
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        processedFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
+      } catch { /* proceed with original */ }
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const preview = e.target?.result as string;
+      setGenerateTarget({ file: processedFile, preview });
+    };
+    reader.readAsDataURL(processedFile);
     if (photoRef.current) photoRef.current.value = "";
   }
 

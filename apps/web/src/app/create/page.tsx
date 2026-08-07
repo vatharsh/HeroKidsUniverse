@@ -425,16 +425,28 @@ function CreatePageInner() {
     if (step >= stepSequence.length) setStep(stepSequence.length - 1);
   }, [stepSequence, step]);
 
-  function handlePhoto(file: File) {
-    setPendingPhotoFile(file);
-    // Use FileReader → data URL; avoids blob URL issues in some browsers
+  async function handlePhoto(file: File) {
+    let processedFile = file;
+    const isHeic =
+      file.type === "image/heic" ||
+      file.type === "image/heif" ||
+      /\.(heic|heif)$/i.test(file.name);
+    if (isHeic) {
+      try {
+        const heic2any = (await import("heic2any")).default;
+        const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+        const blob = Array.isArray(converted) ? converted[0] : converted;
+        processedFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
+      } catch { /* proceed with original */ }
+    }
+    setPendingPhotoFile(processedFile);
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
       setPendingPhotoDataUrl(dataUrl);
       setCropSrc(dataUrl);
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(processedFile);
   }
 
   function handleCharPhoto(file: File) {
