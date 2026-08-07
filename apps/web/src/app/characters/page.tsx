@@ -385,7 +385,8 @@ function HeroEditModal({
   const [gender, setGender]         = useState<HeroGender>((hero.gender as HeroGender) ?? "");
   const [costumeDescription, setCostumeDescription] = useState(hero.costumeDescription ?? "");
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
+  // Auto-open picker when hero has no avatar yet — so photo upload is visible immediately
+  const [showPicker, setShowPicker] = useState(!hero.avatarUrl);
   const [saving, setSaving]         = useState(false);
 
   const [generateTarget, setGenerateTarget] = useState<{ file: File; preview: string } | null>(null);
@@ -801,15 +802,38 @@ function CharactersPageContent() {
       <main className="flex-1 max-w-4xl mx-auto px-6 py-12 w-full">
 
         {/* Hero card */}
+        {!loading && !hero && (
+          <div className="mb-10">
+            <p className="text-ink-mid text-xs font-bold uppercase tracking-widest mb-3">Main Hero · always in every story</p>
+            <div className="bg-white rounded-2xl shadow-card p-5 flex items-center gap-4 border-2 border-dashed border-brand/20">
+              <div className="w-14 h-14 rounded-full bg-brand/10 flex items-center justify-center text-2xl flex-shrink-0">🦸</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-ink">No hero created yet</p>
+                <p className="text-ink-muted text-sm">Your hero is set up when you create your first story.</p>
+              </div>
+              <a href="/create" className="flex-shrink-0 bg-brand hover:bg-brand-dark text-white text-sm font-bold px-4 py-2 rounded-full transition-all">
+                Create First Story →
+              </a>
+            </div>
+          </div>
+        )}
+
         {hero && (
           <div className="mb-10">
             <p className="text-ink-mid text-xs font-bold uppercase tracking-widest mb-3">Main Hero · always in every story</p>
             <div className="bg-white rounded-2xl shadow-card p-5 flex items-center gap-4 border-2 border-brand/15">
-              <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-2xl flex-shrink-0">
-                {hero.avatarUrl
-                  ? <img src={hero.avatarUrl} alt={heroName} className="w-full h-full object-cover" />
-                  : "🦸"}
-              </div>
+              <button type="button" onClick={() => setShowHeroEdit(true)} className="relative flex-shrink-0 group">
+                <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-2xl">
+                  {hero.avatarUrl
+                    ? <img src={hero.avatarUrl} alt={heroName} className="w-full h-full object-cover" />
+                    : "🦸"}
+                </div>
+                {!hero.avatarUrl && (
+                  <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-brand text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                    Add photo
+                  </span>
+                )}
+              </button>
               <div className="flex-1 min-w-0">
                 <p className="font-[family-name:var(--font-display)] text-ink text-lg">{heroName}</p>
                 <p className="text-ink-muted text-sm capitalize">
