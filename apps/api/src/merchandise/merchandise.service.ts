@@ -656,8 +656,13 @@ export class MerchandiseService implements OnModuleInit {
       return sourceUrl;
     }
 
-    const apiBaseUrl = this.configService.get<string>('API_PUBLIC_URL') ?? 'http://localhost:3000/api';
-    const origin = apiBaseUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+    const configured = this.configService.get<string>('API_PUBLIC_URL')?.trim();
+    if (!configured) {
+      return sourceUrl.startsWith('/') ? sourceUrl : `/${sourceUrl}`;
+    }
+
+    const apiBaseUrl = configured.replace(/\/$/, '');
+    const origin = apiBaseUrl.replace(/\/api$/i, '');
     return `${origin}${sourceUrl.startsWith('/') ? sourceUrl : `/${sourceUrl}`}`;
   }
 

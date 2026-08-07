@@ -31,6 +31,26 @@ export class UploadService {
     }
   }
 
+  private getPublicApiBaseUrl(): string | null {
+    const configured =
+      this.configService.get<string>('API_PUBLIC_URL')
+      ?? this.configService.get<string>('PUBLIC_API_URL')
+      ?? this.configService.get<string>('BACKEND_PUBLIC_URL');
+
+    const raw = configured?.trim();
+    if (!raw) return null;
+
+    const base = raw.replace(/\/$/, '');
+    return /\/api$/i.test(base) ? base : `${base}/api`;
+  }
+
+  private localUploadUrl(path: string): string {
+    const relativePath = `/api/upload/files/${path.replace(/^\/+/, '')}`;
+    const publicApiBase = this.getPublicApiBaseUrl();
+    if (!publicApiBase) return relativePath;
+    return `${publicApiBase}/upload/files/${path.replace(/^\/+/, '')}`;
+  }
+
   async uploadAvatar(userId: string, file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Photo is required');
     if (!ALLOWED_MIME.includes(file.mimetype)) throw new BadRequestException('Invalid file type');
@@ -64,7 +84,7 @@ export class UploadService {
 
     await mkdir(STORY_UPLOAD_DIR, { recursive: true });
     await writeFile(join(STORY_UPLOAD_DIR, filename), buffer);
-    return `http://localhost:3000/api/upload/files/stories/${filename}`;
+    return this.localUploadUrl(`stories/${filename}`);
   }
 
   async uploadPageAudio(
@@ -95,7 +115,7 @@ export class UploadService {
     const audioDir = join(process.cwd(), 'uploads', 'audio');
     await mkdir(audioDir, { recursive: true });
     await writeFile(join(audioDir, filename), audioBuffer);
-    return `http://localhost:3000/api/upload/files/audio/${filename}`;
+    return this.localUploadUrl(`audio/${filename}`);
   }
 
   async uploadCharacterAvatar(userId: string, imageBase64: string): Promise<string> {
@@ -164,7 +184,7 @@ export class UploadService {
     const ext      = file.mimetype.split('/')[1] ?? 'jpg';
     const filename = `${userId}-${randomUUID()}.${ext}`;
     await writeFile(join(AVATAR_UPLOAD_DIR, filename), file.buffer);
-    return { avatarUrl: `http://localhost:3000/api/upload/files/${filename}` };
+    return { avatarUrl: this.localUploadUrl(filename) };
   }
 
   async uploadVideo(userId: string, storyId: string, filePath: string): Promise<string> {
@@ -184,7 +204,7 @@ export class UploadService {
     const videoDir = join(process.cwd(), 'uploads', 'videos');
     await mkdir(videoDir, { recursive: true });
     await writeFile(join(videoDir, filename), buffer);
-    return `http://localhost:3000/api/upload/files/videos/${filename}`;
+    return this.localUploadUrl(`videos/${filename}`);
   }
 
   private async uploadBuffer(input: {
@@ -216,6 +236,6 @@ export class UploadService {
     await writeFile(join(uploadDir, input.filename), input.buffer);
 
     const localFolder = input.folder === 'characters' ? 'characters' : '';
-    return `http://localhost:3000/api/upload/files/${localFolder ? `${localFolder}/` : ''}${input.filename}`;
+    return this.localUploadUrl(`${localFolder ? `${localFolder}/` : ''}${input.filename}`);
   }
 }

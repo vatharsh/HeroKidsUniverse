@@ -1648,6 +1648,74 @@ const ALL_SETTINGS_KEYS = [
   "QA_PRESET", "QA_RETRY_STRATEGY", "QA_MODE",
 ];
 
+function AiSettingRow({
+  item, settings, draft, saved, saving, onChange,
+}: {
+  item: SettingDef;
+  settings: Record<string, string>;
+  draft: Record<string, string>;
+  saved: Record<string, string>;
+  saving: boolean;
+  onChange: (key: string, value: string) => void;
+}) {
+  const val = settings[item.key] ?? "";
+  const isDirty = draft[item.key] !== undefined && draft[item.key] !== saved[item.key];
+  return (
+    <div className={`px-5 py-3 flex items-center gap-4 transition-colors ${isDirty ? "bg-amber-50/60" : ""}`}>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-gray-800 flex items-center gap-1.5">
+          {item.label}
+          {isDirty && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">unsaved</span>}
+        </p>
+        <p className="text-[10px] text-gray-400 mt-0.5">{item.description}</p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {item.type === "boolean" ? (
+          <button type="button"
+            onClick={() => { const nv = val === "true" ? "false" : "true"; onChange(item.key, nv); }}
+            disabled={saving}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${val === "true" ? "bg-violet-600" : "bg-gray-200"}`}>
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${val === "true" ? "translate-x-5" : "translate-x-0.5"}`} />
+          </button>
+        ) : item.type === "number" ? (
+          <input type="number" value={val}
+            onChange={e => onChange(item.key, e.target.value)}
+            className={`w-20 text-right font-mono text-xs rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-500 border ${isDirty ? "border-amber-300 bg-amber-50" : "border-gray-200"}`} />
+        ) : (
+          <input type="text" value={val}
+            onChange={e => onChange(item.key, e.target.value)}
+            className={`w-32 text-right font-mono text-xs rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-500 border ${isDirty ? "border-amber-300 bg-amber-50" : "border-gray-200"}`} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AiSettingGroupCard({
+  group, settings, draft, saved, saving, onChange,
+}: {
+  group: SettingGroup;
+  settings: Record<string, string>;
+  draft: Record<string, string>;
+  saved: Record<string, string>;
+  saving: boolean;
+  onChange: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+        <p className="text-xs font-bold text-gray-900">{group.title}</p>
+        <p className="text-[10px] text-gray-400 mt-0.5">{group.description}</p>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {group.items.map(item => (
+          <AiSettingRow key={item.key} item={item} settings={settings} draft={draft} saved={saved} saving={saving} onChange={onChange} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab() {
   const [saved, setSaved] = useState<Record<string, string>>({});  // last-saved values
   const [draft, setDraft] = useState<Record<string, string>>({});  // live edits
@@ -1769,54 +1837,6 @@ function SettingsTab() {
   const previewPreset = pendingPreset ?? (displayPreset !== "custom" ? displayPreset : null);
   const previewMeta = previewPreset ? PRESET_META[previewPreset] : null;
 
-  function SettingRow({ item }: { item: SettingDef }) {
-    const val = settings[item.key] ?? "";
-    const isDirty = draft[item.key] !== undefined && draft[item.key] !== saved[item.key];
-    return (
-      <div className={`px-5 py-3 flex items-center gap-4 transition-colors ${isDirty ? "bg-amber-50/60" : ""}`}>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-gray-800 flex items-center gap-1.5">
-            {item.label}
-            {isDirty && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">unsaved</span>}
-          </p>
-          <p className="text-[10px] text-gray-400 mt-0.5">{item.description}</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {item.type === "boolean" ? (
-            <button type="button"
-              onClick={() => { const nv = val === "true" ? "false" : "true"; change(item.key, nv); }}
-              disabled={saving}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${val === "true" ? "bg-violet-600" : "bg-gray-200"}`}>
-              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${val === "true" ? "translate-x-5" : "translate-x-0.5"}`} />
-            </button>
-          ) : item.type === "number" ? (
-            <input type="number" value={val}
-              onChange={e => change(item.key, e.target.value)}
-              className={`w-20 text-right font-mono text-xs rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-500 border ${isDirty ? "border-amber-300 bg-amber-50" : "border-gray-200"}`} />
-          ) : (
-            <input type="text" value={val}
-              onChange={e => change(item.key, e.target.value)}
-              className={`w-32 text-right font-mono text-xs rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-500 border ${isDirty ? "border-amber-300 bg-amber-50" : "border-gray-200"}`} />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  function SettingGroupCard({ group }: { group: SettingGroup }) {
-    return (
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-          <p className="text-xs font-bold text-gray-900">{group.title}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">{group.description}</p>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {group.items.map(item => <SettingRow key={item.key} item={item} />)}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-5 max-w-3xl">
 
@@ -1927,10 +1947,10 @@ function SettingsTab() {
       </div>
 
       {/* ── Image Generation Backend ── */}
-      <SettingGroupCard group={IMAGE_BACKEND_GROUP} />
+      <AiSettingGroupCard group={IMAGE_BACKEND_GROUP} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />
 
       {/* ── Narration / TTS ── */}
-      <SettingGroupCard group={NARRATION_GROUP} />
+      <AiSettingGroupCard group={NARRATION_GROUP} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />
 
       {/* ── Generation Behaviour ── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1957,10 +1977,10 @@ function SettingsTab() {
       </div>
 
       {/* ── Core QA groups ── */}
-      {QA_GROUPS.map(group => <SettingGroupCard key={group.title} group={group} />)}
+      {QA_GROUPS.map(group => <AiSettingGroupCard key={group.title} group={group} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />)}
 
       {/* ── Budget Protection ── */}
-      <SettingGroupCard group={BUDGET_GROUP} />
+      <AiSettingGroupCard group={BUDGET_GROUP} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />
 
       {/* ── Advanced (collapsible) ── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -1974,7 +1994,7 @@ function SettingsTab() {
         </button>
         {showAdvanced && (
           <div className="divide-y divide-gray-50 border-t border-gray-100">
-            {ADVANCED_GROUP.items.map(item => <SettingRow key={item.key} item={item} />)}
+            {ADVANCED_GROUP.items.map(item => <AiSettingRow key={item.key} item={item} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />)}
           </div>
         )}
       </div>

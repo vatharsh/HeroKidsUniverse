@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
 import { isHeicFile, releasePreparedImagePreview } from "@/lib/image-upload";
+import { resolveMediaUrl } from "@/lib/media-url";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -44,6 +45,7 @@ export default function AvatarGenerateModal({
   const [step, setStep]         = useState<Step>("crop");
   const [consented, setConsented] = useState(false);
   const [generated, setGenerated] = useState<string | null>(null);
+  const [generatedImageBroken, setGeneratedImageBroken] = useState(false);
   const [error, setError]       = useState("");
   const [usedSoFar, setUsedSoFar] = useState(generationsUsed);
 
@@ -206,7 +208,8 @@ export default function AvatarGenerateModal({
       const json = await res.json() as { data?: { avatarUrl?: string }; message?: string };
       if (!res.ok || !json.data?.avatarUrl) throw new Error(json.message ?? "Generation failed");
 
-      setGenerated(json.data.avatarUrl);
+      setGenerated(resolveMediaUrl(json.data.avatarUrl));
+      setGeneratedImageBroken(false);
       setUsedSoFar(u => u + 1);
       setStep("result");
     } catch {
@@ -217,6 +220,7 @@ export default function AvatarGenerateModal({
 
   // Block closing while generation is in-flight
   const canClose = step !== "loading";
+  const generatedAvatarUrl = resolveMediaUrl(generated);
 
   function handleBackdropClick() { if (canClose) onCancel(); }
 
@@ -458,8 +462,23 @@ export default function AvatarGenerateModal({
               </div>
               <span className="text-ink-muted text-xl">→</span>
               <div className="flex flex-col items-center gap-1.5">
-                <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-brand/30 shadow-lg shadow-brand/20">
-                  <img src={generated} alt="Generated avatar" className="w-full h-full object-cover" />
+                <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-brand/30 shadow-lg shadow-brand/20 bg-brand-50 relative">
+                  {!generatedImageBroken ? (
+                    <img
+                      src={generatedAvatarUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={() => {
+                        console.warn("[AvatarGenerateModal] Generated avatar image failed to load", { generatedAvatarUrl });
+                        setGeneratedImageBroken(true);
+                        setError("The avatar was created, but its image link could not be opened. Please try again.");
+                      }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] text-brand font-bold text-center px-2 leading-tight">
+                      Preview unavailable
+                    </div>
+                  )}
                 </div>
                 <p className="text-brand text-[10px] font-semibold">Your avatar ✨</p>
               </div>
@@ -471,8 +490,8 @@ export default function AvatarGenerateModal({
 
             {error && <p className="text-red-500 text-xs mb-3 text-center">{error}</p>}
 
-            <button type="button" onClick={() => onSuccess(generated)}
-              className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3 rounded-full text-sm shadow-brand transition mb-3">
+            <button type="button" disabled={generatedImageBroken} onClick={() => onSuccess(generatedAvatarUrl)}
+              className="w-full bg-brand hover:bg-brand-dark disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold py-3 rounded-full text-sm shadow-brand transition mb-3">
               ✓ Looks good — use this avatar
             </button>
 

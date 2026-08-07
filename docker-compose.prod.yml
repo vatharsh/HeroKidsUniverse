@@ -29,6 +29,7 @@ services:
     environment:
       DATABASE_URL: postgresql://hku:${DB_PASSWORD}@hku-postgres:5432/heroverse
       REDIS_URL: redis://hku-redis:6379
+      API_PUBLIC_URL: https://api.herokidsuniverse.com/api
     depends_on:
       - hku-postgres
       - hku-redis
