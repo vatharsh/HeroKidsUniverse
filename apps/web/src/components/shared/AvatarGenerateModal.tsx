@@ -19,6 +19,7 @@ interface Props {
   characterName?: string;
   generationsUsed: number;
   maxGenerations: number;
+  avatarRefreshTokens?: number;
   onSuccess: (avatarUrl: string) => void;
   onCancel: () => void;
 }
@@ -40,6 +41,7 @@ export default function AvatarGenerateModal({
   photoFile, photoPreview, generateType,
   characterName,
   generationsUsed, maxGenerations,
+  avatarRefreshTokens = 0,
   onSuccess, onCancel,
 }: Props) {
   const [step, setStep]         = useState<Step>("crop");
@@ -184,11 +186,14 @@ export default function AvatarGenerateModal({
     }, "image/jpeg", 0.92);
   }
 
-  const remaining   = maxGenerations - usedSoFar;
-  const atLimit     = remaining <= 0;
   const isCharacter = generateType === "character";
-  const unitLabel   = isCharacter ? "Avatar Refresh" : "avatar generation";
-  const unitLabelPlural = isCharacter ? "Avatar Refreshes" : "avatar generations";
+  const freeRemaining = Math.max(0, maxGenerations - usedSoFar);
+  // For hero: after free slots exhausted, each extra attempt burns 1 refresh token
+  const remaining   = isCharacter ? avatarRefreshTokens : (freeRemaining > 0 ? freeRemaining : avatarRefreshTokens);
+  const usingRefreshToken = !isCharacter && freeRemaining === 0 && avatarRefreshTokens > 0;
+  const atLimit     = remaining <= 0;
+  const unitLabel   = (isCharacter || usingRefreshToken) ? "Avatar Refresh" : "avatar generation";
+  const unitLabelPlural = (isCharacter || usingRefreshToken) ? "Avatar Refreshes" : "avatar generations";
 
   async function handleGenerate(adjustmentHint = "") {
     setStep("loading");

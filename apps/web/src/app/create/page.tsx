@@ -268,8 +268,9 @@ function CreatePageInner() {
   // Avatar generation — shows AvatarGenerateModal after crop
   const [showAvatarGen, setShowAvatarGen]   = useState(false);
   const [heroAvatarUrl, setHeroAvatarUrl]   = useState<string | null>(null);
-  const [avatarGenUsed, setAvatarGenUsed]   = useState(0);
-  const [avatarGenMax, setAvatarGenMax]     = useState(2);
+  const [avatarGenUsed, setAvatarGenUsed]       = useState(0);
+  const [avatarGenMax, setAvatarGenMax]         = useState(2);
+  const [avatarRefreshTokens, setAvatarRefreshTokens] = useState(0);
 
   // Characters state
   const [characters, setCharacters]           = useState<Character[]>([]);
@@ -362,6 +363,7 @@ function CreatePageInner() {
       if (avatarRes.data) {
         setAvatarGenUsed(avatarRes.data.heroGenerationsUsed ?? 0);
         setAvatarGenMax(avatarRes.data.heroGenerationsMax ?? 2);
+        setAvatarRefreshTokens(avatarRes.data.avatarRefreshTokens ?? 0);
       }
     }).finally(() => setHeroLoading(false));
   }, []);
@@ -697,9 +699,15 @@ function CreatePageInner() {
           generateType="hero"
           generationsUsed={avatarGenUsed}
           maxGenerations={avatarGenMax}
+          avatarRefreshTokens={avatarRefreshTokens}
           onSuccess={(url) => {
             setHeroAvatarUrl(url);
-            setAvatarGenUsed(u => u + 1);
+            setAvatarGenUsed(u => {
+              const next = u + 1;
+              // if free slots were already used, this consumed a refresh token
+              if (u >= avatarGenMax) setAvatarRefreshTokens(t => Math.max(0, t - 1));
+              return next;
+            });
             setShowAvatarGen(false);
           }}
           onCancel={() => {
