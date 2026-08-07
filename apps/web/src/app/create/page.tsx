@@ -138,6 +138,96 @@ interface Universe {
   heroTitle: string | null;
 }
 
+// ── Crop Modal ───────────────────────────────────────────────────────────────
+
+interface CropState { x: number; y: number; size: number }
+interface CropModalProps { src: string; onConfirm: (file: File) => void; onSkip: () => void }
+
+function CropModal({ src, onConfirm, onSkip }: CropModalProps) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [crop, setCrop] = useState<CropState | null>(null);
+  const dragRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
+
+  function onImgLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const { clientWidth: w, clientHeight: h } = e.currentTarget;
+    const s = Math.min(w, h) * 0.8;
+    setCrop({ x: (w - s) / 2, y: (h - s) / 2, size: s });
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!crop) return;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = { sx: e.clientX, sy: e.clientY, cx: crop.x, cy: crop.y };
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    if (!dragRef.current || !crop || !imgRef.current) return;
+    const img = imgRef.current;
+    const { sx, sy, cx, cy } = dragRef.current;
+    const nx = Math.max(0, Math.min(img.clientWidth - crop.size, cx + e.clientX - sx));
+    const ny = Math.max(0, Math.min(img.clientHeight - crop.size, cy + e.clientY - sy));
+    setCrop(p => p ? { ...p, x: nx, y: ny } : null);
+  }
+
+  function applyCrop() {
+    const img = imgRef.current;
+    if (!img || !crop) { onSkip(); return; }
+    const sx = img.naturalWidth / img.clientWidth;
+    const sy = img.naturalHeight / img.clientHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { onSkip(); return; }
+    ctx.drawImage(img, crop.x * sx, crop.y * sy, crop.size * sx, crop.size * sy, 0, 0, 512, 512);
+    canvas.toBlob(blob => {
+      if (!blob) { onSkip(); return; }
+      onConfirm(new File([blob], "hero-photo.jpg", { type: "image/jpeg" }));
+    }, "image/jpeg", 0.9);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/75 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-sm w-full p-4 space-y-4 my-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-ink">Crop Photo</h3>
+          <button type="button" onClick={onSkip}><X className="w-4 h-4 text-ink-muted" /></button>
+        </div>
+        <p className="text-ink-muted text-xs">Drag the box to frame your child&apos;s face, then tap &ldquo;Crop &amp; Use&rdquo;.</p>
+        <div
+          className="relative overflow-hidden rounded-xl select-none"
+          style={{ touchAction: "none" }}
+          onPointerMove={onPointerMove}
+          onPointerUp={() => { dragRef.current = null; }}
+        >
+          <img ref={imgRef} src={src} alt="Crop preview" onLoad={onImgLoad}
+            className="w-full block" draggable={false} />
+          {crop && (
+            <div
+              className="absolute cursor-move border-2 border-white"
+              style={{
+                left: crop.x, top: crop.y,
+                width: crop.size, height: crop.size,
+                boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
+              }}
+              onPointerDown={onPointerDown}
+            />
+          )}
+        </div>
+        <div className="flex gap-3">
+          <button type="button" onClick={onSkip}
+            className="flex-1 py-2.5 rounded-full border border-ink/20 text-ink-mid text-sm font-semibold hover:bg-ink/5 transition">
+            Use Full Photo
+          </button>
+          <button type="button" onClick={applyCrop}
+            className="flex-1 py-2.5 rounded-full bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition">
+            Crop &amp; Use
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreatePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -153,6 +243,8 @@ function CreatePageInner() {
   const [photoFile, setPhotoFile]     = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [consented, setConsented]     = useState(false);
+  const [cropSrc, setCropSrc]         = useState<string | null>(null);
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
 
   // Characters state
   const [characters, setCharacters]           = useState<Character[]>([]);
@@ -244,7 +336,7 @@ function CreatePageInner() {
     }).finally(() => setHeroLoading(false));
   }, []);
 
-  // Re-fetch companion when universe selection changes (general path)
+  // Re-fetch companion + story count when universe selection changes (general path)
   useEffect(() => {
     if (!selectedUniverseId || selectedUniverseId === preselectedUniverseId) return;
     const token = localStorage.getItem("hvu_access");
@@ -252,6 +344,15 @@ function CreatePageInner() {
     fetch(`${BASE}/companions/universe/${selectedUniverseId}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(({ data }) => { setExistingCompanion(data?.id ? data : null); setCompanionIncluded(true); })
+      .catch(() => {});
+    // Fetch story count so we only show relevant modes (e.g. no "continue" for empty universes)
+    fetch(`${BASE}/stories?universeId=${selectedUniverseId}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(({ data }) => {
+        const hasStories = Array.isArray(data) && data.length > 0;
+        setUniverseHasStories(hasStories);
+        if (!hasStories) setStoryMode("new_adventure");
+      })
       .catch(() => {});
   }, [selectedUniverseId, preselectedUniverseId]);
 
@@ -319,9 +420,8 @@ function CreatePageInner() {
   }, [stepSequence, step]);
 
   function handlePhoto(file: File) {
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
-    setConsented(false);
+    setPendingPhotoFile(file);
+    setCropSrc(URL.createObjectURL(file));
   }
 
   function handleCharPhoto(file: File) {
@@ -512,8 +612,33 @@ function CreatePageInner() {
 
   if (!user) return null;
 
+  const preselectedUniverseName = preselectedUniverseId
+    ? (universes.find(u => u.id === preselectedUniverseId)?.name ?? null)
+    : null;
+
   return (
     <div className="min-h-screen bg-cream flex flex-col">
+      {cropSrc && (
+        <CropModal
+          src={cropSrc}
+          onConfirm={(file) => {
+            setPhotoFile(file);
+            setPhotoPreview(URL.createObjectURL(file));
+            setConsented(false);
+            setCropSrc(null);
+            setPendingPhotoFile(null);
+          }}
+          onSkip={() => {
+            if (pendingPhotoFile) {
+              setPhotoFile(pendingPhotoFile);
+              setPhotoPreview(URL.createObjectURL(pendingPhotoFile));
+              setConsented(false);
+            }
+            setCropSrc(null);
+            setPendingPhotoFile(null);
+          }}
+        />
+      )}
       <Navbar />
 
       {/* Dark header */}
@@ -658,7 +783,11 @@ function CreatePageInner() {
               <>
                 <div className="mb-5 bg-brand/8 border border-brand/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
                   <span className="text-brand text-sm">🌌</span>
-                  <span className="text-ink-mid text-xs font-semibold">This episode will be saved to the selected universe</span>
+                  <span className="text-ink-mid text-xs font-semibold">
+                    {preselectedUniverseName
+                      ? <><strong className="text-brand">{preselectedUniverseName}</strong> &mdash; choose episode type</>
+                      : "This episode will be saved to the selected universe"}
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
                   {UNIVERSE_MODES.filter(m => universeHasStories || m.value === "new_adventure").map((mode) => (
