@@ -1,3 +1,9 @@
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+// Load .env before NestJS boots — works regardless of CWD (Turbo vs direct)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';

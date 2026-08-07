@@ -182,8 +182,8 @@ export default function BuyCreditsSection({ onPurchased }: BuyCreditsSectionProp
         const err = await initRes.json().catch(() => ({})) as { message?: string };
         throw new Error(err.message ?? "Could not create payment order");
       }
-      const { razorpayOrderId, amount, currency, keyId } =
-        await initRes.json() as { razorpayOrderId: string; amount: number; currency: string; keyId: string };
+      const initBody = await initRes.json() as { data: { razorpayOrderId: string; amount: number; currency: string; keyId: string } };
+      const { razorpayOrderId, amount, currency, keyId } = initBody.data;
 
       // 2. Load Razorpay SDK
       const loaded = await loadRazorpayScript();
@@ -213,8 +213,8 @@ export default function BuyCreditsSection({ onPurchased }: BuyCreditsSectionProp
               const err = await verRes.json().catch(() => ({})) as { message?: string };
               throw new Error(err.message ?? "Payment verification failed");
             }
-            const body = await verRes.json() as { data?: { newBalance: number }; newBalance?: number };
-            const newBalance = (body.data?.newBalance ?? (body as unknown as { newBalance: number }).newBalance) ?? 0;
+            const body = await verRes.json() as { data?: { newBalance: number } };
+            const newBalance = body.data?.newBalance ?? 0;
             onPurchased?.(newBalance);
           } catch (err) {
             setPayError(err instanceof Error ? err.message : "Payment verification failed");

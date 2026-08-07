@@ -25,12 +25,14 @@ export class CreditPacksService {
 
   private get razorpay(): Razorpay {
     if (!this._razorpay) {
+      const keyId = process.env.RAZORPAY_KEY_ID;
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      if (!keyId || !keySecret) {
+        throw new Error(`Razorpay keys not configured (RAZORPAY_KEY_ID=${keyId ? 'set' : 'MISSING'}, RAZORPAY_KEY_SECRET=${keySecret ? 'set' : 'MISSING'})`);
+      }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const RazorpayClass = require('razorpay') as typeof Razorpay;
-      this._razorpay = new RazorpayClass({
-        key_id: process.env.RAZORPAY_KEY_ID ?? '',
-        key_secret: process.env.RAZORPAY_KEY_SECRET ?? '',
-      });
+      this._razorpay = new RazorpayClass({ key_id: keyId, key_secret: keySecret });
     }
     return this._razorpay;
   }
