@@ -248,8 +248,9 @@ function CreatePageInner() {
   const [photoFile, setPhotoFile]     = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [consented, setConsented]     = useState(false);
-  const [cropSrc, setCropSrc]         = useState<string | null>(null);
+  const [cropSrc, setCropSrc]               = useState<string | null>(null);
   const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const [pendingPhotoDataUrl, setPendingPhotoDataUrl] = useState<string | null>(null);
 
   // Characters state
   const [characters, setCharacters]           = useState<Character[]>([]);
@@ -426,7 +427,14 @@ function CreatePageInner() {
 
   function handlePhoto(file: File) {
     setPendingPhotoFile(file);
-    setCropSrc(URL.createObjectURL(file));
+    // Use FileReader → data URL; avoids blob URL issues in some browsers
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setPendingPhotoDataUrl(dataUrl);
+      setCropSrc(dataUrl);
+    };
+    reader.readAsDataURL(file);
   }
 
   function handleCharPhoto(file: File) {
@@ -632,15 +640,17 @@ function CreatePageInner() {
             setConsented(false);
             setCropSrc(null);
             setPendingPhotoFile(null);
+            setPendingPhotoDataUrl(null);
           }}
           onSkip={() => {
-            if (pendingPhotoFile) {
+            if (pendingPhotoFile && pendingPhotoDataUrl) {
               setPhotoFile(pendingPhotoFile);
-              setPhotoPreview(URL.createObjectURL(pendingPhotoFile));
+              setPhotoPreview(pendingPhotoDataUrl); // data URL, no blob URL needed
               setConsented(false);
             }
             setCropSrc(null);
             setPendingPhotoFile(null);
+            setPendingPhotoDataUrl(null);
           }}
         />
       )}
