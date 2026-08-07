@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import Navbar from "@/components/layout/Navbar";
+import AvatarGenerateModal from "@/components/shared/AvatarGenerateModal";
 import AvatarPicker from "@/components/shared/AvatarPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
@@ -264,6 +265,11 @@ function CreatePageInner() {
   const [cropSrc, setCropSrc]               = useState<string | null>(null);
   const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
   const [pendingPhotoDataUrl, setPendingPhotoDataUrl] = useState<string | null>(null);
+  // Avatar generation — shows AvatarGenerateModal after crop
+  const [showAvatarGen, setShowAvatarGen]   = useState(false);
+  const [heroAvatarUrl, setHeroAvatarUrl]   = useState<string | null>(null);
+  const [avatarGenUsed, setAvatarGenUsed]   = useState(0);
+  const [avatarGenMax, setAvatarGenMax]     = useState(2);
 
   // Characters state
   const [characters, setCharacters]           = useState<Character[]>([]);
@@ -333,7 +339,8 @@ function CreatePageInner() {
       preselectedUniverseId
         ? fetch(`${BASE}/companions/universe/${preselectedUniverseId}`, { headers: h }).then(r => r.json()).catch(() => ({ data: null }))
         : Promise.resolve({ data: null }),
-    ]).then(([heroRes, charRes, univRes, storiesRes, companionRes]) => {
+      fetch(`${BASE}/avatars`, { headers: h }).then(r => r.json()).catch(() => ({ data: null })),
+    ]).then(([heroRes, charRes, univRes, storiesRes, companionRes, avatarRes]) => {
       if (Array.isArray(heroRes.data) && heroRes.data.length > 0) {
         setHero(heroRes.data[0] as ExistingHero);
       }
@@ -351,6 +358,10 @@ function CreatePageInner() {
       }
       if (companionRes.data?.id) {
         setExistingCompanion(companionRes.data);
+      }
+      if (avatarRes.data) {
+        setAvatarGenUsed(avatarRes.data.heroGenerationsUsed ?? 0);
+        setAvatarGenMax(avatarRes.data.heroGenerationsMax ?? 2);
       }
     }).finally(() => setHeroLoading(false));
   }, []);
@@ -538,7 +549,7 @@ function CreatePageInner() {
 
   function canAdvance(): boolean {
     switch (stepType) {
-      case "hero":       return !!heroName.trim() && !!heroDob && !!heroGender && (!photoFile || consented);
+      case "hero":       return !!heroName.trim() && !!heroDob && !!heroGender && (!photoFile || heroAvatarUrl !== null || consented);
       case "mode": {
         if (!storyMode) return false;
         // On general path with a universe mode selected, must have a universe picked
@@ -567,8 +578,9 @@ function CreatePageInner() {
       if (hero) {
         heroId = hero.id;
       } else {
-        let avatarUrl: string | undefined;
-        if (photoFile) {
+        // Avatar URL: prefer already-generated cartoon; fall back to raw photo upload
+        let avatarUrl: string | undefined = heroAvatarUrl ?? undefined;
+        if (!avatarUrl && photoFile) {
           const form = new FormData();
           form.append("photo", photoFile);
           const upRes = await fetch(`${BASE}/upload/avatar`, { method: "POST", headers, body: form });
@@ -654,25 +666,50 @@ function CreatePageInner() {
         <CropModal
           src={cropSrc}
           onConfirm={(file, preview) => {
+            // After square crop → open AvatarGenerateModal for cartoon generation
             setPhotoFile(file);
-            setPhotoPreview(preview); // data URL — reliable cross-browser preview
-            setConsented(false);
+            setPhotoPreview(preview);
             setCropSrc(null);
             setPendingPhotoFile(null);
             setPendingPhotoDataUrl(null);
+            setShowAvatarGen(true);
           }}
           onSkip={() => {
-            if (pendingPhotoFile && pendingPhotoDataUrl) {
-              setPhotoFile(pendingPhotoFile);
-              setPhotoPreview(pendingPhotoDataUrl); // data URL, no blob URL needed
-              setConsented(false);
-            }
+            // User skipped crop → use full photo, go straight to AvatarGenerateModal
+            const file = pendingPhotoFile;
+            const preview = pendingPhotoDataUrl;
             setCropSrc(null);
             setPendingPhotoFile(null);
             setPendingPhotoDataUrl(null);
+            if (file && preview) {
+              setPhotoFile(file);
+              setPhotoPreview(preview);
+              setShowAvatarGen(true);
+            }
           }}
         />
       )}
+
+      {showAvatarGen && photoFile && photoPreview && (
+        <AvatarGenerateModal
+          photoFile={photoFile}
+          photoPreview={photoPreview}
+          generateType="hero"
+          generationsUsed={avatarGenUsed}
+          maxGenerations={avatarGenMax}
+          onSuccess={(url) => {
+            setHeroAvatarUrl(url);
+            setAvatarGenUsed(u => u + 1);
+            setShowAvatarGen(false);
+          }}
+          onCancel={() => {
+            // User skipped generation — keep photo for story gen, clear avatar URL
+            setHeroAvatarUrl(null);
+            setShowAvatarGen(false);
+          }}
+        />
+      )}
+
       <Navbar />
 
       {/* Dark header */}
@@ -743,14 +780,34 @@ function CreatePageInner() {
 
             <div className="mb-6">
               <input type="file" accept="image/*,.heic,.heif" id="photo-upload" className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhoto(f); }} />
-              {photoPreview ? (
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) { setHeroAvatarUrl(null); handlePhoto(f); } }} />
+              {heroAvatarUrl ? (
+                /* Cartoon avatar was generated — show it prominently */
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="relative">
+                    <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-brand/30 shadow-lg shadow-brand/20">
+                      <img src={heroAvatarUrl} alt="Hero avatar" className="w-full h-full object-cover" />
+                    </div>
+                    <span className="absolute -bottom-1 -right-1 bg-brand text-white text-[10px] font-bold px-2 py-0.5 rounded-full">✨ Avatar ready</span>
+                  </div>
+                  <label htmlFor="photo-upload"
+                    className="text-ink-muted hover:text-brand text-xs font-medium cursor-pointer transition">
+                    Upload a different photo →
+                  </label>
+                </div>
+              ) : photoPreview ? (
                 <div className="relative w-full rounded-2xl overflow-hidden bg-ink/5 border border-ink/10">
                   <img src={photoPreview} alt="Hero" className="w-full max-h-64 object-contain" />
-                  <label htmlFor="photo-upload"
-                    className="absolute bottom-3 right-3 bg-white/90 backdrop-blur text-ink text-xs font-semibold px-3 py-1.5 rounded-full cursor-pointer hover:bg-white border border-ink/10 shadow-sm transition">
-                    Replace photo
-                  </label>
+                  <div className="absolute bottom-3 right-3 flex gap-2">
+                    <button type="button" onClick={() => setShowAvatarGen(true)}
+                      className="bg-brand text-white text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-brand-dark transition shadow">
+                      ✨ Generate Avatar
+                    </button>
+                    <label htmlFor="photo-upload"
+                      className="bg-white/90 backdrop-blur text-ink text-xs font-semibold px-3 py-1.5 rounded-full cursor-pointer hover:bg-white border border-ink/10 shadow-sm transition">
+                      Replace
+                    </label>
+                  </div>
                 </div>
               ) : (
                 <label htmlFor="photo-upload"
@@ -762,7 +819,7 @@ function CreatePageInner() {
               )}
             </div>
 
-            {photoFile && (
+            {photoFile && !heroAvatarUrl && (
               <label className="flex items-start gap-3 mb-5 cursor-pointer bg-brand-50 rounded-xl p-3">
                 <input type="checkbox" checked={consented} onChange={(e) => setConsented(e.target.checked)}
                   className="mt-0.5 w-4 h-4 rounded accent-brand flex-shrink-0" />
