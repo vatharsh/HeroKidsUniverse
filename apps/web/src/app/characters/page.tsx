@@ -968,7 +968,7 @@ function CharactersPageContent() {
                   </p>
                 )}
 
-                <div className="flex gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex gap-2 mt-3 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity">
                   <button type="button" onClick={() => openEdit(char)}
                     className="p-1.5 rounded-full bg-brand/10 hover:bg-brand hover:text-white text-brand transition-all">
                     <Pencil className="w-3.5 h-3.5" />

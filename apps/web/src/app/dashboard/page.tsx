@@ -218,9 +218,9 @@ function EpisodeCard({ story, onDelete, episodeNumber }: { story: Story; onDelet
   );
 
   return isReady ? (
-    <a href={`/stories/${story.id}`} className="block group">
+    <div className="block group cursor-pointer" onClick={() => { window.location.href = `/stories/${story.id}`; }}>
       {cardInner}
-    </a>
+    </div>
   ) : (
     <div className="block group">{cardInner}</div>
   );
