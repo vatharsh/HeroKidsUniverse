@@ -256,9 +256,10 @@ function CreatePageInner() {
   // Hero state
   const [hero, setHero]               = useState<ExistingHero | null>(null);
   const [heroLoading, setHeroLoading] = useState(true);
-  const [heroName, setHeroName]       = useState("");
-  const [heroDob, setHeroDob]         = useState("");
-  const [heroGender, setHeroGender]   = useState<HeroGender>("");
+  const [heroName, setHeroName]             = useState("");
+  const [heroDob, setHeroDob]               = useState("");
+  const [heroGender, setHeroGender]         = useState<HeroGender>("");
+  const [heroCostumeDescription, setHeroCostumeDescription] = useState("");
   const [photoFile, setPhotoFile]     = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [consented, setConsented]     = useState(false);
@@ -295,6 +296,7 @@ function CreatePageInner() {
   // Universe state (for general path universe picker)
   const [universes, setUniverses]               = useState<Universe[]>([]);
   const [selectedUniverseId, setSelectedUniverseId] = useState<string | null>(null);
+  const [newUniverseName, setNewUniverseName]   = useState("");
   // null = still loading, true/false = resolved
   const [universeHasStories, setUniverseHasStories] = useState<boolean | null>(preselectedUniverseId ? null : true);
 
@@ -394,15 +396,18 @@ function CreatePageInner() {
   const stepSequence = useMemo<StepType[]>(() => {
     const arr: StepType[] = [];
     if (!hasHero) arr.push("hero");
-    // Skip mode selection for new universes — only "New Adventure" makes sense for the first story
-    if (!(preselectedUniverseId && universeHasStories === false)) arr.push("mode");
+    // Skip mode selection for:
+    //  1. New universe path with no stories yet (only new_adventure makes sense)
+    //  2. True first-timer with no hero and no universes — auto-route to new_adventure
+    const isFirstTimer = !hasHero && universes.length === 0;
+    if (!isFirstTimer && !(preselectedUniverseId && universeHasStories === false)) arr.push("mode");
     if (storyMode !== "freeform") arr.push("theme");
     arr.push("characters");
     if (["new_adventure", "continue_arc", "new_arc"].includes(storyMode) && !existingCompanion) arr.push("companion");
     arr.push("context");
     arr.push("generate");
     return arr;
-  }, [hasHero, storyMode, preselectedUniverseId, universeHasStories, existingCompanion]);
+  }, [hasHero, storyMode, preselectedUniverseId, universeHasStories, existingCompanion, universes.length]);
 
   const stepType = stepSequence[step] ?? "generate";
   const stepLabels = stepSequence.map(s => STEP_LABELS[s]);
@@ -445,6 +450,13 @@ function CreatePageInner() {
       .catch(() => {})
       .finally(() => setLastStoryLoading(false));
   }, [storyMode, selectedUniverseId, preselectedUniverseId]);
+
+  // Auto-select new_adventure for true first-timers (no hero, no universes)
+  useEffect(() => {
+    if (!hasHero && !heroLoading && universes.length === 0) {
+      setStoryMode("new_adventure");
+    }
+  }, [hasHero, heroLoading, universes.length]);
 
   // When freeform is selected and theme step disappears, keep step index valid
   useEffect(() => {
@@ -600,18 +612,36 @@ function CreatePageInner() {
         const { data: newHero } = await heroRes.json();
         heroId = newHero.id;
 
-        if (avatarUrl) {
+        const heroPatches: Record<string, string> = {};
+        if (avatarUrl) heroPatches.avatarUrl = avatarUrl;
+        if (heroCostumeDescription.trim()) heroPatches.costumeDescription = heroCostumeDescription.trim();
+        if (Object.keys(heroPatches).length > 0) {
           await fetch(`${BASE}/heroes/${heroId}`, {
             method: "PATCH",
             headers: { ...headers, "Content-Type": "application/json" },
-            body: JSON.stringify({ avatarUrl }),
+            body: JSON.stringify(heroPatches),
           });
         }
       }
 
       const isIndependent = storyMode === "standalone";
+
+      // For first-timers with no universe, create one from the name they entered
+      let resolvedUniverseId = preselectedUniverseId ?? selectedUniverseId ?? null;
+      if (!resolvedUniverseId && !isIndependent && newUniverseName.trim()) {
+        const univRes = await fetch(`${BASE}/universes`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newUniverseName.trim() }),
+        });
+        if (univRes.ok) {
+          const { data: newUniverse } = await univRes.json();
+          resolvedUniverseId = newUniverse?.id ?? null;
+        }
+      }
+
       // Universe ID: from URL param (universe button path) or from picker (general path)
-      const effectiveUniverseId = isIndependent ? undefined : (preselectedUniverseId ?? selectedUniverseId ?? undefined);
+      const effectiveUniverseId = isIndependent ? undefined : (resolvedUniverseId ?? undefined);
       const storyRes = await fetch(`${BASE}/stories`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
@@ -870,6 +900,19 @@ function CreatePageInner() {
                   })}
                 </div>
               </div>
+              <div>
+                <label className="text-ink-mid text-sm font-medium block mb-1.5">
+                  Hero&apos;s signature outfit <span className="text-ink-muted font-normal text-xs">— optional</span>
+                </label>
+                <textarea
+                  value={heroCostumeDescription}
+                  onChange={(e) => setHeroCostumeDescription(e.target.value)}
+                  rows={2}
+                  maxLength={200}
+                  placeholder="e.g. Red cape, blue mask, golden shield — or their favourite t-shirt"
+                  className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none text-sm"
+                />
+              </div>
             </div>
           </section>
         )}
@@ -983,7 +1026,8 @@ function CreatePageInner() {
                   ) : (
                     <>
                       <div className="grid grid-cols-1 gap-3">
-                        {UNIVERSE_MODES.map((mode) => (
+                        {/* First-time hero creators only see New Adventure — no Continue/Arc yet */}
+                        {UNIVERSE_MODES.filter(m => hasHero || m.value === "new_adventure").map((mode) => (
                           <button key={mode.value} type="button"
                             onClick={() => handleModeSelect(mode.value)}
                             className={cn(
@@ -1453,6 +1497,22 @@ function CreatePageInner() {
         {/* ── Story Context ────────────────────────────────────────────────── */}
         {stepType === "context" && (
           <section>
+            {/* Universe naming for first-timers (no hero, no universe yet) */}
+            {!hasHero && universes.length === 0 && storyMode === "new_adventure" && (
+              <div className="mb-6 bg-brand/5 border border-brand/20 rounded-2xl p-5">
+                <p className="text-ink font-semibold text-sm mb-1">🌌 Name your universe</p>
+                <p className="text-ink-muted text-xs mb-3">Every hero has a universe — a home for all their adventures. Give it a name!</p>
+                <input
+                  type="text"
+                  value={newUniverseName}
+                  onChange={(e) => setNewUniverseName(e.target.value)}
+                  maxLength={60}
+                  placeholder="e.g. Arjun's Epic Adventures"
+                  className="w-full px-4 py-3 rounded-xl border border-brand/30 bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition text-sm"
+                />
+                <p className="text-ink-muted text-[11px] mt-1.5">Optional — we&apos;ll create one automatically if you skip.</p>
+              </div>
+            )}
             <p className="text-ink-muted text-sm mb-2">
               {storyMode === "standalone"
                 ? "Describe what happens in this story. Be as specific or as vague as you like — the AI will build around it."
