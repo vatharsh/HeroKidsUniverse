@@ -85,6 +85,18 @@ const GROUPS: SettingGroup[] = [
       { key: "MAX_IMAGES_PER_STORY_PROD", label: "Max Images / Story (Prod)", description: "Image cap used in production.", type: "number" },
     ],
   },
+  {
+    title: "Character Age & Visual Consistency",
+    description: "Controls how the image pipeline enforces character ages and applies age-appropriate styling. Changes take effect on the next story generated.",
+    items: [
+      { key: "APPARENT_AGE_QA_ENABLED", label: "Apparent-Age QA", description: "After each image is generated, a vision pass checks whether each child character's apparent age matches their canon age. If drift is detected, the image is regenerated.", type: "boolean" },
+      { key: "APPARENT_AGE_TOLERANCE", label: "Age Drift Tolerance (years)", description: "Maximum allowed difference (in years) between a character's canon age and their estimated apparent age before the image is retried. Default: 3.", type: "number" },
+      { key: "APPARENT_AGE_RETRY_CAP", label: "Age QA Retry Cap", description: "How many times to retry image generation if age drift is detected. Each retry uses identity boost mode. Default: 2.", type: "number" },
+      { key: "CHILD_COSTUME_REWRITE_ENABLED", label: "Child Costume Rewrite", description: "Automatically qualifies adult-coded costume descriptions (e.g. 'battle armor') with 'child-sized' for heroes below the age threshold, reducing age drift caused by costume vocabulary.", type: "boolean" },
+      { key: "CHILD_COSTUME_REWRITE_AGE_THRESHOLD", label: "Costume Rewrite Age Threshold", description: "Heroes younger than this age (in years) will have their costume descriptions rewritten to child-coded equivalents. Default: 13.", type: "number" },
+      { key: "ENABLE_COSTUMED_CANONICAL", label: "Costumed Canonical Reference", description: "Before generating story pages, pre-generate one portrait of each child character wearing their story costume. All page generation calls then reference this costumed portrait instead of the plain avatar, locking both age and outfit. Increases cost (one extra image per child character per story).", type: "boolean" },
+    ],
+  },
 ];
 
 function defaultValues(): Record<string, string> {
