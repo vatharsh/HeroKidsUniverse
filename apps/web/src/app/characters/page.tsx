@@ -822,10 +822,19 @@ function CharactersPageContent() {
 
       <main className="flex-1 max-w-4xl mx-auto px-6 py-12 w-full">
 
-        {/* Hero card */}
-        {!loading && !hero && (
-          <div className="mb-10">
-            <p className="text-ink-mid text-xs font-bold uppercase tracking-widest mb-3">Main Hero · always in every story</p>
+        {/* Hero card — always visible (skeleton while loading) */}
+        <div className="mb-10">
+          <p className="text-ink-mid text-xs font-bold uppercase tracking-widest mb-3">Main Hero · always in every story</p>
+          {loading ? (
+            <div className="bg-white rounded-2xl shadow-card p-5 flex items-center gap-4 border-2 border-gray-100 animate-pulse">
+              <div className="w-14 h-14 rounded-full bg-gray-200 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-200 rounded-full w-28" />
+                <div className="h-3 bg-gray-100 rounded-full w-20" />
+              </div>
+              <div className="h-8 w-14 bg-gray-100 rounded-full" />
+            </div>
+          ) : !hero ? (
             <div className="bg-white rounded-2xl shadow-card p-5 flex items-center gap-4 border-2 border-dashed border-brand/20">
               <div className="w-14 h-14 rounded-full bg-brand/10 flex items-center justify-center text-2xl flex-shrink-0">🦸</div>
               <div className="flex-1 min-w-0">
@@ -836,12 +845,7 @@ function CharactersPageContent() {
                 Create First Story →
               </a>
             </div>
-          </div>
-        )}
-
-        {hero && (
-          <div className="mb-10">
-            <p className="text-ink-mid text-xs font-bold uppercase tracking-widest mb-3">Main Hero · always in every story</p>
+          ) : (
             <div className="bg-white rounded-2xl shadow-card p-5 flex items-center gap-4 border-2 border-brand/15">
               <button type="button" onClick={() => setShowHeroEdit(true)} className="relative flex-shrink-0 group">
                 <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-2xl">
@@ -874,8 +878,8 @@ function CharactersPageContent() {
                 </a>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Supporting cast header */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
