@@ -30,6 +30,8 @@ services:
       DATABASE_URL: postgresql://hku:${DB_PASSWORD}@hku-postgres:5432/heroverse
       REDIS_URL: redis://hku-redis:6379
       API_PUBLIC_URL: https://api.herokidsuniverse.com/api
+    volumes:
+      - hku_uploads_data:/app/uploads
     depends_on:
       - hku-postgres
       - hku-redis
@@ -53,6 +55,7 @@ services:
 volumes:
   hku_postgres_data:
   hku_redis_data:
+  hku_uploads_data:
 
 networks:
   herokids:
