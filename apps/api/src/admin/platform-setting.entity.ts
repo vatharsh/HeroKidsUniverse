@@ -111,7 +111,7 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   OPENAI_IMAGE_QUALITY:                     { value: 'medium',          type: 'string',  description: 'OpenAI image quality: low | medium | high. Higher quality is slower and costs more per image.' },
   OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK:{ value: 'false',           type: 'boolean', description: 'Allow image generation without reference photos. If false, hero avatar references are required.' },
   GEMINI_IMAGE_COST_PER_IMAGE:              { value: '0.039',           type: 'number',  description: 'Gemini image generation cost per image (USD). Default: Nano Banana 2 (gemini-3.1-flash-image) at ~$0.039/image.' },
-  ENABLE_SPEECH_BUBBLE_LAYOUT_QA:          { value: 'false',           type: 'boolean', description: 'Run a GPT-4o-mini vision pass after each page to refine speech bubble anchor positions. Adds ~2-5s per page with speech bubbles. Disable if generation is slow.' },
+  ENABLE_SPEECH_BUBBLE_LAYOUT_QA:          { value: 'true',            type: 'boolean', description: 'Run a GPT-4o-mini vision pass after each page to refine speech bubble anchor positions. Adds ~2-5s per page with speech bubbles. Disable if generation is slow.' },
 
   // ── Preset & mode ─────────────────────────────────────────────────────────────
   QA_PRESET:                        { value: 'balanced',    type: 'string',  description: 'Active QA configuration preset (development/balanced/strict/cost_optimized/custom).' },

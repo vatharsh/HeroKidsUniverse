@@ -239,6 +239,18 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
         ].join(' ')
       : '';
 
+    // Explicit age lock — prevents gpt-image-1 from ageing up child heroes when they wear
+    // grown-up costumes (explorer, superhero, etc.) or appear in adult-coded settings.
+    const ageLockLine = input.heroAge < 18
+      ? [
+          `⚠️ CHILD AGE LOCK — CRITICAL: ${input.heroName} is ${input.heroAge} years old — a CHILD, not a teenager, not a young adult.`,
+          `In EVERY panel, draw them with the face proportions and body size of a ${input.heroAge}-year-old child:`,
+          `rounded cheeks, soft jawline, small nose, large-relative-to-face eyes, child-height body.`,
+          `An explorer costume, superhero suit, or adventure gear does NOT change their age. The character inside the costume is still a child aged ${input.heroAge}.`,
+          `This is NON-NEGOTIABLE. If you feel the scene or costume suggests an older character, ignore that feeling and draw a ${input.heroAge}-year-old child.`,
+        ].join(' ')
+      : '';
+
     const styleDefault = input.style ?? STORYBOOK_STYLE;
     const stateBlock = input.storyStateBlock ?? storyStateLockLine;
 
@@ -246,6 +258,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
     if (dbImageTemplate) {
       // DB template is the source of truth — render exclusively, no blending
       prompt = [
+        ageLockLine, // prepend age lock before the DB template so it is always seen
         this.promptRegistry.renderPrompt(dbImageTemplate, {
           style: styleDefault,
           referenceOrderLine,
@@ -264,6 +277,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
     } else {
       // Hardcoded fallback
       prompt = [
+        ageLockLine,
         styleDefault,
         referenceOrderLine,
         heroIdentityLine,
