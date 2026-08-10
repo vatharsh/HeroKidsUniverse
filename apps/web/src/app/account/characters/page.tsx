@@ -3,10 +3,17 @@
 import { ExternalLink, Loader2, Pencil, Plus, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import type React from "react";
 
 import { getAccessToken } from "@/lib/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
+
+function AvatarImg({ src, alt, className, fallback }: { src: string | null; alt: string; className?: string; fallback: React.ReactNode }) {
+  const [errored, setErrored] = useState(false);
+  if (!src || errored) return <>{fallback}</>;
+  return <img src={src} alt={alt} className={className} onError={() => setErrored(true)} />;
+}
 
 interface Hero {
   id: string;
@@ -89,9 +96,7 @@ export default function AccountCharactersPage() {
                 HERO
               </div>
               <div className="w-full h-28 bg-gradient-to-br from-brand/20 to-purple-100 flex items-center justify-center">
-                {hero.avatarUrl
-                  ? <img src={hero.avatarUrl} alt={hero.name ?? "Hero"} className="w-full h-full object-cover" />
-                  : <span className="text-4xl font-bold text-ink/20">{(hero.name ?? "H")[0]}</span>}
+                <AvatarImg src={hero.avatarUrl} alt={hero.name ?? "Hero"} className="w-full h-full object-cover" fallback={<span className="text-4xl font-bold text-ink/20">{(hero.name ?? "H")[0]}</span>} />
               </div>
               <div className="p-4">
                 <p className="font-[family-name:var(--font-display)] text-ink text-base leading-snug">{hero.name ?? "Unnamed Hero"}</p>
@@ -110,9 +115,7 @@ export default function AccountCharactersPage() {
           {characters.map(c => (
             <div key={c.id} className="bg-white rounded-2xl border border-ink/10 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
               <div className="w-full h-28 bg-gradient-to-br from-brand/10 to-purple-50 flex items-center justify-center">
-                {c.avatarUrl
-                  ? <img src={c.avatarUrl} alt={c.name} className="w-full h-full object-cover" />
-                  : <span className="text-4xl font-bold text-ink/20">{c.name[0]}</span>}
+                <AvatarImg src={c.avatarUrl} alt={c.name} className="w-full h-full object-cover" fallback={<span className="text-4xl font-bold text-ink/20">{c.name[0]}</span>} />
               </div>
               <div className="p-4">
                 <p className="font-[family-name:var(--font-display)] text-ink text-base leading-snug">{c.name}</p>

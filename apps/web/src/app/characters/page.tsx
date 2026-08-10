@@ -87,6 +87,13 @@ const DEFAULT_ECONOMY: CharacterEconomy = {
   avatarRefreshTokens: 0,
 };
 
+// Gracefully falls back to a placeholder when the avatar URL is broken (e.g. file deleted after server redeploy).
+function AvatarImg({ src, alt, className, fallback }: { src: string | null; alt: string; className?: string; fallback: React.ReactNode }) {
+  const [errored, setErrored] = useState(false);
+  if (!src || errored) return <>{fallback}</>;
+  return <img src={src} alt={alt} className={className} onError={() => setErrored(true)} />;
+}
+
 // ── Character Form Modal ──────────────────────────────────────────────────────
 
 interface FormModalProps {
@@ -849,9 +856,7 @@ function CharactersPageContent() {
             <div className="bg-white rounded-2xl shadow-card p-5 flex items-center gap-4 border-2 border-brand/15">
               <button type="button" onClick={() => setShowHeroEdit(true)} className="relative flex-shrink-0 group">
                 <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-2xl">
-                  {hero.avatarUrl
-                    ? <img src={hero.avatarUrl} alt={heroName} className="w-full h-full object-cover" />
-                    : "🦸"}
+                  <AvatarImg src={hero.avatarUrl} alt={heroName} className="w-full h-full object-cover" fallback="🦸" />
                 </div>
                 {!hero.avatarUrl && (
                   <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-brand text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
@@ -950,9 +955,7 @@ function CharactersPageContent() {
             {characters.map((char) => (
               <div key={char.id} className="bg-white rounded-2xl shadow-card p-5 flex flex-col items-center text-center relative group">
                 <div className="w-16 h-16 rounded-full overflow-hidden bg-brand-50 flex items-center justify-center mb-3 flex-shrink-0">
-                  {char.avatarUrl
-                    ? <img src={char.avatarUrl} alt={char.name?.trim() || "Character"} className="w-full h-full object-cover" />
-                    : <span className="text-3xl">{roleEmoji(char.role)}</span>}
+                  <AvatarImg src={char.avatarUrl} alt={char.name?.trim() || "Character"} className="w-full h-full object-cover" fallback={<span className="text-3xl">{roleEmoji(char.role)}</span>} />
                 </div>
 
                 <p className="font-[family-name:var(--font-display)] text-ink text-sm leading-tight mb-0.5">
