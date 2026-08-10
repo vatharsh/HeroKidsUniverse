@@ -32,6 +32,7 @@ export interface ImageGenerationInput {
   characterCanonSummaries?: string[];
   characterNeverChangeRules?: (string[] | null)[]; // one entry per supporting character, same order
   characterBibles?: string[]; // one entry per supporting character — user-authored CHARACTER BIBLE block
+  supportingCharacterAges?: (number | null)[]; // one entry per supporting character — used for age-anchor descriptors
   storyStateBlock?: string;
   characterDirections?: Array<{
     name: string;
@@ -102,6 +103,24 @@ export interface AvatarGenerationInput {
   adjustmentHint?: string;
 }
 
+export interface ApparentAgeCheckInput {
+  imageBase64: string;
+  characters: Array<{ name: string; canonAge: number; description?: string }>;
+}
+
+export interface ApparentAgeCheckResult {
+  estimates: Array<{ name: string; canonAge: number; estimatedAge: number }>;
+}
+
+export interface CostumedCanonicalInput {
+  characterName: string;
+  age: number;
+  costumeDescription: string;
+  avatarUrl: string;
+  canonSummary?: string;
+  quality?: string;
+}
+
 export interface ImageGenerationProvider {
   generateImage(input: ImageGenerationInput): Promise<ImageGenerationOutput>;
   generateAvatar(input: AvatarGenerationInput): Promise<ImageGenerationOutput>;
@@ -111,4 +130,6 @@ export interface ImageGenerationProvider {
   checkFaceConsistency(heroAvatarUrl: string, generatedImageBase64: string, heroName: string): Promise<FaceConsistencyResult | null>;
   checkFaceConsistencyFromUrl(heroAvatarUrl: string, generatedImageUrl: string, heroName: string): Promise<FaceConsistencyResult | null>;
   locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null>;
+  checkApparentAge(input: ApparentAgeCheckInput): Promise<ApparentAgeCheckResult | null>;
+  generateCostumedCanonical(input: CostumedCanonicalInput): Promise<ImageGenerationOutput>;
 }

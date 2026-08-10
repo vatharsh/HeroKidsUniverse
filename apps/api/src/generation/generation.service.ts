@@ -316,6 +316,7 @@ export class GenerationService implements OnModuleInit {
       if (companionLabel) supportingCharLabels.push(companionLabel);
       const supportingCharAvatars = supportingChars.map((c) => c.avatarUrl).filter((u): u is string => !!u);
       const supportingCharDescriptions = supportingChars.map((c) => c.avatarDescription ?? '');
+      const supportingCharAges: (number | null)[] = supportingChars.map((c) => c.age);
       const characterCanonData = canonEnabled
         ? await this.buildCharacterCanonData(story, supportingChars)
         : { summaries: supportingChars.map((c) => c.avatarDescription ?? ''), neverChangeRules: supportingChars.map(() => null) };
@@ -471,6 +472,7 @@ export class GenerationService implements OnModuleInit {
           characterCanonSummaries,
           characterNeverChangeRules,
           characterBibles,
+          supportingCharAges,
           async (sceneNum, total) => {
             await updateJob({
               currentStep: `Generating Illustrations (scene ${sceneNum}/${total})`,
@@ -502,6 +504,7 @@ export class GenerationService implements OnModuleInit {
           characterCanonSummaries,
           characterNeverChangeRules,
           characterBibles,
+          supportingCharAges,
           async (pageNum, total) => {
             await updateJob({
               currentStep: `Generating Illustrations (${pageNum}/${total})`,
@@ -661,6 +664,7 @@ export class GenerationService implements OnModuleInit {
     characterCanonSummaries?: string[],
     characterNeverChangeRules?: (string[] | null)[],
     characterBibles?: string[],
+    supportingCharAges?: (number | null)[],
     onPageDone?: (pageNum: number, total: number) => Promise<void>,
   ): Promise<{ pages: StoryPage[]; totalCostUsd: number }> {
     const mode = await this.getStringSetting('IMAGE_GENERATION_MODE', 'full_generation');
@@ -723,6 +727,85 @@ export class GenerationService implements OnModuleInit {
     const costPerImage = await this.getNumberSetting(imageCostKey as keyof typeof SETTING_DEFAULTS, Number(SETTING_DEFAULTS[imageCostKey as keyof typeof SETTING_DEFAULTS]?.value ?? SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value));
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
     const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
+    const ageQAEnabled = await this.getBooleanSetting('APPARENT_AGE_QA_ENABLED', true);
+    const ageQATolerance = await this.getNumberSetting('APPARENT_AGE_TOLERANCE', 3);
+    const ageQARetryCap = await this.getNumberSetting('APPARENT_AGE_RETRY_CAP', 2);
+    const childCostumeRewriteEnabled = await this.getBooleanSetting('CHILD_COSTUME_REWRITE_ENABLED', true);
+    const childCostumeThreshold = await this.getNumberSetting('CHILD_COSTUME_REWRITE_AGE_THRESHOLD', 13);
+    const costumedCanonicalEnabled = await this.getBooleanSetting('ENABLE_COSTUMED_CANONICAL', false);
+
+    // Change 4: rewrite adult-coded costume language for child characters
+    const effectiveVisualState: typeof storyVisualState = (storyVisualState && childCostumeRewriteEnabled)
+      ? {
+          ...storyVisualState,
+          costume: (storyVisualState.costume && heroAge < childCostumeThreshold)
+            ? this.rewriteChildCostume(storyVisualState.costume, heroAge)
+            : storyVisualState.costume,
+        }
+      : storyVisualState;
+
+    // Change 5: build child-character list for apparent-age QA
+    const ageQAChildChars = [
+      ...(heroAge < 18 ? [{ name: heroName, canonAge: heroAge, description: hero.avatarDescription ?? undefined }] : []),
+      ...(supportingCharAges ?? []).flatMap((age, i) => {
+        if (!age || age >= 18) return [];
+        const name = supportingCharacters[i]?.split('(')[0].trim() ?? `Character ${i + 1}`;
+        return [{ name, canonAge: age, description: characterAvatarDescriptions[i] ?? undefined }];
+      }),
+    ];
+
+    // Change 7: costumed canonical pre-step (behind ENABLE_COSTUMED_CANONICAL flag)
+    let effectiveHeroAvatarUrl = hero.avatarUrl;
+    let effectiveCharAvatarUrls = [...characterAvatarUrls];
+    if (costumedCanonicalEnabled && !isBackgroundOnly) {
+      if (hero.avatarUrl && heroAge < 18 && effectiveVisualState?.costume) {
+        try {
+          const canonical = await this.imageProvider.generateCostumedCanonical({
+            characterName: heroName,
+            age: heroAge,
+            costumeDescription: effectiveVisualState.costume,
+            avatarUrl: hero.avatarUrl,
+            canonSummary: heroCanonSummary,
+            quality: imageQuality,
+          });
+          if (canonical.imageUrl) {
+            effectiveHeroAvatarUrl = canonical.imageUrl;
+            this.logger.log(`Costumed canonical generated for hero ${heroName}`);
+          }
+        } catch (err) {
+          this.logger.warn(`Costumed canonical failed for hero: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      for (let i = 0; i < characterAvatarUrls.length; i++) {
+        const charAge = supportingCharAges?.[i];
+        if (!charAge || charAge >= 18 || !characterAvatarUrls[i]) continue;
+        const charName = supportingCharacters[i]?.split('(')[0].trim();
+        const charCostume = effectiveVisualState?.characterOutfits?.[charName ?? ''];
+        if (!charCostume || !charName) continue;
+        try {
+          const canonical = await this.imageProvider.generateCostumedCanonical({
+            characterName: charName,
+            age: charAge,
+            costumeDescription: charCostume,
+            avatarUrl: characterAvatarUrls[i],
+            canonSummary: characterCanonSummaries?.[i],
+            quality: imageQuality,
+          });
+          if (canonical.imageUrl) {
+            effectiveCharAvatarUrls[i] = canonical.imageUrl;
+            this.logger.log(`Costumed canonical generated for ${charName}`);
+          }
+        } catch (err) {
+          this.logger.warn(`Costumed canonical failed for ${charName}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    // Supporting char info for Change 3 (age prefix in scene descriptions)
+    const supportingCharInfoForAgePrefix = supportingCharacters.map((label, i) => ({
+      name: label.split('(')[0].trim(),
+      age: supportingCharAges?.[i] ?? null,
+    }));
 
     // Separate pages that get illustrations from those that don't (beyond maxImages cap)
     const illustratedPages = generated.pages.slice(0, maxImages);
@@ -741,16 +824,19 @@ export class GenerationService implements OnModuleInit {
       async (page): Promise<PageResult> => {
         try {
           const imageInput: ImageGenerationInput = {
-            sceneDescription: page.sceneDescription,
+            // Change 3: embed hero+character ages in scene description's first mention of each name
+            sceneDescription: this.prefixAgesInSceneDescription(
+              page.sceneDescription, heroName, heroAge, supportingCharInfoForAgePrefix,
+            ),
             heroName,
             heroAge,
             supportingCharacters,
-            heroAvatarUrl: hero.avatarUrl ?? undefined,
+            heroAvatarUrl: effectiveHeroAvatarUrl ?? undefined,
             heroAvatarDescription: hero.avatarDescription ?? undefined,
-            characterAvatarUrls,
+            characterAvatarUrls: effectiveCharAvatarUrls,
             characterAvatarDescriptions,
             style: isBackgroundOnly ? BACKGROUND_SCENE_STYLE : STORYBOOK_STYLE,
-            storyVisualState: storyVisualState ?? undefined,
+            storyVisualState: effectiveVisualState ?? undefined,
             dialogue: page.dialogue,
             characters: page.characters,
             camera: page.camera,
@@ -760,6 +846,7 @@ export class GenerationService implements OnModuleInit {
             characterCanonSummaries,
             characterNeverChangeRules,
             characterBibles,
+            supportingCharacterAges: supportingCharAges ?? undefined,
             storyStateBlock: pageStateBlockMap.get(page.pageNumber) ?? undefined,
             characterDirections: page.characterDirections,
             backgroundOnlyMode: isBackgroundOnly,
@@ -780,6 +867,39 @@ export class GenerationService implements OnModuleInit {
                 imageOutput = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true });
               } catch {
                 this.logger.warn(`Identity boost regeneration failed for page ${page.pageNumber}, using original`);
+              }
+            }
+          }
+
+          // Change 5: apparent-age QA gate — separate from face-consistency score
+          if (!isBackgroundOnly && ageQAEnabled && ageQAChildChars.length > 0 && imageOutput.imageBase64) {
+            const ageResult = await this.imageProvider.checkApparentAge({
+              imageBase64: imageOutput.imageBase64,
+              characters: ageQAChildChars,
+            }).catch(() => null);
+            if (ageResult) {
+              const hasDrift = ageResult.estimates.some(
+                (e) => Math.abs(e.estimatedAge - e.canonAge) > ageQATolerance,
+              );
+              if (hasDrift) {
+                this.logger.warn(
+                  `Age QA page ${page.pageNumber}: drift — ${ageResult.estimates
+                    .map((e) => `${e.name} canon=${e.canonAge} est=${e.estimatedAge}`).join(', ')}`,
+                );
+                for (let attempt = 0; attempt < ageQARetryCap; attempt++) {
+                  try {
+                    const retryOutput = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true });
+                    const retryCheck = retryOutput.imageBase64
+                      ? await this.imageProvider.checkApparentAge({
+                          imageBase64: retryOutput.imageBase64, characters: ageQAChildChars,
+                        }).catch(() => null)
+                      : null;
+                    const stillDrift = retryCheck?.estimates.some(
+                      (e) => Math.abs(e.estimatedAge - e.canonAge) > ageQATolerance,
+                    ) ?? true;
+                    if (!stillDrift) { imageOutput = retryOutput; break; }
+                  } catch { break; }
+                }
               }
             }
           }
@@ -910,6 +1030,7 @@ export class GenerationService implements OnModuleInit {
     characterCanonSummaries?: string[],
     characterNeverChangeRules?: (string[] | null)[],
     characterBibles?: string[],
+    supportingCharAges?: (number | null)[],
     onPageDone?: (pageNum: number, total: number) => Promise<void>,
   ): Promise<{ pages: StoryPage[]; scenes: StoryScene[]; totalCostUsd: number }> {
     const scenes = generated.scenes ?? [];
@@ -927,6 +1048,12 @@ export class GenerationService implements OnModuleInit {
     const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
     const imageQuality = await this.getStringSetting('OPENAI_IMAGE_QUALITY', 'medium');
     const allowReferenceless = await this.getBooleanSetting('OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK', false);
+    const ageQAEnabled = await this.getBooleanSetting('APPARENT_AGE_QA_ENABLED', true);
+    const ageQATolerance = await this.getNumberSetting('APPARENT_AGE_TOLERANCE', 3);
+    const ageQARetryCap = await this.getNumberSetting('APPARENT_AGE_RETRY_CAP', 2);
+    const childCostumeRewriteEnabled = await this.getBooleanSetting('CHILD_COSTUME_REWRITE_ENABLED', true);
+    const childCostumeThreshold = await this.getNumberSetting('CHILD_COSTUME_REWRITE_AGE_THRESHOLD', 13);
+    const costumedCanonicalEnabled = await this.getBooleanSetting('ENABLE_COSTUMED_CANONICAL', false);
     let totalCostUsd = 0;
     let settled = 0;
 
@@ -983,20 +1110,96 @@ export class GenerationService implements OnModuleInit {
     const illustratedScenes = scenes.slice(0, maxScenes);
     const remainingScenes = scenes.slice(maxScenes);
 
+    // Change 4: rewrite adult-coded costume language for child characters
+    const effectiveVisualState: typeof storyVisualState = (storyVisualState && childCostumeRewriteEnabled)
+      ? {
+          ...storyVisualState,
+          costume: (storyVisualState.costume && heroAge < childCostumeThreshold)
+            ? this.rewriteChildCostume(storyVisualState.costume, heroAge)
+            : storyVisualState.costume,
+        }
+      : storyVisualState;
+
+    // Change 5: child-character list for apparent-age QA
+    const ageQAChildChars = [
+      ...(heroAge < 18 ? [{ name: heroName, canonAge: heroAge, description: hero.avatarDescription ?? undefined }] : []),
+      ...(supportingCharAges ?? []).flatMap((age, i) => {
+        if (!age || age >= 18) return [];
+        const name = supportingCharacters[i]?.split('(')[0].trim() ?? `Character ${i + 1}`;
+        return [{ name, canonAge: age, description: characterAvatarDescriptions[i] ?? undefined }];
+      }),
+    ];
+
+    // Change 7: costumed canonical pre-step (behind ENABLE_COSTUMED_CANONICAL flag)
+    let effectiveHeroAvatarUrl = hero.avatarUrl;
+    let effectiveCharAvatarUrls = [...characterAvatarUrls];
+    if (costumedCanonicalEnabled && !isBackgroundOnly) {
+      if (hero.avatarUrl && heroAge < 18 && effectiveVisualState?.costume) {
+        try {
+          const canonical = await this.imageProvider.generateCostumedCanonical({
+            characterName: heroName,
+            age: heroAge,
+            costumeDescription: effectiveVisualState.costume,
+            avatarUrl: hero.avatarUrl,
+            canonSummary: heroCanonSummary,
+            quality: imageQuality,
+          });
+          if (canonical.imageUrl) {
+            effectiveHeroAvatarUrl = canonical.imageUrl;
+            this.logger.log(`Costumed canonical generated for hero ${heroName}`);
+          }
+        } catch (err) {
+          this.logger.warn(`Costumed canonical failed for hero: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      for (let i = 0; i < characterAvatarUrls.length; i++) {
+        const charAge = supportingCharAges?.[i];
+        if (!charAge || charAge >= 18 || !characterAvatarUrls[i]) continue;
+        const charName = supportingCharacters[i]?.split('(')[0].trim();
+        const charCostume = effectiveVisualState?.characterOutfits?.[charName ?? ''];
+        if (!charCostume || !charName) continue;
+        try {
+          const canonical = await this.imageProvider.generateCostumedCanonical({
+            characterName: charName,
+            age: charAge,
+            costumeDescription: charCostume,
+            avatarUrl: characterAvatarUrls[i],
+            canonSummary: characterCanonSummaries?.[i],
+            quality: imageQuality,
+          });
+          if (canonical.imageUrl) {
+            effectiveCharAvatarUrls[i] = canonical.imageUrl;
+            this.logger.log(`Costumed canonical generated for ${charName}`);
+          }
+        } catch (err) {
+          this.logger.warn(`Costumed canonical failed for ${charName}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    // Supporting char info for Change 3 (age prefix in scene descriptions)
+    const supportingCharInfoForAgePrefix = supportingCharacters.map((label, i) => ({
+      name: label.split('(')[0].trim(),
+      age: supportingCharAges?.[i] ?? null,
+    }));
+
     const buildSceneImageInput = (scene: SceneOutput, styleReferenceUrl?: string): ImageGenerationInput => {
       const firstPage = scene.pages[0];
       return {
-        sceneDescription: scene.illustrationBrief,
+        // Change 3: embed hero+character ages in the first mention of each name
+        sceneDescription: this.prefixAgesInSceneDescription(
+          scene.illustrationBrief, heroName, heroAge, supportingCharInfoForAgePrefix,
+        ),
         heroName,
         heroAge,
         supportingCharacters,
-        heroAvatarUrl: hero.avatarUrl ?? undefined,
+        heroAvatarUrl: effectiveHeroAvatarUrl ?? undefined,
         heroAvatarDescription: hero.avatarDescription ?? undefined,
-        characterAvatarUrls,
+        characterAvatarUrls: effectiveCharAvatarUrls,
         characterAvatarDescriptions,
         style: STORYBOOK_STYLE,
         styleReferenceUrl,
-        storyVisualState: storyVisualState ?? undefined,
+        storyVisualState: effectiveVisualState ?? undefined,
         characters: firstPage?.characters,
         camera: 'wide cinematic composition, characters positioned with generous background space on all sides for flexible cropping',
         heroCanonSummary,
@@ -1005,6 +1208,7 @@ export class GenerationService implements OnModuleInit {
         characterCanonSummaries,
         characterNeverChangeRules,
         characterBibles,
+        supportingCharacterAges: supportingCharAges ?? undefined,
         storyStateBlock: sceneStateBlockMap.get(scene.sceneId) ?? undefined,
         characterDirections: firstPage?.characterDirections,
         backgroundOnlyMode: isBackgroundOnly,
@@ -1030,6 +1234,39 @@ export class GenerationService implements OnModuleInit {
               imageOutput = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true });
             } catch {
               this.logger.warn(`Identity boost regeneration failed for scene ${scene.sceneId}, using original`);
+            }
+          }
+        }
+
+        // Change 5: apparent-age QA gate
+        if (!isBackgroundOnly && ageQAEnabled && ageQAChildChars.length > 0 && imageOutput.imageBase64) {
+          const ageResult = await this.imageProvider.checkApparentAge({
+            imageBase64: imageOutput.imageBase64,
+            characters: ageQAChildChars,
+          }).catch(() => null);
+          if (ageResult) {
+            const hasDrift = ageResult.estimates.some(
+              (e) => Math.abs(e.estimatedAge - e.canonAge) > ageQATolerance,
+            );
+            if (hasDrift) {
+              this.logger.warn(
+                `Age QA scene ${scene.sceneId}: drift — ${ageResult.estimates
+                  .map((e) => `${e.name} canon=${e.canonAge} est=${e.estimatedAge}`).join(', ')}`,
+              );
+              for (let attempt = 0; attempt < ageQARetryCap; attempt++) {
+                try {
+                  const retryOutput = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true });
+                  const retryCheck = retryOutput.imageBase64
+                    ? await this.imageProvider.checkApparentAge({
+                        imageBase64: retryOutput.imageBase64, characters: ageQAChildChars,
+                      }).catch(() => null)
+                    : null;
+                  const stillDrift = retryCheck?.estimates.some(
+                    (e) => Math.abs(e.estimatedAge - e.canonAge) > ageQATolerance,
+                  ) ?? true;
+                  if (!stillDrift) { imageOutput = retryOutput; break; }
+                } catch { break; }
+              }
             }
           }
         }
@@ -1155,18 +1392,20 @@ export class GenerationService implements OnModuleInit {
         if (!isBackgroundOnly && sceneImageUrl && needsPageSpecificExpression) {
           try {
             const imageInput: ImageGenerationInput = {
-              sceneDescription: page.sceneDescription || scene.illustrationBrief,
+              sceneDescription: this.prefixAgesInSceneDescription(
+                page.sceneDescription || scene.illustrationBrief, heroName, heroAge, supportingCharInfoForAgePrefix,
+              ),
               heroName,
               heroAge,
               supportingCharacters,
-              heroAvatarUrl: hero.avatarUrl ?? undefined,
+              heroAvatarUrl: effectiveHeroAvatarUrl ?? undefined,
               heroAvatarDescription: hero.avatarDescription ?? undefined,
-              characterAvatarUrls,
+              characterAvatarUrls: effectiveCharAvatarUrls,
               characterAvatarDescriptions,
               style: STORYBOOK_STYLE,
               // Anchor to this scene's own illustration so hair/costume/face stay identical to the base scene image
               styleReferenceUrl: sceneImageUrl,
-              storyVisualState: storyVisualState ?? undefined,
+              storyVisualState: effectiveVisualState ?? undefined,
               dialogue: page.dialogue,
               characters: page.characters,
               camera: page.camera ?? 'medium shot with face clearly visible',
@@ -1176,6 +1415,7 @@ export class GenerationService implements OnModuleInit {
               characterCanonSummaries,
               characterNeverChangeRules,
               characterBibles,
+              supportingCharacterAges: supportingCharAges ?? undefined,
               storyStateBlock: pageStateBlockMap.get(page.pageNumber) ?? undefined,
               characterDirections: page.characterDirections,
             };
@@ -1584,7 +1824,7 @@ export class GenerationService implements OnModuleInit {
 
   private async buildSupportingCharacterContext(
     story: Story,
-  ): Promise<Array<{ label: string; characterId?: string; avatarUrl: string | null; avatarDescription: string | null }>> {
+  ): Promise<Array<{ label: string; characterId?: string; avatarUrl: string | null; avatarDescription: string | null; age: number | null }>> {
     const characterIds = story.characterIds ?? [];
     if (characterIds.length === 0) return [];
 
@@ -1596,6 +1836,7 @@ export class GenerationService implements OnModuleInit {
       characterId: c.id,
       avatarUrl: c.avatarUrl ?? null,
       avatarDescription: c.avatarDescription ?? null,
+      age: c.dob ? this.computeAge(c.dob) : null,
     }));
   }
 
@@ -1646,6 +1887,31 @@ export class GenerationService implements OnModuleInit {
         );
       }
     }
+  }
+
+  // Change 3: Prefix each character's first mention in a scene description with their age.
+  private prefixAgesInSceneDescription(
+    desc: string,
+    heroName: string,
+    heroAge: number,
+    supportingChars: Array<{ name: string; age: number | null }>,
+  ): string {
+    let result = desc;
+    const heroPattern = new RegExp(`\\b(${heroName})\\b`);
+    result = result.replace(heroPattern, `${heroAge}-year-old $1`);
+    for (const { name, age } of supportingChars) {
+      if (!age || age <= 0) continue;
+      const pattern = new RegExp(`\\b(${name})\\b`);
+      result = result.replace(pattern, `${age}-year-old $1`);
+    }
+    return result;
+  }
+
+  // Change 4: Rewrite adult-coded costume vocabulary to child-coded equivalents.
+  private rewriteChildCostume(costume: string, age: number): string {
+    if (age >= 13) return costume;
+    if (/child.?sized|kid.?size|play |mini |little |costume/i.test(costume)) return costume;
+    return `child-sized ${costume}`;
   }
 
   private computeAge(dob: string): number {

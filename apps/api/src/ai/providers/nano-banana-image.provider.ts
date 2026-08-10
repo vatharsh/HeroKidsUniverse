@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import type {
+  ApparentAgeCheckInput,
+  ApparentAgeCheckResult,
   AvatarGenerationInput,
+  CostumedCanonicalInput,
   FaceConsistencyResult,
   ImageGenerationInput,
   ImageGenerationOutput,
@@ -510,5 +513,13 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
 
   locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null> {
     return this.openai.locateSpeechBubbleAnchors(input);
+  }
+
+  checkApparentAge(input: ApparentAgeCheckInput): Promise<ApparentAgeCheckResult | null> {
+    return this.openai.checkApparentAge(input);
+  }
+
+  generateCostumedCanonical(input: CostumedCanonicalInput): Promise<ImageGenerationOutput> {
+    return this.openai.generateCostumedCanonical(input);
   }
 }

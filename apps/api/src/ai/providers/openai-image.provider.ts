@@ -6,7 +6,10 @@ import { toFile } from 'openai/uploads';
 import { basename, join } from 'path';
 
 import {
+  ApparentAgeCheckInput,
+  ApparentAgeCheckResult,
   AvatarGenerationInput,
+  CostumedCanonicalInput,
   FaceConsistencyResult,
   ImageGenerationInput,
   ImageGenerationOutput,
@@ -135,9 +138,14 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
           ...input.supportingCharacters.map((label, index) => {
             const canonSummary = input.characterCanonSummaries?.[index];
             const description = canonSummary ?? input.characterAvatarDescriptions?.[index];
+            const charAge = input.supportingCharacterAges?.[index];
+            // Change 2: prepend explicit age anchor for every named character
+            const ageAnchor = charAge != null
+              ? `${charAge}-year-old ${charAge < 18 ? 'child' : 'adult'}, ${this.ageDescriptors(charAge)}.`
+              : '';
             return description
-              ? `${label}: ${description}`
-              : `${label}: use the scene description and reference image if available; keep age, skin tone, hair, face, and clothing consistent.`;
+              ? `${label}${ageAnchor ? ` [${ageAnchor}]` : ''}: ${description}`
+              : `${label}${ageAnchor ? ` [${ageAnchor}]` : ''}: use the scene description and reference image if available; keep age, skin tone, hair, face, and clothing consistent.`;
           }),
         ].join('\n')
       : '';
@@ -239,16 +247,9 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
         ].join(' ')
       : '';
 
-    // Explicit age lock — prevents gpt-image-1 from ageing up child heroes when they wear
-    // grown-up costumes (explorer, superhero, etc.) or appear in adult-coded settings.
+    // Positive, concrete age-anchor — no negations, no meta-instructions (Change 1).
     const ageLockLine = input.heroAge < 18
-      ? [
-          `⚠️ CHILD AGE LOCK — CRITICAL: ${input.heroName} is ${input.heroAge} years old — a CHILD, not a teenager, not a young adult.`,
-          `In EVERY panel, draw them with the face proportions and body size of a ${input.heroAge}-year-old child:`,
-          `rounded cheeks, soft jawline, small nose, large-relative-to-face eyes, child-height body.`,
-          `An explorer costume, superhero suit, or adventure gear does NOT change their age. The character inside the costume is still a child aged ${input.heroAge}.`,
-          `This is NON-NEGOTIABLE. If you feel the scene or costume suggests an older character, ignore that feeling and draw a ${input.heroAge}-year-old child.`,
-        ].join(' ')
+      ? `${input.heroName} is a ${input.heroAge}-year-old child: ${this.ageDescriptors(input.heroAge)}.`
       : '';
 
     const styleDefault = input.style ?? STORYBOOK_STYLE;
@@ -305,6 +306,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
           n: 1,
           size: '1024x1024',
           quality: imageQuality,
+          input_fidelity: 'high',
         });
         return this.fromImageResponse(edited);
       } catch (err) {
@@ -374,6 +376,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
           n: 1,
           size: '1024x1024',
           quality: imageQuality,
+          input_fidelity: 'high',
         });
         return this.fromImageResponse(edited);
       } catch {
@@ -613,6 +616,7 @@ Description to parse:
           n: 1,
           size: '1024x1024',
           quality: 'high',
+          input_fidelity: 'high',
         });
         return this.fromImageResponse(edited);
       }
@@ -766,6 +770,103 @@ Description to parse:
       this.logger.warn(`locateSpeechBubbleAnchors failed: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
+  }
+
+  // Change 2: Returns positive, concrete age-anchoring descriptors for a given age.
+  // Used in ageLockLine (hero) and castLine (supporting characters).
+  private ageDescriptors(age: number): string {
+    if (age <= 6) return 'toddler proportions, very round face, chubby cheeks, chubby hands, very short stature, head large relative to body';
+    if (age <= 9) return 'young-child proportions, rounded cheeks, small button nose, child-height body, head noticeably large relative to body';
+    if (age <= 12) return 'child proportions, rounded cheeks, soft jawline, child-height frame, small hands and feet';
+    if (age <= 17) return 'adolescent proportions, still-growing frame, youthful face, taller than a young child but clearly a teenager';
+    return 'adult proportions, mature facial structure, full adult height';
+  }
+
+  // Change 5: Estimates apparent age of named characters in a generated image.
+  async checkApparentAge(input: ApparentAgeCheckInput): Promise<ApparentAgeCheckResult | null> {
+    if (!input.characters.length) return { estimates: [] };
+    try {
+      const characterList = input.characters.map((c, i) =>
+        `${i + 1}. ${c.name} (canon age ${c.canonAge})${c.description ? ` — ${c.description}` : ''}`,
+      ).join('\n');
+
+      const prompt = [
+        'You are a children\'s book illustrator reviewing a generated story illustration.',
+        'For each named character below, look at the image and estimate their apparent age in years based on face proportions, body size, and overall appearance.',
+        'Return ONLY valid JSON. Respond with a single integer age per character — do not explain.',
+        '',
+        `Characters to check:\n${characterList}`,
+        '',
+        'Return: {"estimates": [{"name": "...", "canonAge": N, "estimatedAge": N}, ...]}',
+      ].join('\n');
+
+      const dataUrl = `data:image/png;base64,${input.imageBase64}`;
+      const response = await this.client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+        max_tokens: 200,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return null;
+      const parsed = JSON.parse(content) as ApparentAgeCheckResult;
+      this.logger.log(
+        `Apparent-age check: ${parsed.estimates.map(e => `${e.name} canon=${e.canonAge} estimated=${e.estimatedAge}`).join(', ')}`,
+      );
+      return parsed;
+    } catch (err) {
+      this.logger.warn(`checkApparentAge failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
+  // Change 7: Generates one costumed canonical portrait for a child character.
+  // Uses avatar as identity reference + costume description as style direction.
+  async generateCostumedCanonical(input: CostumedCanonicalInput): Promise<ImageGenerationOutput> {
+    const ageAnchor = `${input.characterName} is a ${input.age}-year-old child: ${this.ageDescriptors(input.age)}.`;
+    const prompt = [
+      ageAnchor,
+      STORYBOOK_STYLE,
+      `HERO IDENTITY — draw ${input.characterName} EXACTLY as shown in the reference avatar. Preserve face shape, skin tone, hairstyle, eye shape, age, and all distinctive features.`,
+      input.canonSummary ? `Canon description: ${input.canonSummary}` : '',
+      `COSTUME: ${input.costumeDescription}`,
+      'This is a single full-body portrait. Clear storybook illustration style. No background clutter. No text, no speech bubbles.',
+      'IDENTITY LOCK: preserve face shape, skin tone, hairstyle, eye shape, and age. Do not age the character up or down.',
+    ].filter(Boolean).join('\n');
+
+    const refFile = await this.urlToFile(input.avatarUrl, 'avatar-ref.png');
+    if (refFile) {
+      try {
+        const edited = await (this.client.images.edit as any)({
+          model: this.model,
+          image: [refFile],
+          prompt,
+          n: 1,
+          size: '1024x1024',
+          quality: input.quality ?? 'medium',
+          input_fidelity: 'high',
+        });
+        return this.fromImageResponse(edited);
+      } catch (err) {
+        this.logger.warn(`generateCostumedCanonical edit failed, falling back to generate: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    const response = await (this.client.images.generate as any)({
+      model: this.model,
+      prompt,
+      n: 1,
+      size: '1024x1024',
+      quality: input.quality ?? 'medium',
+    });
+    return this.fromImageResponse(response);
   }
 
   private fromImageResponse(response: OpenAI.Images.ImagesResponse): ImageGenerationOutput {

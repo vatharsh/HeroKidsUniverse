@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 
 import { PlatformSetting } from '../../admin/platform-setting.entity';
 import type {
+  ApparentAgeCheckInput,
+  ApparentAgeCheckResult,
   AvatarGenerationInput,
+  CostumedCanonicalInput,
   FaceConsistencyResult,
   ImageGenerationInput,
   ImageGenerationOutput,
@@ -127,5 +130,15 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
   async locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null> {
     const { provider } = await this.resolveProvider();
     return provider.locateSpeechBubbleAnchors(input);
+  }
+
+  async checkApparentAge(input: ApparentAgeCheckInput): Promise<ApparentAgeCheckResult | null> {
+    const { provider } = await this.resolveProvider();
+    return provider.checkApparentAge(input);
+  }
+
+  async generateCostumedCanonical(input: CostumedCanonicalInput): Promise<ImageGenerationOutput> {
+    const { provider } = await this.resolveProvider();
+    return provider.generateCostumedCanonical(input);
   }
 }
