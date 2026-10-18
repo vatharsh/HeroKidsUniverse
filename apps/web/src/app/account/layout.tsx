@@ -20,12 +20,13 @@ import { useEffect, type ReactNode } from "react";
 
 import Navbar from "@/components/layout/Navbar";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/account",              icon: User,      label: "Profile" },
   { href: "/account/password",     icon: KeyRound,  label: "Password" },
-  { href: "/account/addresses",    icon: MapPin,    label: "Addresses" },
+  { href: "/account/addresses",    icon: MapPin,    label: "Addresses", storeOnly: true },
   { href: "/account/orders",       icon: Package,   label: "My Orders" },
   { href: "/account/credits",      icon: CreditCard, label: "Credits & Wallet" },
   { href: "/account/characters",   icon: Users,     label: "My Characters" },
@@ -38,6 +39,9 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const { flags } = usePublicPlatformSettings();
+  // Shipping addresses only matter for merch orders — hide them while the store is off.
+  const nav = NAV.filter((item) => !item.storeOnly || flags.ENABLE_MERCHANDISE === true);
 
   useEffect(() => {
     if (loading) return;
@@ -76,7 +80,7 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
       {/* Mobile tab strip */}
       <div className="md:hidden bg-white border-b border-ink/10 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sticky top-0 z-20 shadow-sm">
         <div className="flex gap-0 px-4">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -100,7 +104,7 @@ export default function AccountLayout({ children }: { children: ReactNode }) {
         {/* Sidebar */}
         <aside className="hidden md:flex flex-col w-52 shrink-0">
           <nav className="flex flex-col gap-1 sticky top-8">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const active = pathname === item.href;
               return (
                 <Link

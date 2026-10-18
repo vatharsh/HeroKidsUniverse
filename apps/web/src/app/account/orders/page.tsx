@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchMyOrdersV2, type OrderV2ListResponse } from "@/lib/merchandise";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 
 type OrderRow = OrderV2ListResponse["items"][number];
@@ -26,6 +27,8 @@ function statusLabel(s: string) {
 }
 
 export default function AccountOrdersPage() {
+  const { flags } = usePublicPlatformSettings();
+  const storeEnabled = flags.ENABLE_MERCHANDISE === true;
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -52,12 +55,14 @@ export default function AccountOrdersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-1">My Orders</h2>
-          <p className="text-ink-muted text-sm">All your printed and digital merchandise orders.</p>
+          <p className="text-ink-muted text-sm">Your purchases and orders in one place.</p>
         </div>
-        <Link href="/dashboard/merchandise/create"
-          className="flex items-center gap-2 bg-brand text-white text-sm font-bold px-5 py-2.5 rounded-full hover:bg-brand-dark transition">
-          <Package className="w-4 h-4" /> New Order
-        </Link>
+        {storeEnabled && (
+          <Link href="/dashboard/merchandise/create"
+            className="flex items-center gap-2 bg-brand text-white text-sm font-bold px-5 py-2.5 rounded-full hover:bg-brand-dark transition">
+            <Package className="w-4 h-4" /> New Order
+          </Link>
+        )}
       </div>
 
       <div className="flex items-center gap-3 rounded-2xl border border-ink/10 bg-white px-4 py-3 shadow-sm">
@@ -75,11 +80,13 @@ export default function AccountOrdersPage() {
         <div className="rounded-3xl border-2 border-dashed border-ink/10 bg-white py-16 text-center">
           <Package className="w-10 h-10 mx-auto text-ink-muted mb-4" />
           <p className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">No orders yet</p>
-          <p className="text-ink-muted text-sm mb-5">Create your first merchandise piece from a universe, story, or hero.</p>
-          <Link href="/dashboard/merchandise/create"
-            className="inline-flex items-center gap-2 bg-brand text-white text-sm font-bold px-6 py-3 rounded-full hover:bg-brand-dark transition">
-            Start Creating
-          </Link>
+          <p className="text-ink-muted text-sm mb-5">{storeEnabled ? "Create your first merchandise piece from a universe, story, or hero." : "Your credit purchases will appear here."}</p>
+          {storeEnabled && (
+            <Link href="/dashboard/merchandise/create"
+              className="inline-flex items-center gap-2 bg-brand text-white text-sm font-bold px-6 py-3 rounded-full hover:bg-brand-dark transition">
+              Start Creating
+            </Link>
+          )}
         </div>
       ) : (
         <div className="overflow-hidden rounded-3xl border border-ink/10 bg-white shadow-card">

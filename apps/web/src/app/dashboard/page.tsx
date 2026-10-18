@@ -767,7 +767,7 @@ function DashboardPageInner() {
               <span className="font-[family-name:var(--font-display)] text-white text-2xl">Cast</span>
               <span className="text-white/50 text-xs">Manage →</span>
             </a>
-            {flags.ENABLE_MERCHANDISE !== false && (
+            {flags.ENABLE_MERCHANDISE === true && (
               <>
                 <a href="/dashboard/merchandise/create"
                   className="flex flex-col items-center gap-1 bg-white/8 border border-white/10 rounded-2xl px-4 py-4 min-w-[100px] hover:bg-white/15 hover:border-white/20 transition-colors">

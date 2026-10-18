@@ -26,6 +26,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -493,8 +494,8 @@ export default function MerchandiseCreatePage() {
     ...filteredCharacters.map((c) => ({ type: "character" as const, id: c.id, name: c.name, avatarUrl: c.avatarUrl, universeId: c.universeId, role: c.role })),
   ], [filteredHeroes, filteredCharacters]);
 
-  const merchEnabled   = flagsLoading ? true : flags.ENABLE_MERCHANDISE !== false;
-  const physicalEnabled = flagsLoading ? true : flags.ENABLE_PHYSICAL_ORDERS !== false;
+  const merchEnabled    = flags.ENABLE_MERCHANDISE === true;
+  const physicalEnabled = flags.ENABLE_PHYSICAL_ORDERS === true;
   const effectiveProducts = useMemo(
     () => products.filter((p) => physicalEnabled || p.productType === "digital"),
     [products, physicalEnabled],
@@ -872,8 +873,11 @@ export default function MerchandiseCreatePage() {
         <main className="flex-1 max-w-4xl mx-auto px-6 py-24 w-full">
           <div className="rounded-3xl border border-ink/10 bg-white p-8 shadow-card">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-ink-muted mb-3">Merchandise</p>
-            <h1 className="font-[family-name:var(--font-display)] text-ink text-3xl mb-3">Merchandise is currently hidden</h1>
-            <p className="text-ink-muted text-sm">The merchandise flow is controlled from platform settings.</p>
+            <h1 className="font-[family-name:var(--font-display)] text-ink text-3xl mb-3">Our store is coming soon</h1>
+            <p className="text-ink-muted text-sm mb-6">Printed books, posters and gifts starring your hero are on the way. Meanwhile, keep the adventures going!</p>
+            <Link href="/dashboard" className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark transition">
+              Back to dashboard
+            </Link>
           </div>
         </main>
         <Footer />

@@ -21,6 +21,7 @@ import { CommerceOrderStatus, CommerceOrderType, Order } from './order.entity';
 import { OrderItemAttribute } from './order-item-attribute.entity';
 import { OrderItemAttributeValue } from './order-item-attribute-value.entity';
 import { OrderItem } from './order-item.entity';
+import { StoreAvailabilityService } from '../store-availability.service';
 
 @Injectable()
 export class OrderV2Service implements OnModuleInit {
@@ -57,6 +58,7 @@ export class OrderV2Service implements OnModuleInit {
     private readonly dataSource: DataSource,
     @InjectRepository(PlatformSetting)
     private readonly settingsRepo: Repository<PlatformSetting>,
+    private readonly store: StoreAvailabilityService,
   ) {}
 
   async onModuleInit() {
@@ -80,6 +82,8 @@ export class OrderV2Service implements OnModuleInit {
   }
 
   async createOrder(userId: string, dto: CreateOrderV2Dto) {
+    // Merch checkout only — credit-pack purchases create their orders in CreditPacksService.
+    await this.store.assertEnabled();
     return this.dataSource.transaction(async (manager) => {
       const productSlugs = dto.items.map((item) => item.productSlug);
       const products = await manager.find(Product, {

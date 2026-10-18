@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import ProductMockup from "@/components/shared/ProductMockup";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 const DEMO_HERO = "Arjun";
 
@@ -58,11 +59,15 @@ const PRODUCTS = [
 export default function MerchandiseShowcase() {
   const { user } = useAuth();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { flags } = usePublicPlatformSettings();
 
   function scroll(dir: "left" | "right") {
     if (!scrollRef.current) return;
     scrollRef.current.scrollBy({ left: dir === "left" ? -320 : 320, behavior: "smooth" });
   }
+
+
+  if (flags.ENABLE_MERCHANDISE !== true) return null;
 
   return (
     <section className="py-24 bg-cream relative overflow-hidden">

@@ -55,8 +55,8 @@ const GROUPS: SettingGroup[] = [
     items: [
       { key: "ENABLE_NARRATION", label: "Narration", description: "Allow AI narration generation.", type: "boolean" },
       { key: "ENABLE_VIDEO_EXPORT", label: "Video Export", description: "Show video export actions in the story reader.", type: "boolean" },
-      { key: "ENABLE_MERCHANDISE", label: "Merchandise", description: "Show merchandise-related experiences.", type: "boolean" },
-      { key: "ENABLE_PHYSICAL_ORDERS", label: "Physical Orders", description: "Show physical order purchase options.", type: "boolean" },
+      { key: "ENABLE_MERCHANDISE", label: "Online Store (Merchandise & Checkout)", description: "Master switch for the merchandise store, cart and checkout. When off, customers can still buy credits and avatars, but merchandise pages, buttons and new merch orders are blocked.", type: "boolean" },
+      { key: "ENABLE_PHYSICAL_ORDERS", label: "Physical Orders", description: "Allow physical (shipped) products in the store. Only applies when the Online Store is on.", type: "boolean" },
       { key: "ENABLE_INFLUENCER_PROGRAM", label: "Influencer Program", description: "Show influencer admin tools.", type: "boolean" },
       { key: "ENABLE_STORY_CONTINUATION", label: "Story Continuation", description: "Allow continuing existing universes.", type: "boolean" },
       { key: "ENABLE_UNIVERSE_MEMORY", label: "Universe Memory", description: "Persist and reuse memory for universes.", type: "boolean" },

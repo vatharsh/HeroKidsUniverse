@@ -33,6 +33,7 @@ import { OrderItemAttributeValue } from './orders/order-item-attribute-value.ent
 import { OrderItemAttribute } from './orders/order-item-attribute.entity';
 import { OrderItem } from './orders/order-item.entity';
 import { Order } from './orders/order.entity';
+import { StoreAvailabilityService } from './store-availability.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
@@ -60,7 +61,7 @@ import { Order } from './orders/order.entity';
     User,
   ]), InfluencersModule],
   controllers: [MerchandiseController, MerchandiseCatalogController, OrderV2Controller, AdminCatalogController, AdminOrderV2Controller],
-  providers: [MerchandiseService, CatalogService, OrderV2Service, MerchandiseSeedService],
-  exports: [MerchandiseService, CatalogService, OrderV2Service],
+  providers: [MerchandiseService, CatalogService, OrderV2Service, MerchandiseSeedService, StoreAvailabilityService],
+  exports: [MerchandiseService, CatalogService, OrderV2Service, StoreAvailabilityService],
 })
 export class MerchandiseModule {}

@@ -1005,7 +1005,7 @@ export default function StoryReaderPage() {
             <FileText className="w-3.5 h-3.5" />
             PDF
           </button>
-          {flags.ENABLE_MERCHANDISE !== false && (
+          {flags.ENABLE_MERCHANDISE === true && (
             <a
               href={`/dashboard/merchandise/create?source=story&storyId=${story.id}`}
               className="flex items-center gap-1.5 text-xs font-semibold bg-brand/90 hover:bg-brand text-white px-3 py-1.5 rounded-full transition-all"

@@ -304,7 +304,7 @@ function UniversePageInner() {
               <p className="font-[family-name:var(--font-display)] text-white text-xl">Cast</p>
               <p className="text-white/40 text-xs">Manage →</p>
             </a>
-            {flags.ENABLE_MERCHANDISE !== false && (
+            {flags.ENABLE_MERCHANDISE === true && (
               <a href={`/dashboard/merchandise/create?source=universe&universeId=${universe.id}`}
                 className="bg-white/8 border border-white/10 hover:bg-white/15 hover:border-white/20 rounded-2xl px-5 py-3 text-center min-w-[80px] transition-colors">
                 <div className="text-lg flex justify-center">

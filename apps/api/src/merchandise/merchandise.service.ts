@@ -34,6 +34,7 @@ import {
   ProductType,
 } from './order.entity';
 import { OrderStatusHistory } from './order-status-history.entity';
+import { StoreAvailabilityService } from './store-availability.service';
 
 type OwnedAssetContext = {
   universe: Universe | null;
@@ -60,6 +61,7 @@ export class MerchandiseService implements OnModuleInit {
     private readonly historyRepository: Repository<OrderStatusHistory>,
     @InjectRepository(PlatformSetting)
     private readonly settingsRepository: Repository<PlatformSetting>,
+    private readonly store: StoreAvailabilityService,
     @InjectRepository(Hero)
     private readonly heroesRepository: Repository<Hero>,
     @InjectRepository(Character)
@@ -455,9 +457,7 @@ export class MerchandiseService implements OnModuleInit {
   }
 
   private async ensureMerchandiseEnabled() {
-    if (!(await this.getBooleanSetting('ENABLE_MERCHANDISE', true))) {
-      throw new ForbiddenException('Merchandise is disabled');
-    }
+    await this.store.assertEnabled();
   }
 
   private async isPhysicalOrdersEnabled() {

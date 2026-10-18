@@ -875,7 +875,7 @@ function CharactersPageContent() {
                 className="flex items-center gap-1.5 text-brand text-sm font-semibold hover:underline flex-shrink-0">
                 <Pencil className="w-3.5 h-3.5" /> Edit
               </button>
-              {flags.ENABLE_MERCHANDISE !== false && (
+              {flags.ENABLE_MERCHANDISE === true && (
                 <a href={`/dashboard/merchandise/create?source=hero&heroId=${hero.id}`}
                   className="flex items-center gap-1.5 text-xs font-semibold bg-brand/10 hover:bg-brand hover:text-white text-brand px-3 py-2 rounded-full transition-all">
                   <Package className="w-3.5 h-3.5" />

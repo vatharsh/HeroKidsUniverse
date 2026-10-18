@@ -10,6 +10,7 @@ import Navbar from "@/components/layout/Navbar";
 import Breadcrumb from "@/components/shared/Breadcrumb";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchMyOrdersV2, type OrderV2ListResponse } from "@/lib/merchandise";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 
 type OrderRow = OrderV2ListResponse["items"][number];
@@ -38,6 +39,8 @@ function statusLabel(status: string) {
 export default function MyOrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { flags } = usePublicPlatformSettings();
+  const storeEnabled = flags.ENABLE_MERCHANDISE === true;
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -79,12 +82,14 @@ export default function MyOrdersPage() {
           <div>
             <Breadcrumb crumbs={[{ label: "My Orders" }]} variant="dark" className="mb-4" />
             <h1 className="font-[family-name:var(--font-display)] text-white text-4xl md:text-5xl">My Orders</h1>
-            <p className="text-white/50 text-sm mt-2">Track your printed and digital merchandise in one place.</p>
+            <p className="text-white/50 text-sm mt-2">Your purchases and orders in one place.</p>
           </div>
-          <Link href="/dashboard/merchandise/create" className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark transition self-start md:self-auto">
-            <Package className="w-4 h-4" />
-            Create New
-          </Link>
+          {storeEnabled && (
+            <Link href="/dashboard/merchandise/create" className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark transition self-start md:self-auto">
+              <Package className="w-4 h-4" />
+              Create New
+            </Link>
+          )}
         </div>
       </header>
 
@@ -109,10 +114,12 @@ export default function MyOrdersPage() {
           <div className="rounded-3xl border-2 border-dashed border-ink/10 bg-white py-16 text-center shadow-card">
             <Package className="w-10 h-10 mx-auto text-ink-muted mb-4" />
             <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">No orders yet</h2>
-            <p className="text-ink-muted text-sm mb-6">Create your first merchandise piece from a universe, story, or hero.</p>
-            <Link href="/dashboard/merchandise/create" className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark transition">
-              Start Creating
-            </Link>
+            <p className="text-ink-muted text-sm mb-6">{storeEnabled ? "Create your first merchandise piece from a universe, story, or hero." : "Your credit purchases will appear here."}</p>
+            {storeEnabled && (
+              <Link href="/dashboard/merchandise/create" className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-dark transition">
+                Start Creating
+              </Link>
+            )}
           </div>
         ) : (
           <div className="overflow-hidden rounded-3xl border border-ink/10 bg-white shadow-card">
