@@ -133,7 +133,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
           `HERO COSTUME (LOCKED — original design inspired by: "${sv.costume}"). ` +
           `Create a fully ORIGINAL outfit. Do NOT reproduce any trademarked or copyrighted character design. ` +
           `Use general aesthetic principles (colour palette, armour style, emblem shape) but make it entirely new. ` +
-          `This exact costume appears on the hero in EVERY page of this story — never change it.`,
+          `This exact costume appears on the hero in EVERY page of this story — never change it, even if the scene text describes other clothes for the hero.`,
         );
       } else {
         // No user-defined costume — still lock whatever outfit appears on page 1
@@ -153,6 +153,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
         const outfitLines = Object.entries(charOutfits)
           .map(([name, outfit]) => `- ${name.toUpperCase()}: LOCKED outfit this story — "${outfit}". Do NOT change this in any page.`);
         lines.push(`CHARACTER OUTFIT LOCK (entire story):\n${outfitLines.join('\n')}`);
+        lines.push('If the SCENE text below describes different clothes for anyone, ignore that — the outfits above always win.');
       }
     }
 
@@ -267,7 +268,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
     lines.push(
       `All faces must be clearly visible and recognisable. ` +
       `Render in the cinematic 3D style specified above — NOT flat 2D cartoon. ` +
-      `No text, letters, or speech bubbles in the image. Child-safe, joyful.`,
+      `No text, letters, or speech bubbles in the image. No real-world logos, brands or flags (no NASA, no foreign flags) — patches may show the Indian tricolour or an original badge. Child-safe, joyful.`,
     );
 
     return lines.filter(Boolean).join('\n');
@@ -286,10 +287,12 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
   private async generateImageInternal(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     // Build reference image parts
     const refUrls: Array<{ url: string; label: string }> = [];
-    if (input.heroAvatarUrl) refUrls.push({ url: input.heroAvatarUrl, label: `HERO — ${input.heroName}. Copy this face, hair and skin tone exactly.` });
+    // Avatars show everyday clothes — take only the person from them; clothing comes from the story outfit.
+    const faceOnly = 'Copy this face, hair, skin tone, glasses and age exactly, but NOT the clothes — dress them in their story outfit.';
+    if (input.heroAvatarUrl) refUrls.push({ url: input.heroAvatarUrl, label: `HERO — ${input.heroName}. ${faceOnly}` });
     (input.characterAvatarUrls ?? []).forEach((url, i) => {
       const name = input.supportingCharacters?.[i]?.split('(')[0].trim() ?? `character ${i + 1}`;
-      refUrls.push({ url, label: `CHARACTER — ${name}. Copy this face, hair and skin tone exactly.` });
+      refUrls.push({ url, label: `CHARACTER — ${name}. ${faceOnly}` });
     });
     if (input.styleReferenceUrl) {
       refUrls.push({

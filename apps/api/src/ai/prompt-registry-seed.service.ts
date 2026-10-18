@@ -32,8 +32,8 @@ const SEED_PROMPTS: Array<{
       required: ['heroName', 'heroAge', 'heroGender', 'heroRef', 'pageCount', 'sceneCount', 'climaxPage', 'supportingCharactersLine', 'visualIdentityLines', 'sceneEntries'],
       optional: ['customStoryDirective', 'themeDescriptionLine', 'universeSection', 'visualStateSection', 'storySourceLine'],
     },
-    seedVersion: 5,
-    changeNotes: 'v5 — bubble positions removed (the app places bubbles from the finished image; the old LEFT→bottom-left vs top-right rules contradicted each other); one outfit per character for the whole story via storyVisualState.characterOutfits.',
+    seedVersion: 7,
+    changeNotes: 'v7 — hero keeps the story costume on every page; no real logos/flags on outfits. v6 — adventure outfits: every character (grandparents too) dressed for the story setting once per story via characterOutfits; removed the conflicting no-clothing rule. v5 — bubble positions removed (the app places bubbles from the finished image; the old LEFT→bottom-left vs top-right rules contradicted each other); one outfit per character for the whole story via storyVisualState.characterOutfits.',
     promptText: `You are a creative children's storybook author for HeroKids Universe.
 {{customStoryDirective}}
 Hero details:
@@ -49,9 +49,12 @@ Write a {{pageCount}}-page illustrated storybook where {{heroRef}} is the main c
 CANONICAL VISUAL IDENTITY RULES FOR THE ILLUSTRATOR:
 {{visualIdentityLines}}
 
-Do NOT invent new facial features, glasses, bindis, moustaches, hairstyles, age changes, body type changes, or clothing for these named people unless explicitly stated above.
+Do NOT invent new facial features, glasses, bindis, moustaches, hairstyles, age changes or body type changes for these named people unless explicitly stated above. Clothing is different: design each character's story outfit as described in ADVENTURE OUTFITS below.
 Each named character should appear as the same person on every page. If the scene has multiple children, do not duplicate one child's face for another child.
 {{visualStateSection}}
+
+ADVENTURE OUTFITS (decided ONCE for the whole story):
+- dress EVERY character, including grandparents and parents, for where this story takes place, so the world feels real. On a spaceship or in space: proper space suits. Underwater: diving suits. Snow or ice: warm winter gear. Jungle or mountains: explorer clothes. A royal palace: festive traditional wear. At home or school: everyday clothes. Add a personal or Indian touch where it fits (e.g. Daadi's space suit with a soft saree-print trim, and her bindi). Write the hero's outfit in storyVisualState.costume and every other named character's outfit in storyVisualState.characterOutfits, e.g. { "Daadi": "silver-and-maroon space suit with saree-print trim", "Vedant Bhaiya": "navy space suit with a mission patch" }. Keep glasses, bindis and similar personal features. These outfits NEVER change from page to page, and every scene description must repeat them exactly. The HERO always wears the costume in storyVisualState.costume on every page; adventure outfits are for everyone else (the hero's costume may only gain accessories such as a helmet). No real-world logos, brands or flags on any outfit (no NASA, no foreign flags); patches may show the Indian tricolour or an original mission badge.
 
 STORYTELLING RULES:
 - Each page: 2-3 short punchy sentences (max 55 words), written for a {{heroAge}}-year-old reader
@@ -150,7 +153,7 @@ Respond with ONLY valid JSON (no markdown, no code fences):
   "cliffhanger": "One sentence hinting at the next adventure",
   "storyVisualState": {
     "costume": "The hero's ONE outfit for this whole story",
-    "characterOutfits": { "Other character name": "their ONE outfit for this whole story" },
+    "characterOutfits": { "Other character name": "their ONE adventure outfit for this whole story" },
     "companion": "Companion name and type, or null",
     "weapon": "Primary weapon or item, or null",
     "powers": ["Power 1", "Power 2"],
