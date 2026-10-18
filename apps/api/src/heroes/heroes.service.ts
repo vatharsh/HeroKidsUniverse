@@ -37,6 +37,7 @@ export class HeroesService {
     let characterIdentity: Hero['characterIdentity'] = null;
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
+      // heroId not available yet (entity not saved), so upload uses a random UUID prefix.
       const result = await this.generateAvatar(userId, createHeroDto.name, photo);
       avatarUrl = result.avatarUrl;
       avatarDescription = result.avatarDescription;
@@ -78,6 +79,8 @@ export class HeroesService {
     photo?: Express.Multer.File,
   ): Promise<HeroResponse> {
     const hero = await this.findHeroEntity(userId, id);
+    const oldAvatarUrl = hero.avatarUrl;
+
     Object.assign(hero, {
       ...updateHeroDto,
       name: updateHeroDto.name ?? hero.name,
@@ -87,7 +90,7 @@ export class HeroesService {
 
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
-      const result = await this.generateAvatar(userId, hero.name ?? 'Hero', photo);
+      const result = await this.generateAvatar(userId, hero.name ?? 'Hero', photo, hero.id);
       hero.avatarUrl = result.avatarUrl;
       hero.avatarDescription = result.avatarDescription;
       hero.characterIdentity = result.characterIdentity;
@@ -95,7 +98,14 @@ export class HeroesService {
       hero.avatarUrl = updateHeroDto.avatarUrl;
     }
 
-    return this.withComputedAge(await this.heroesRepository.save(hero));
+    const saved = await this.heroesRepository.save(hero);
+
+    // Delete the old R2 object only after the DB is updated successfully
+    if (photo && oldAvatarUrl && oldAvatarUrl !== saved.avatarUrl) {
+      await this.uploadService.deleteObject(oldAvatarUrl);
+    }
+
+    return this.withComputedAge(saved);
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -109,13 +119,17 @@ export class HeroesService {
       throw new ConflictException('Hero has associated stories');
     }
 
+    const avatarUrl = hero.avatarUrl;
     await this.heroesRepository.remove(hero);
+    await this.uploadService.deleteObject(avatarUrl);
   }
 
   async adminRegenerateAvatar(heroId: string): Promise<HeroResponse> {
     const hero = await this.heroesRepository.findOne({ where: { id: heroId } });
     if (!hero) throw new NotFoundException('Hero not found');
     if (!hero.avatarUrl) throw new NotFoundException('Hero has no avatar to regenerate from');
+
+    const oldAvatarUrl = hero.avatarUrl;
 
     let photoBuffer: Buffer | null = null;
     try {
@@ -130,20 +144,25 @@ export class HeroesService {
       : null;
 
     if (mockPhoto) {
-      const result = await this.generateAvatar(hero.userId, hero.name ?? 'Hero', mockPhoto);
+      const result = await this.generateAvatar(hero.userId, hero.name ?? 'Hero', mockPhoto, hero.id);
       hero.avatarUrl = result.avatarUrl ?? hero.avatarUrl;
       hero.avatarDescription = result.avatarDescription ?? hero.avatarDescription;
       hero.characterIdentity = result.characterIdentity ?? hero.characterIdentity;
     } else {
-      // Re-generate from description only (no image reference)
       const avatar = await this.imageProvider.generateAvatar({ name: hero.name ?? 'Hero', role: 'hero' });
       if (avatar.imageBase64) {
-        hero.avatarUrl = await this.uploadService.uploadHeroAvatar(hero.userId, avatar.imageBase64);
+        hero.avatarUrl = await this.uploadService.uploadHeroAvatar(hero.userId, avatar.imageBase64, hero.id);
       }
     }
 
     this.logger.log(`Admin avatar regeneration for hero ${heroId} complete`);
-    return this.withComputedAge(await this.heroesRepository.save(hero));
+    const saved = await this.heroesRepository.save(hero);
+
+    if (oldAvatarUrl && oldAvatarUrl !== saved.avatarUrl) {
+      await this.uploadService.deleteObject(oldAvatarUrl);
+    }
+
+    return this.withComputedAge(saved);
   }
 
   private async findHeroEntity(userId: string, id: string): Promise<Hero> {
@@ -179,9 +198,9 @@ export class HeroesService {
     userId: string,
     name: string,
     photo: Express.Multer.File,
+    heroId?: string,
   ): Promise<{ avatarUrl: string | null; avatarDescription: string | null; characterIdentity: Hero['characterIdentity'] }> {
     try {
-      // Run avatar generation and appearance description in parallel
       const [avatar, avatarDescription] = await Promise.all([
         this.imageProvider.generateAvatar({
           name,
@@ -194,7 +213,7 @@ export class HeroesService {
 
       let avatarUrl: string | null = null;
       if (avatar.imageBase64) {
-        avatarUrl = await this.uploadService.uploadHeroAvatar(userId, avatar.imageBase64);
+        avatarUrl = await this.uploadService.uploadHeroAvatar(userId, avatar.imageBase64, heroId);
       } else {
         avatarUrl = avatar.imageUrl || null;
       }

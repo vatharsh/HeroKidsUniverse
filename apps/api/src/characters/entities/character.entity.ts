@@ -42,6 +42,9 @@ export class Character {
   @Column({ type: 'text', nullable: true })
   avatarDescription!: string | null;
 
+  @Column({ type: 'boolean', nullable: true, default: null })
+  needsRegeneration!: boolean | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

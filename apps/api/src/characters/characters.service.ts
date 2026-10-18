@@ -79,7 +79,7 @@ export class CharactersService {
 
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
-      const result = await this.generateAvatar(userId, createCharacterDto.name, createCharacterDto.role, photo);
+      const result = await this.generateAvatar(userId, createCharacterDto.name, createCharacterDto.role, photo, undefined, character.id);
       character.avatarUrl = result.avatarUrl;
       character.avatarDescription = result.avatarDescription;
       character = await this.charactersRepository.save(character);
@@ -127,6 +127,7 @@ export class CharactersService {
     photo?: Express.Multer.File,
   ): Promise<Character> {
     const character = await this.findOne(userId, id);
+    const oldAvatarUrl = character.avatarUrl;
 
     Object.assign(character, {
       ...updateCharacterDto,
@@ -137,14 +138,20 @@ export class CharactersService {
     if (photo) {
       await this.consumeAvatarRefresh(userId, character.id);
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
-      const result = await this.generateAvatar(userId, character.name, character.role, photo);
+      const result = await this.generateAvatar(userId, character.name, character.role, photo, undefined, character.id);
       character.avatarUrl = result.avatarUrl;
       character.avatarDescription = result.avatarDescription;
     } else if (updateCharacterDto.avatarUrl !== undefined) {
       character.avatarUrl = updateCharacterDto.avatarUrl;
     }
 
-    return this.charactersRepository.save(character);
+    const saved = await this.charactersRepository.save(character);
+
+    if (photo && oldAvatarUrl && oldAvatarUrl !== saved.avatarUrl) {
+      await this.uploadService.deleteObject(oldAvatarUrl);
+    }
+
+    return saved;
   }
 
   async refreshAvatar(
@@ -155,14 +162,19 @@ export class CharactersService {
   ): Promise<{ avatarUrl: string; avatarRefreshTokens: number }> {
     if (!photo) throw new BadRequestException('Photo is required');
     const character = await this.findOne(userId, id);
+    const oldAvatarUrl = character.avatarUrl;
 
     const avatarRefreshTokens = await this.consumeAvatarRefresh(userId, character.id);
     // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
-    const result = await this.generateAvatar(userId, character.name, character.role, photo, adjustmentHint);
+    const result = await this.generateAvatar(userId, character.name, character.role, photo, adjustmentHint, character.id);
     character.avatarUrl = result.avatarUrl;
     character.avatarDescription = result.avatarDescription;
     if (!character.avatarUrl) throw new BadRequestException('Avatar refresh failed. Please try again.');
     await this.charactersRepository.save(character);
+
+    if (oldAvatarUrl && oldAvatarUrl !== character.avatarUrl) {
+      await this.uploadService.deleteObject(oldAvatarUrl);
+    }
 
     return { avatarUrl: character.avatarUrl, avatarRefreshTokens };
   }
@@ -205,7 +217,9 @@ export class CharactersService {
 
   async remove(userId: string, id: string): Promise<void> {
     const character = await this.findOne(userId, id);
+    const avatarUrl = character.avatarUrl;
     await this.charactersRepository.remove(character);
+    await this.uploadService.deleteObject(avatarUrl);
   }
 
   private async generateAvatar(
@@ -214,6 +228,7 @@ export class CharactersService {
     role: string | undefined,
     photo: Express.Multer.File,
     adjustmentHint?: string,
+    characterId?: string,
   ): Promise<{ avatarUrl: string | null; avatarDescription: string | null }> {
     try {
       const [avatar, avatarDescription] = await Promise.all([
@@ -229,7 +244,7 @@ export class CharactersService {
 
       let avatarUrl: string | null = null;
       if (avatar.imageBase64) {
-        avatarUrl = await this.uploadService.uploadCharacterAvatar(userId, avatar.imageBase64);
+        avatarUrl = await this.uploadService.uploadCharacterAvatar(userId, avatar.imageBase64, characterId);
       } else {
         avatarUrl = avatar.imageUrl || null;
       }

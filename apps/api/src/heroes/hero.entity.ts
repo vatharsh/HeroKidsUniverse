@@ -64,6 +64,9 @@ export class Hero {
   @Column({ type: 'jsonb', nullable: true })
   characterIdentity!: CharacterIdentity | null;
 
+  @Column({ type: 'boolean', nullable: true, default: null })
+  needsRegeneration!: boolean | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

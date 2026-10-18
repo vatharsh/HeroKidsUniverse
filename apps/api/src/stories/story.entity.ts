@@ -250,6 +250,10 @@ export class Story {
   @Column({ type: 'float', nullable: true })
   overallConfidence!: number | null;
 
+  /** Set when stored assets (cover/page images/audio) were lost and the story must be regenerated. */
+  @Column({ type: 'boolean', nullable: true, default: null })
+  needsRegeneration!: boolean | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

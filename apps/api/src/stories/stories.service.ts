@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Inj
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 
+import { UploadService } from '../upload/upload.service';
+
 import { PlatformSetting } from '../admin/platform-setting.entity';
 import { Character } from '../characters/entities/character.entity';
 import { CompanionsService } from '../companions/companions.service';
@@ -39,6 +41,7 @@ export class StoriesService {
     private readonly dataSource: DataSource,
     private readonly generationService: GenerationService,
     private readonly companionsService: CompanionsService,
+    private readonly uploadService: UploadService,
   ) {}
 
   private async isSandboxMode(): Promise<boolean> {
@@ -239,6 +242,18 @@ export class StoriesService {
   async remove(userId: string, id: string): Promise<void> {
     const story = await this.findOne(userId, id);
     await this.generationService.deleteJobsByStoryId(story.id);
+
+    // Collect all R2 object URLs before removing the DB row
+    const r2Urls: (string | undefined)[] = [
+      story.coverImageUrl ?? undefined,
+      story.pdfUrl ?? undefined,
+      story.videoUrl ?? undefined,
+      ...(story.pages ?? []).flatMap((p) => [p.imageUrl, p.backgroundUrl, p.audioUrl]),
+    ];
+
     await this.storiesRepository.remove(story);
+
+    // Delete R2 objects after DB removal — fire-and-forget errors (don't fail the delete)
+    await Promise.allSettled(r2Urls.filter(Boolean).map((url) => this.uploadService.deleteObject(url)));
   }
 }
