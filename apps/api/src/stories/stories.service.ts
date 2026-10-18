@@ -2,8 +2,6 @@ import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Inj
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 
-import { UploadService } from '../upload/upload.service';
-
 import { PlatformSetting } from '../admin/platform-setting.entity';
 import { Character } from '../characters/entities/character.entity';
 import { CompanionsService } from '../companions/companions.service';
@@ -15,8 +13,10 @@ import { HeroPower } from '../powers/hero-power.entity';
 import { Quest } from '../quests/quest.entity';
 import { UniverseMemory } from '../universes/universe-memory.entity';
 import { Universe } from '../universes/universe.entity';
+import { UploadService } from '../upload/upload.service';
 import { User } from '../users/user.entity';
 import { CreateStoryDto } from './dto/create-story.dto';
+import { storyAssetUrls } from './story-assets';
 import { Story, StoryMode, StoryStatus } from './story.entity';
 
 @Injectable()
@@ -244,16 +244,11 @@ export class StoriesService {
     await this.generationService.deleteJobsByStoryId(story.id);
 
     // Collect all R2 object URLs before removing the DB row
-    const r2Urls: (string | undefined)[] = [
-      story.coverImageUrl ?? undefined,
-      story.pdfUrl ?? undefined,
-      story.videoUrl ?? undefined,
-      ...(story.pages ?? []).flatMap((p) => [p.imageUrl, p.backgroundUrl, p.audioUrl]),
-    ];
+    const assetUrls = storyAssetUrls(story);
 
     await this.storiesRepository.remove(story);
 
     // Delete R2 objects after DB removal — fire-and-forget errors (don't fail the delete)
-    await Promise.allSettled(r2Urls.filter(Boolean).map((url) => this.uploadService.deleteObject(url)));
+    await Promise.allSettled(assetUrls.map((url) => this.uploadService.deleteObject(url)));
   }
 }

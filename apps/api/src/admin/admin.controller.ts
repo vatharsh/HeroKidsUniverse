@@ -119,9 +119,14 @@ export class AdminController {
     };
   }
 
+  @Get('stories/:id/refund-preview')
+  storyRefundPreview(@Param('id') id: string) {
+    return this.adminService.getStoryRefundPreview(id);
+  }
+
   @Delete('stories/:id')
-  deleteStory(@Param('id') id: string) {
-    return this.adminService.deleteStory(id);
+  deleteStory(@Param('id') id: string, @Query('refund') refund?: string) {
+    return this.adminService.deleteStory(id, { refund: refund === 'true' });
   }
 
   @Get('qa/dashboard')

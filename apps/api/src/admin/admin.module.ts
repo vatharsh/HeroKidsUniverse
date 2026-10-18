@@ -29,6 +29,7 @@ import { AdminService } from './admin.service';
 import { PlatformSetting } from './platform-setting.entity';
 import { PlatformSettingsController } from './platform-settings.controller';
 import { PromptRegistryController } from './prompt-registry.controller';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { PromptRegistryController } from './prompt-registry.controller';
     PaymentsModule,
     CreditsModule,
     InfluencersModule,
+    UploadModule,
     TypeOrmModule.forFeature([
       User,
       Story,

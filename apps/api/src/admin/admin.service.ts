@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
   DataSource,
+  EntityManager,
   ILike,
   In,
   IsNull,
@@ -13,7 +14,7 @@ import {
 import { AiOperation, AiUsageLog } from '../ai/entities/ai-usage-log.entity';
 import { StoryGenerationCost } from '../ai/entities/story-generation-cost.entity';
 import { Character } from '../characters/entities/character.entity';
-import { CreditTransaction } from '../credits/credit-transaction.entity';
+import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { GenerationJob, JobStatus } from '../generation/generation-job.entity';
 import { Hero } from '../heroes/hero.entity';
 import { InfluencerReferral } from '../influencers/influencer-referral.entity';
@@ -25,8 +26,10 @@ import { OrderStatusHistory } from '../merchandise/order-status-history.entity';
 import { CommerceOrderStatus, CommerceOrderType, Order as CommerceOrder } from '../merchandise/orders/order.entity';
 import { Payment, PaymentStatus } from '../payments/payment.entity';
 import { StoryArc } from '../story-arcs/story-arc.entity';
+import { storyAssetUrls } from '../stories/story-assets';
 import { Story, StoryStatus, StoryTheme, VideoStatus } from '../stories/story.entity';
 import { Universe } from '../universes/universe.entity';
+import { UploadService } from '../upload/upload.service';
 import { User, UserPlan, UserRole } from '../users/user.entity';
 import { PlatformSetting, PUBLIC_SETTING_KEYS, SETTING_DEFAULTS, normalizeSettingValue } from './platform-setting.entity';
 
@@ -71,6 +74,7 @@ export class AdminService implements OnModuleInit {
     @InjectRepository(CommerceOrder) private readonly commerceOrdersRepo: Repository<CommerceOrder>,
     private readonly dataSource: DataSource,
     private readonly influencersService: InfluencersService,
+    private readonly uploadService: UploadService,
   ) {}
 
   async onModuleInit() {
@@ -498,11 +502,66 @@ export class AdminService implements OnModuleInit {
     };
   }
 
-  async deleteStory(storyId: string) {
+  /**
+   * Credits still net-charged for a story: its ledger rows (charge -1, failure refund +1, admin refund +N)
+   * summed and negated, so a story can never be refunded twice. Legacy stories with no ledger rows fall
+   * back to `creditsUsed`.
+   */
+  private async refundableCredits(manager: EntityManager, story: Story): Promise<number> {
+    const row = await manager
+      .createQueryBuilder(CreditTransaction, 'tx')
+      .select('COALESCE(SUM(tx.delta), 0)', 'net')
+      .addSelect('COUNT(*)', 'count')
+      .where('tx.referenceId = :id', { id: story.id })
+      .getRawOne<{ net: string; count: string }>();
+    if (!row || Number(row.count) === 0) return Math.max(0, story.creditsUsed ?? 0);
+    return Math.max(0, -Number(row.net));
+  }
+
+  async getStoryRefundPreview(storyId: string) {
+    const story = await this.storiesRepo.findOne({ where: { id: storyId }, relations: { user: true } });
+    if (!story) throw new NotFoundException('Story not found');
+    return {
+      storyId: story.id,
+      title: story.title,
+      userEmail: story.user?.email ?? '',
+      refundableCredits: await this.refundableCredits(this.dataSource.manager, story),
+    };
+  }
+
+  /** Deletes a story (jobs, DB row, stored assets) and optionally refunds the owner's credits atomically. */
+  async deleteStory(storyId: string, opts: { refund?: boolean } = {}) {
     const story = await this.storiesRepo.findOne({ where: { id: storyId } });
     if (!story) throw new NotFoundException('Story not found');
-    await this.storiesRepo.remove(story);
-    return { success: true };
+    const assetUrls = storyAssetUrls(story);
+
+    const refundedCredits = await this.dataSource.transaction(async (manager) => {
+      let refunded = 0;
+      if (opts.refund) {
+        const user = await manager.findOne(User, { where: { id: story.userId }, lock: { mode: 'pessimistic_write' } });
+        refunded = user ? await this.refundableCredits(manager, story) : 0;
+        if (user && refunded > 0) {
+          user.credits += refunded;
+          await manager.save(user);
+          await manager.save(
+            manager.create(CreditTransaction, {
+              userId: story.userId,
+              delta: refunded,
+              reason: CreditTransactionReason.Refund,
+              referenceId: story.id,
+            }),
+          );
+        }
+      }
+      await manager.delete(GenerationJob, { storyId: story.id });
+      await manager.remove(story);
+      return refunded;
+    });
+
+    // Storage cleanup after commit — failures are logged by UploadService and never fail the delete.
+    await Promise.allSettled(assetUrls.map((url) => this.uploadService.deleteObject(url)));
+    this.logger.log(`Admin deleted story ${storyId} (user ${story.userId}), refunded ${refundedCredits} credit(s)`);
+    return { success: true, refundedCredits };
   }
 
   async listJobs(page = 1, limit = 20, status?: string, search?: string) {
