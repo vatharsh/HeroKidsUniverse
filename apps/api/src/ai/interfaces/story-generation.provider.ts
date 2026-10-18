@@ -97,6 +97,8 @@ export interface StoryVisualStateOutput {
   weapon: string | null;
   powers: string[];
   inventory: string[];
+  /** One outfit per named non-hero character, fixed for the whole story. */
+  characterOutfits?: Record<string, string>;
 }
 
 export interface SceneOutput {

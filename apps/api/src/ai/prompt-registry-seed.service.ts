@@ -27,13 +27,13 @@ const SEED_PROMPTS: Array<{
     name: 'Story Generation',
     promptType: 'story_generation',
     provider: 'gemini',
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-3.8-flash',
     variablesJson: {
       required: ['heroName', 'heroAge', 'heroGender', 'heroRef', 'pageCount', 'sceneCount', 'climaxPage', 'supportingCharactersLine', 'visualIdentityLines', 'sceneEntries'],
       optional: ['customStoryDirective', 'themeDescriptionLine', 'universeSection', 'visualStateSection', 'storySourceLine'],
     },
-    seedVersion: 4,
-    changeNotes: 'v4 — engagement rules (every supporting character speaks + actively helps); participation moment (1 per story, type riddle/predict/guess/choose); imageVariant per page (reuse vs expression) to reduce rendering cost; max 10 pages enforced.',
+    seedVersion: 5,
+    changeNotes: 'v5 — bubble positions removed (the app places bubbles from the finished image; the old LEFT→bottom-left vs top-right rules contradicted each other); one outfit per character for the whole story via storyVisualState.characterOutfits.',
     promptText: `You are a creative children's storybook author for HeroKids Universe.
 {{customStoryDirective}}
 Hero details:
@@ -112,14 +112,6 @@ CROP HINT:
 - First page of each scene: "full_width" (full establishing shot).
 - Second page of a scene (if present): "zoom_center" (slightly tighter on the action).
 
-SPEECH BUBBLE PLACEMENT RULES:
-- Speech bubbles are rendered later by the app, not drawn into images.
-- Use structured preferredPosition + tailDirection so the bubble sits near the speaker and the tail points toward the mouth/lower face.
-- If speaker stands LEFT, prefer "top-right" with tailDirection "down-left".
-- If speaker stands RIGHT, prefer "top-left" with tailDirection "down-right".
-- If speaker stands CENTER, alternate "top-left" and "top-right".
-- Avoid covering face, eyes, mouth, hands, or important action.
-
 CHARACTER DIRECTION RULES:
 - Every named character visible in a scene MUST appear in characterDirections.
 - visible: true if character appears in the frame, false if off-screen.
@@ -135,25 +127,13 @@ CHARACTER DIRECTION RULES:
 SPEECH BUBBLE RULES:
 - speechBubbles carries the structured rendering metadata — the frontend places them; they are NEVER baked into the AI image.
 - Also populate the dialogue array (legacy) with the same lines for backward compatibility.
-- REQUIRED FIELDS: speakerName, text, bubbleStyle, preferredPosition, tailDirection.
-- Also include anchorTarget: "mouth" for spoken lines, "forehead" for thought bubbles.
+- REQUIRED FIELDS: speakerName, text, bubbleStyle, anchorTarget ("mouth" for spoken lines, "head" for thought bubbles).
+- Do NOT output bubble positions or coordinates — the app places every bubble next to the speaker in the finished illustration.
 - speakerName: MUST be the exact name of a character who appears on that page.
 - text: short child-friendly line, max 12 words. Spoken dialogue OR an internal thought in first person.
 - bubbleStyle: "normal" | "excited" | "whisper" | "thinking" | "surprised"
   - Use "thinking" for internal thoughts (rendered as a cloud/dots bubble). Max 1 thinking bubble per page, max 10 words, first person (e.g. "I hope this works…").
   - Use other styles for spoken dialogue.
-- preferredPosition: where the bubble should float — pick based on where the character stands:
-    Character on LEFT → "bottom-left"
-    Character on RIGHT → "bottom-right"
-    Character at top of frame → "top-left" or "top-right"
-    Default: "bottom-left" for first speaker, "bottom-right" for second speaker.
-- tailDirection: direction the tail points FROM the bubble TOWARD the speaker's mouth (or head for thoughts):
-    Bubble bottom-left, character above-right → "up-right"
-    Bubble bottom-right, character above-left → "up-left"
-    Bubble top-left, character below-right → "down-right"
-    Bubble top-right, character below-left → "down-left"
-- avoidCovering: list body parts to avoid: ["face"] always, add "hands" if the character's hands are in focus.
-- maxWidthPercent: 44 (leave the other half of the image clear).
 - Max 2 speechBubbles per page (at most 1 may be "thinking"). Set speechBubbles to [] if no one speaks. Do NOT invent dialogue.
 
 STORY STATE UPDATE RULES:
@@ -169,7 +149,8 @@ Respond with ONLY valid JSON (no markdown, no code fences):
   "title": "Story title here",
   "cliffhanger": "One sentence hinting at the next adventure",
   "storyVisualState": {
-    "costume": "Describe the hero's full costume for this story",
+    "costume": "The hero's ONE outfit for this whole story",
+    "characterOutfits": { "Other character name": "their ONE outfit for this whole story" },
     "companion": "Companion name and type, or null",
     "weapon": "Primary weapon or item, or null",
     "powers": ["Power 1", "Power 2"],

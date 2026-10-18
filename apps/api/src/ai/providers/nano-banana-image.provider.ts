@@ -62,7 +62,9 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
 
   private async urlToBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      // Locally stored uploads are saved as relative paths (/api/upload/files/...) that this API serves itself.
+      const absoluteUrl = url.startsWith('/') ? `http://localhost:${process.env.PORT ?? 3000}${url}` : url;
+      const res = await fetch(absoluteUrl, { signal: AbortSignal.timeout(20_000) });
       if (!res.ok) return null;
       const buf = await res.arrayBuffer();
       const ct = res.headers.get('content-type') ?? 'image/jpeg';
@@ -233,50 +235,6 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
       }
     }
 
-    // Adventure-appropriate clothing — detect environment, lock hero base + add accessories, enforce attire for all chars
-    const sceneDesc = (input.sceneDescription ?? '').toLowerCase();
-    type AdventureType = 'space' | 'underwater' | 'jungle' | 'ancient' | 'fantasy' | 'detective' | 'future' | 'ice' | 'volcano';
-
-    const ADVENTURE_CONFIG: Record<AdventureType, { heroAccessories: string; envRule: string }> = {
-      space:    { heroAccessories: 'helmet, jet boosters, glowing visor', envRule: 'This is a SPACE scene. ALL characters — including elderly or traditionally-dressed characters — must wear futuristic space suits or mission-appropriate gear. Absolutely no sarees, kurta, jeans, school uniforms, or any everyday clothing in space. No exceptions.' },
-      underwater: { heroAccessories: 'breathing mask, fins, aqua-glow trim', envRule: 'This is an UNDERWATER scene. ALL characters must wear diving suits or waterproof mission attire. No everyday clothes of any kind.' },
-      jungle:   { heroAccessories: 'explorer hat, utility vest, vine accents', envRule: 'This is a JUNGLE/EXPEDITION scene. ALL characters must wear sturdy explorer gear or expedition clothing (boots, utility vest, cargo). Absolutely no formal clothes, sarees, kurta, office wear, or delicate traditional clothing.' },
-      ancient:  { heroAccessories: 'explorer gear, headlamp, utility belt', envRule: 'This is an ANCIENT RUINS / RELIC QUEST scene. ALL characters must wear expedition gear, explorer clothing (cargo pants, utility vest, boots), or quest-appropriate attire. Absolutely no everyday casual clothes (kurta, saree, jeans, t-shirts, school uniforms) — this is an active adventure mission inside ancient ruins.' },
-      fantasy:  { heroAccessories: 'magical armour overlay, enchanted cape', envRule: 'This is a FANTASY/CASTLE scene. ALL characters must wear fantasy-appropriate attire — armour, robes, or medieval clothing. No modern everyday clothes.' },
-      detective: { heroAccessories: 'trench coat overlay, detective badge', envRule: 'This is a DETECTIVE/MYSTERY scene. ALL characters must wear trench coats, detective attire, or mystery-appropriate clothing. No casual everyday wear.' },
-      future:   { heroAccessories: 'nano-tech armour panels, holographic visor', envRule: 'This is a FUTURE/SCI-FI scene. ALL characters must wear futuristic nano-tech suits, holographic attire, or cyber gear. No traditional or everyday clothes.' },
-      ice:      { heroAccessories: 'frost-resistant armour, icy glow trim', envRule: 'This is an ICE WORLD scene. ALL characters must wear insulated arctic gear, frost-resistant armour, or cold-weather mission attire. No light or everyday clothes.' },
-      volcano:  { heroAccessories: 'heat shield plating, lava-resistant trim', envRule: 'This is a VOLCANO/FIRE scene. ALL characters must wear heat-resistant armour, fire-proof gear, or mission-appropriate protective attire. No ordinary clothes.' },
-    };
-
-    const detectAdventure = (): AdventureType | null => {
-      if (sceneDesc.match(/\b(space|spaceship|planet|rocket|galaxy|astronaut|orbit|asteroid|moon mission)\b/)) return 'space';
-      if (sceneDesc.match(/\b(underwater|ocean|coral|submarine|deep sea|diving|seabed)\b/)) return 'underwater';
-      if (sceneDesc.match(/\b(ancient|ruins|relic|artifact|dungeon|archaeological|stone chamber|lost temple|ancient temple|ancient city)\b/)) return 'ancient';
-      if (sceneDesc.match(/\b(jungle|rainforest|expedition|temple|vines|canopy|dense forest)\b/)) return 'jungle';
-      if (sceneDesc.match(/\b(castle|fantasy|dragon|wizard|magical kingdom|enchanted|medieval)\b/)) return 'fantasy';
-      if (sceneDesc.match(/\b(detective|mystery|crime|clue|investigation|noir|secret case)\b/)) return 'detective';
-      if (sceneDesc.match(/\b(futuristic|future city|cyber|holographic|nano|robot city|sci-fi)\b/)) return 'future';
-      if (sceneDesc.match(/\b(ice world|frozen|arctic|tundra|blizzard|glacier|snow world)\b/)) return 'ice';
-      if (sceneDesc.match(/\b(volcano|lava|magma|eruption|fire mountain|molten)\b/)) return 'volcano';
-      return null;
-    };
-
-    const adventure = detectAdventure();
-    if (adventure) {
-      const cfg = ADVENTURE_CONFIG[adventure];
-      // Hero: base costume stays locked, adventure accessories are layered on top
-      if (input.storyVisualState?.costume) {
-        lines.push(
-          `HERO ADVENTURE GEAR (layered OVER base costume — base design stays unchanged): ` +
-          `Add these mission accessories to the hero's existing outfit: ${cfg.heroAccessories}. ` +
-          `The hero's base costume remains visible underneath — only these accessories are added.`,
-        );
-      }
-      // All characters: must wear environment-appropriate attire
-      lines.push(`ENVIRONMENT RULE: ${cfg.envRule}`);
-    }
-
     // Character directions — condensed per-character
     if (input.characterDirections?.length) {
       const dirs = input.characterDirections.map((c) => {
@@ -328,27 +286,44 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
   private async generateImageInternal(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     // Build reference image parts
     const refUrls: Array<{ url: string; label: string }> = [];
-    if (input.heroAvatarUrl) refUrls.push({ url: input.heroAvatarUrl, label: 'hero' });
-    for (const url of (input.characterAvatarUrls ?? [])) {
-      refUrls.push({ url, label: 'character' });
+    if (input.heroAvatarUrl) refUrls.push({ url: input.heroAvatarUrl, label: `HERO — ${input.heroName}. Copy this face, hair and skin tone exactly.` });
+    (input.characterAvatarUrls ?? []).forEach((url, i) => {
+      const name = input.supportingCharacters?.[i]?.split('(')[0].trim() ?? `character ${i + 1}`;
+      refUrls.push({ url, label: `CHARACTER — ${name}. Copy this face, hair and skin tone exactly.` });
+    });
+    if (input.styleReferenceUrl) {
+      refUrls.push({
+        url: input.styleReferenceUrl,
+        label: 'EARLIER PAGE of this same story — match its art style, lighting and every character\'s outfit. Do not copy its composition or poses.',
+      });
     }
-    if (input.styleReferenceUrl) refUrls.push({ url: input.styleReferenceUrl, label: 'style-ref' });
 
     const refData = await Promise.all(refUrls.map(r => this.urlToBase64(r.url)));
-    const validRefs = refData.filter((d): d is NonNullable<typeof d> => d !== null);
+    // Keep labels aligned with the images that actually loaded, so "reference #1" really is the hero.
+    const loadedRefs = refUrls
+      .map((ref, i) => ({ ...ref, data: refData[i] }))
+      .filter((ref): ref is typeof ref & { data: NonNullable<typeof ref.data> } => ref.data !== null);
+    // Only face references count toward the hero/character "ref #N" numbering in the prompt.
+    const faceRefCount = loadedRefs.filter((ref) => !ref.label.startsWith('EARLIER PAGE')).length;
 
-    const promptText = this.buildPrompt(input, validRefs.length);
+    const promptText = this.buildPrompt(input, faceRefCount);
 
-    const parts: GeminiSDK[] = [{ text: promptText }];
-    for (const ref of validRefs) {
-      parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } });
-    }
+    // Interleave a text label before each image so the model can tell the references apart.
+    const parts: GeminiSDK[] = [];
+    loadedRefs.forEach((ref, i) => {
+      parts.push({ text: `Reference image #${i + 1}: ${ref.label}` });
+      parts.push({ inlineData: { mimeType: ref.data.mimeType, data: ref.data.data } });
+    });
+    parts.push({ text: promptText });
 
     const genAI = this.getGenAI();
     // responseModalities must be set at model-init time, not in generateContent
     const model = genAI.getGenerativeModel({
       model: NanoBananaImageProvider.IMAGE_MODEL,
-      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE'],
+        ...(input.aspectRatio ? { imageConfig: { aspectRatio: input.aspectRatio } } : {}),
+      } as GeminiSDK,
     });
 
     let lastError: Error | null = null;

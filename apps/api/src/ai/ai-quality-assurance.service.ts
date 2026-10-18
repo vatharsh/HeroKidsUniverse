@@ -559,10 +559,6 @@ export class AIQualityAssuranceService {
       issues.push(`page ${page.pageNumber}: too many speech bubbles for clean composition`);
     }
     for (const bubble of bubbles) {
-      if (!bubble.preferredPosition || !bubble.tailDirection) {
-        score -= 1;
-        issues.push(`page ${page.pageNumber}: speech bubble missing structured placement`);
-      }
       if (!bubble.anchorTarget && !bubble.anchor) {
         score -= 0.5;
         issues.push(`page ${page.pageNumber}: speech bubble missing speaker anchor target`);

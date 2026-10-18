@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { PlatformSetting } from '../../admin/platform-setting.entity';
+import { PlatformSetting, SETTING_DEFAULTS } from '../../admin/platform-setting.entity';
 import type {
   ApparentAgeCheckInput,
   ApparentAgeCheckResult,
@@ -37,6 +37,8 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
   private cacheExpiresAt = 0;
   private cachedAvatarBackend: string | null = null;
   private avatarCacheExpiresAt = 0;
+  private cachedAspectRatio: string | null = null;
+  private aspectCacheExpiresAt = 0;
   private static readonly CACHE_TTL_MS = 30_000;
 
   constructor(
@@ -85,7 +87,16 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
 
   async generateImage(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     const { provider } = await this.resolveProvider();
-    return provider.generateImage(input);
+    return provider.generateImage({ ...input, aspectRatio: input.aspectRatio ?? await this.resolveAspectRatio() });
+  }
+
+  /** One ratio for every illustration — without it pages came back mixed (square and 16:9 in one story). */
+  private async resolveAspectRatio(): Promise<string> {
+    if (Date.now() < this.aspectCacheExpiresAt && this.cachedAspectRatio) return this.cachedAspectRatio;
+    const row = await this.settingsRepo.findOne({ where: { key: 'STORY_IMAGE_ASPECT_RATIO' } });
+    this.cachedAspectRatio = row?.value?.trim() || SETTING_DEFAULTS.STORY_IMAGE_ASPECT_RATIO.value;
+    this.aspectCacheExpiresAt = Date.now() + ImageProviderDispatcher.CACHE_TTL_MS;
+    return this.cachedAspectRatio;
   }
 
   async generateAvatar(input: AvatarGenerationInput): Promise<ImageGenerationOutput> {

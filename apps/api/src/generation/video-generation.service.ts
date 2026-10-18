@@ -45,8 +45,12 @@ export class VideoGenerationService {
       const story = await this.storiesRepo.findOne({ where: { id: storyId, userId } });
       if (!story) throw new Error('Story not found');
 
-      const pages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber);
-      if (pages.length === 0) throw new Error('Story has no pages');
+      const allPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber);
+      // One missing illustration used to fail the whole export — skip it and keep the rest of the story.
+      const pages = allPages.filter((pg) => !!pg.imageUrl);
+      const skipped = allPages.length - pages.length;
+      if (skipped > 0) this.logger.warn(`Video for story ${storyId}: skipping ${skipped} page(s) without an image`);
+      if (pages.length === 0) throw new Error('Story has no illustrated pages');
 
       fs.mkdirSync(tmpDir, { recursive: true });
       this.logger.log(`Video generation started for story ${storyId} in ${tmpDir}`);
@@ -59,10 +63,9 @@ export class VideoGenerationService {
         imageSlots.push({ url: story.coverImageUrl, local });
       }
       for (const pg of pages) {
-        if (!pg.imageUrl) throw new Error(`Page ${pg.pageNumber} is missing an image`);
         const local = path.join(tmpDir, `page_${pg.pageNumber}.jpg`);
-        await this.downloadFile(pg.imageUrl, local);
-        imageSlots.push({ url: pg.imageUrl, local });
+        await this.downloadFile(pg.imageUrl!, local);
+        imageSlots.push({ url: pg.imageUrl!, local });
       }
 
       // ── Determine audio durations ────────────────────────────────────────

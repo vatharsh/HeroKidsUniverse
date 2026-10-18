@@ -366,9 +366,19 @@ export class GenerationService implements OnModuleInit {
       // hero.costumeDescription is the canonical source — always wins over whatever Gemini describes.
       // Gemini's storyVisualState.costume reflects what it thinks the hero is wearing (often casual),
       // which must NOT override the user-authored costume. Only allow Gemini's value as a last resort.
+      // Standalone stories don't use the universe costume, but still need ONE locked outfit — the writer's.
       const effectiveCostume = isStandalone
-        ? null
+        ? (normalizedGenerated.storyVisualState?.costume || null)
         : (hero.costumeDescription || existingVisualState?.costume || normalizedGenerated.storyVisualState?.costume || null);
+      // Writer-designed outfit for every other character. Parents often put accessories or age in the
+      // "outfit" field ("rectangular glasses"), so keep their note AND the writer's actual outfit.
+      for (const [name, outfit] of Object.entries(normalizedGenerated.storyVisualState?.characterOutfits ?? {})) {
+        if (!outfit) continue;
+        const parentNote = characterOutfits[name];
+        characterOutfits[name] = parentNote && !parentNote.toLowerCase().includes(outfit.toLowerCase())
+          ? `${outfit}; always with: ${parentNote}`
+          : outfit;
+      }
 
       let storyVisualState: StoryVisualState | null = null;
       if (normalizedGenerated.storyVisualState) {
@@ -1275,10 +1285,26 @@ export class GenerationService implements OnModuleInit {
     // Generate scene 1 first so its output can anchor visual consistency for all later scenes
     const sceneResults: SceneResult[] = [];
     let styleReferenceUrl: string | undefined;
+    const preUploadedUrls = new Map<string, string>();
     if (illustratedScenes.length > 0) {
       const scene1Result = await generateSceneImage(illustratedScenes[0]);
       sceneResults.push(scene1Result);
-      styleReferenceUrl = scene1Result.imageOutput?.imageUrl ?? undefined;
+      // The Gemini backend returns base64 with imageUrl '' — previously that empty string became the
+      // "anchor", so later scenes silently had no consistency reference at all.
+      const scene1Output = scene1Result.imageOutput;
+      if (scene1Output?.imageBase64) {
+        try {
+          const url = await this.uploadService.uploadGeneratedImage(
+            story.userId, story.id, illustratedScenes[0].pages[0]?.pageNumber ?? 1, scene1Output.imageBase64,
+          );
+          preUploadedUrls.set(illustratedScenes[0].sceneId, url);
+          styleReferenceUrl = url;
+        } catch (err) {
+          this.logger.warn(`Scene 1 anchor upload failed for ${story.id}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        styleReferenceUrl = scene1Output?.imageUrl || undefined;
+      }
     }
 
     // Remaining scenes run in parallel, each receiving scene 1's image as a visual anchor
@@ -1312,9 +1338,9 @@ export class GenerationService implements OnModuleInit {
       let illustrationUrl: string | undefined;
       try {
         const fileKey = scene.pages[0]?.pageNumber ?? 1;
-        illustrationUrl = imageOutput.imageBase64
+        illustrationUrl = preUploadedUrls.get(scene.sceneId) ?? (imageOutput.imageBase64
           ? await this.uploadService.uploadGeneratedImage(story.userId, story.id, fileKey, imageOutput.imageBase64)
-          : imageOutput.imageUrl || undefined;
+          : imageOutput.imageUrl || undefined);
 
         totalCostUsd += costPerImage;
         await this.aiUsageLogsRepo.save(

@@ -1,6 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Repository } from 'typeorm';
+
+import { PlatformSetting, SETTING_DEFAULTS } from '../../admin/platform-setting.entity';
 
 import {
   StoryGenerationInput,
@@ -26,20 +30,27 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
   constructor(
     private readonly config: ConfigService,
     private readonly promptRegistry: PromptRegistryService,
+    @Optional() @InjectRepository(PlatformSetting)
+    private readonly settingsRepo?: Repository<PlatformSetting>,
   ) {
     const apiKey = this.config.get<string>('GEMINI_API_KEY') ?? '';
-    this.model = this.config.get<string>('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+    this.model = this.config.get<string>('GEMINI_MODEL') ?? SETTING_DEFAULTS.STORY_GENERATION_MODEL.value;
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
   async generateStory(input: StoryGenerationInput): Promise<StoryGenerationOutput> {
     const { prompt, activePromptVersion } = await this.buildPrompt(input);
-    const modelNames = this.getModelFallbacks();
+    const modelNames = await this.getModelFallbacks();
     const maxRetries = 3;
     let lastError: Error = new Error('All Gemini models failed');
 
-    for (const modelName of modelNames) {
-      const model = this.genAI.getGenerativeModel({ model: modelName });
+    for (const [modelIndex, modelName] of modelNames.entries()) {
+      // JSON mode: the model must return parseable JSON (previously a malformed reply silently dropped
+      // the story to the next, weaker model).
+      const model = this.genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: 'application/json' },
+      });
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
@@ -66,6 +77,7 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
           const retryDelayMs = this.getRetryDelayMs(msg, attempt);
           const isQuota = this.isQuotaError(msg);
           const isRetryable = isQuota ||
+            err instanceof SyntaxError || // malformed JSON — worth one more try on the same model
             msg.includes('503') ||
             msg.includes('overloaded') ||
             msg.includes('high demand');
@@ -78,6 +90,12 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
             await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
           } else {
             lastError = err instanceof Error ? err : new Error(msg);
+            const next = modelNames[modelIndex + 1];
+            // Never downgrade silently: a fallback means a different (usually weaker) writer.
+            this.logger.error(
+              `Story model ${modelName} failed: ${msg.slice(0, 300)}` +
+              (next ? ` — falling back to ${next}` : ' — no fallback left'),
+            );
             break;
           }
         }
@@ -87,15 +105,25 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
     throw lastError;
   }
 
-  private getModelFallbacks(): string[] {
+  /**
+   * Primary model comes from the STORY_GENERATION_MODEL platform setting (admin-selectable), then the
+   * GEMINI_MODEL env var. Fallbacks are same-tier models only — no silent drop to Flash-Lite.
+   */
+  private async getModelFallbacks(): Promise<string[]> {
+    const setting = await this.settingsRepo
+      ?.findOne({ where: { key: 'STORY_GENERATION_MODEL' } })
+      .catch(() => null);
+    const primary = setting?.value?.trim() || this.model;
+
     const configured = this.config.get<string>('GEMINI_MODEL_FALLBACKS')
       ?.split(',')
       .map((model) => model.trim())
       .filter(Boolean) ?? [];
 
-    const defaults = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash'];
-    return [...new Set([this.model, ...configured, ...defaults])]
-      .filter((model) => model !== 'gemini-2.0-flash');
+    // Retired / no-longer-served models are dropped even if still configured somewhere.
+    const retired = new Set(['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash']);
+    return [...new Set([primary, ...configured, 'gemini-3.8-flash', 'gemini-3.6-flash'])]
+      .filter((model) => !retired.has(model));
   }
 
   private isQuotaError(message: string): boolean {
@@ -140,16 +168,8 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
   private buildRuntimeQualityContract(): string {
     return `RUNTIME QUALITY CONTRACT — MUST FOLLOW EVEN IF EARLIER PROMPT TEXT CONFLICTS:
 - speechBubbles are metadata only. Never ask image generation to draw text or bubbles.
-- Each speechBubble must include speakerName, text, emotion, bubbleStyle, preferredPosition, tailDirection, anchorTarget, anchorPoint, AND faceSide.
-- anchorTarget: "mouth" or "lower_face" for spoken dialogue; "forehead" for bubbleStyle "thinking".
-- anchorPoint: { "x": <0-100>, "y": <0-100> } — the speaker's estimated MOUTH position as a percentage of the image frame. This is used to draw the speech bubble tail directly at the character's face. Rules for estimating:
-  * x from characterDirections position: "left"→22, "center"→50, "right"→76. Adjust ±5 for exact framing.
-  * y from camera: "close-up on face"→34, "medium shot"→42, "wide angle"→48. "low angle"→38.
-  * Foreground character (larger in frame, closer to camera): subtract 5 from y.
-  * Background character (smaller, farther from camera): add 5 to y.
-  * CRITICAL: Every speaker on the same page MUST have a DIFFERENT anchorPoint. Two speakers standing at different positions will NEVER have the same x value. Never copy the same anchorPoint for two different speakers.
-- faceSide: "left" or "right" — which half of the image the speaker's face occupies. Derived from anchorPoint.x: x < 50 → "left", x >= 50 → "right". Used by the frontend to place the bubble on the correct side.
-- Place bubbles near speaker: speaker LEFT -> preferredPosition "top-right", tailDirection "down-left"; speaker RIGHT -> "top-left", tailDirection "down-right"; speaker CENTER -> alternate top-left/top-right.
+- Each speechBubble must include speakerName, text, emotion, bubbleStyle and anchorTarget ONLY. Do NOT output positions or coordinates (no preferredPosition, tailDirection, anchorPoint or faceSide) — the app places bubbles from the finished illustration.
+- anchorTarget: "mouth" for spoken dialogue; "head" for bubbleStyle "thinking".
 - Every speaking character must have characterDirections with position, expression, expressionDetails.eyes, expressionDetails.mouth, expressionDetails.eyebrows, expressionDetails.gaze, expressionDetails.headTilt, pose, action, lookingAt, mouthState "speaking", isSpeaking true.
 - Non-speaking visible characters must have reaction expressions and mouthState "closed", "smiling", or "surprised".
 - Include narrationText on every page. Dialogue may appear in narrationText only once; do not duplicate speech bubble text in narration.
@@ -160,7 +180,7 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
 - COSTUME LOCK: Every character's outfit established on page 1 must remain IDENTICAL across ALL pages of this story. Never change, replace, or vary any character's clothing mid-story. A costume change may ONLY occur if explicitly written into the plot AND reflected in storyStateUpdate.costumeChange. If no costumeChange is declared, the outfit is frozen.
 - HERO OUTFIT LOCK: If the hero has a defined superhero costume, it appears on every page. If not, whatever the hero wears on page 1 is locked for the entire story — never change it.
 - CHARACTER SCALE LOCK: The height and body size of every character relative to the hero must remain IDENTICAL across all pages. If a supporting character is taller or shorter than the hero in page 1, that size ratio is frozen for all subsequent pages. Never shrink or grow any character between scenes.
-- ADVENTURE CLOTHING RULE: The hero's BASE costume stays on at all times — adventure environments only ADD accessories on top (never replace the suit). Space → add helmet + jet boosters + glowing visor. Underwater → add breathing mask + fins + aqua-glow trim. Jungle/expedition → add explorer hat + utility vest + vine accents. Ancient ruins/relic quest → add explorer gear + headlamp + utility belt. Fantasy/castle → add magical armour overlay + enchanted cape. Detective/mystery → add trench coat overlay + badge. Future/cyber → add nano-tech armour panels + holographic visor. Ice world → add frost-resistant armour + icy glow. Volcano/fire → add heat shield plating + lava-resistant trim. Supporting characters MUST wear full environment-appropriate attire in the same adventure — absolutely NO sarees, kurta, jeans, t-shirts, school uniforms, or everyday casual clothes inside active adventure environments (space, ruins, underwater, jungle, volcano, etc). This applies to elderly characters and grandparents too — no exceptions for anyone.`;
+- OUTFIT DESIGN (decided ONCE for the whole story): in storyVisualState.costume describe the hero's single outfit for this story, and in storyVisualState.characterOutfits give every other named character exactly one outfit, e.g. { "Dadi": "purple cotton saree with a warm grey shawl" }. Choose outfits that suit the adventure (warm clothes for snow, gear for space). These outfits never change from page to page — scene descriptions must repeat them exactly.`;
   }
 
   private computePromptVariables(input: StoryGenerationInput): Record<string, string> {
@@ -318,13 +338,7 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
             "speakerName": "${heroRef}",
             "text": "Spoken line max 12 words",
             "bubbleStyle": "normal",
-            "preferredPosition": "top-right",
-            "tailDirection": "down-left",
-            "anchorTarget": "lower_face",
-            "anchorPoint": { "x": 22, "y": 42 },
-            "faceSide": "left",
-            "avoidCovering": ["face", "hands"],
-            "maxWidthPercent": 44
+            "anchorTarget": "mouth"
           }
         ],
         "storyStateUpdate": {

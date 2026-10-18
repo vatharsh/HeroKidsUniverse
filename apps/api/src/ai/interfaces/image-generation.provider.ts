@@ -2,6 +2,8 @@ export const IMAGE_GENERATION_PROVIDER = 'IMAGE_GENERATION_PROVIDER';
 
 export interface ImageGenerationInput {
   sceneDescription: string;
+  /** e.g. "1:1", "4:3" — every page of a story must share one ratio (set by the dispatcher from settings). */
+  aspectRatio?: string;
   heroName: string;
   heroAge: number;
   style?: string;
