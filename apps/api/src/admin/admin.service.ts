@@ -13,6 +13,7 @@ import {
 
 import { AiOperation, AiUsageLog } from '../ai/entities/ai-usage-log.entity';
 import { StoryGenerationCost } from '../ai/entities/story-generation-cost.entity';
+import { CharacterCanon } from '../characters/entities/character-canon.entity';
 import { Character } from '../characters/entities/character.entity';
 import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { GenerationJob, JobStatus } from '../generation/generation-job.entity';
@@ -562,6 +563,106 @@ export class AdminService implements OnModuleInit {
     await Promise.allSettled(assetUrls.map((url) => this.uploadService.deleteObject(url)));
     this.logger.log(`Admin deleted story ${storyId} (user ${story.userId}), refunded ${refundedCredits} credit(s)`);
     return { success: true, refundedCredits };
+  }
+
+  // ── Character canon refunds ──────────────────────────────────────────────
+
+  /**
+   * Avatar generations aren't linked to a hero/character in the ledger, so a canon refund is a flat
+   * 1 Avatar Refresh token. Failed canons pile up (one per story attempt), so every canon built from the
+   * same avatar is treated as one unit: refunded at most once and retired together.
+   */
+  private async canonRefundContext(manager: EntityManager, canon: CharacterCanon) {
+    const subject = canon.heroId
+      ? await manager.findOne(Hero, { where: { id: canon.heroId } })
+      : canon.characterId
+        ? await manager.findOne(Character, { where: { id: canon.characterId } })
+        : null;
+    const subjectWhere = canon.heroId ? { heroId: canon.heroId } : { characterId: canon.characterId! };
+    const siblings = canon.approvedAvatarUrl
+      ? await manager.find(CharacterCanon, {
+          where: { ...subjectWhere, approvedAvatarUrl: canon.approvedAvatarUrl },
+          withDeleted: true,
+        })
+      : [canon];
+    const alreadyRefunded = await manager.exists(CreditTransaction, {
+      where: { referenceId: In(siblings.map((c) => c.id)), reason: CreditTransactionReason.Refund },
+    });
+    // Only clear the avatar if it is still the one this canon was built from (the parent may have replaced it).
+    const clearsAvatar = !!subject?.avatarUrl && subject.avatarUrl === canon.approvedAvatarUrl;
+    const liveSiblings = siblings.filter((c) => !c.deletedAt);
+    return { subject, liveSiblings, alreadyRefunded, clearsAvatar, refundableTokens: subject && !alreadyRefunded ? 1 : 0 };
+  }
+
+  async getCanonRefundPreview(canonId: string) {
+    const canon = await this.dataSource.manager.findOne(CharacterCanon, { where: { id: canonId } });
+    if (!canon) throw new NotFoundException('Character canon not found');
+    const user = await this.usersRepo.findOne({ where: { id: canon.userId } });
+    const { subject, alreadyRefunded, clearsAvatar, refundableTokens } = await this.canonRefundContext(this.dataSource.manager, canon);
+    return {
+      canonId: canon.id,
+      canonType: canon.canonType,
+      status: canon.status,
+      errorMessage: canon.errorMessage,
+      entityName: subject?.name ?? null,
+      userEmail: user?.email ?? '',
+      clearsAvatar,
+      alreadyRefunded,
+      refundableTokens,
+    };
+  }
+
+  /**
+   * Deletes a canon and (if still current) the hero/character avatar it was built from, so the parent
+   * regenerates it — optionally refunding the Avatar Refresh token. All DB changes are atomic.
+   */
+  async deleteCanon(canonId: string, opts: { refund?: boolean } = {}) {
+    const result = await this.dataSource.transaction(async (manager) => {
+      const canon = await manager.findOne(CharacterCanon, { where: { id: canonId } });
+      if (!canon) throw new NotFoundException('Character canon not found');
+      const { subject, liveSiblings, clearsAvatar, refundableTokens } = await this.canonRefundContext(manager, canon);
+
+      let refundedTokens = 0;
+      if (opts.refund && refundableTokens > 0) {
+        const user = await manager.findOne(User, { where: { id: canon.userId }, lock: { mode: 'pessimistic_write' } });
+        if (user) {
+          user.avatarRefreshTokens += refundableTokens;
+          await manager.save(user);
+          await manager.save(
+            manager.create(CreditTransaction, {
+              userId: canon.userId,
+              delta: 0,
+              reason: CreditTransactionReason.Refund,
+              referenceId: canon.id,
+              avatarRefreshTokensDelta: refundableTokens,
+            }),
+          );
+          refundedTokens = refundableTokens;
+        }
+      }
+
+      let removedAvatarUrl: string | null = null;
+      if (subject?.avatarUrl && clearsAvatar) {
+        const avatarUrl = subject.avatarUrl;
+        removedAvatarUrl = avatarUrl;
+        subject.avatarUrl = null;
+        subject.avatarDescription = null;
+        if (subject instanceof Hero) subject.characterIdentity = null;
+        await manager.save(subject);
+      }
+      // Retire every canon built from that avatar, not just this row (no duplicates left to refund again).
+      await manager.softRemove(liveSiblings);
+
+      return { canon, refundedTokens, removedAvatarUrl };
+    });
+
+    // Storage cleanup after commit — failures are logged by UploadService and never fail the delete.
+    if (result.removedAvatarUrl) await this.uploadService.deleteObject(result.removedAvatarUrl);
+    this.logger.log(
+      `Admin deleted canon ${canonId} (user ${result.canon.userId}), avatar cleared: ${!!result.removedAvatarUrl}, ` +
+      `refunded ${result.refundedTokens} avatar token(s)`,
+    );
+    return { success: true, refundedTokens: result.refundedTokens, avatarCleared: !!result.removedAvatarUrl };
   }
 
   async listJobs(page = 1, limit = 20, status?: string, search?: string) {

@@ -241,31 +241,41 @@ Return ONLY valid JSON matching this exact structure (no markdown):
     }
   }
 
+  // A subject can have several canon rows (regenerations, retries) — always return the newest.
   getCanonForHero(heroId: string): Promise<CharacterCanon | null> {
-    return this.canonRepo.findOne({ where: { heroId } });
+    return this.canonRepo.findOne({ where: { heroId }, order: { createdAt: 'DESC' } });
   }
 
   getCanonForCharacter(characterId: string): Promise<CharacterCanon | null> {
-    return this.canonRepo.findOne({ where: { characterId } });
+    return this.canonRepo.findOne({ where: { characterId }, order: { createdAt: 'DESC' } });
   }
 
   getCanonForCompanion(companionId: string): Promise<CharacterCanon | null> {
-    return this.canonRepo.findOne({ where: { companionId } });
+    return this.canonRepo.findOne({ where: { companionId }, order: { createdAt: 'DESC' } });
   }
 
   async regenerateCanon(canonId: string): Promise<CharacterCanon> {
     const existing = await this.canonRepo.findOneOrFail({ where: { id: canonId } });
+    // Prefer the subject's current avatar — the parent may have replaced it since this canon was made.
+    const currentAvatarUrl = existing.heroId
+      ? (await this.heroesRepo.findOne({ where: { id: existing.heroId }, select: ['id', 'avatarUrl'] }))?.avatarUrl
+      : existing.characterId
+        ? (await this.charactersRepo.findOne({ where: { id: existing.characterId }, select: ['id', 'avatarUrl'] }))?.avatarUrl
+        : null;
     const regenerated = await this.generateCanonFromAvatar({
       heroId: existing.heroId ?? undefined,
       characterId: existing.characterId ?? undefined,
       companionId: existing.companionId ?? undefined,
       userId: existing.userId,
-      avatarUrl: existing.approvedAvatarUrl ?? '',
+      avatarUrl: currentAvatarUrl ?? existing.approvedAvatarUrl ?? '',
       canonType: existing.canonType,
       generatedFrom: existing.generatedFrom,
     });
     regenerated.generationVersion = existing.generationVersion + 1;
-    return this.canonRepo.save(regenerated);
+    const saved = await this.canonRepo.save(regenerated);
+    // The new row supersedes the old one, so the admin list doesn't keep showing the stale/failed version.
+    await this.canonRepo.softRemove(existing);
+    return saved;
   }
 
   async backfillAll(): Promise<BackfillResult> {
@@ -394,6 +404,7 @@ Return ONLY valid JSON matching this exact structure (no markdown):
         id: row.id,
         canonType: row.canonType,
         status: row.status,
+        errorMessage: row.errorMessage,
         qualityScore: row.qualityScore,
         approvedAvatarUrl: row.approvedAvatarUrl,
         appearanceSummary: row.appearanceSummary,

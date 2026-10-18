@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, ShieldCheck } from "lucide-react";
+import { Loader2, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/api";
 
@@ -13,6 +13,7 @@ interface CanonRow {
   id: string;
   canonType: CanonType;
   status: CanonStatus;
+  errorMessage: string | null;
   qualityScore: number | null;
   approvedAvatarUrl: string | null;
   appearanceSummary: string | null;
@@ -44,6 +45,17 @@ const TYPE_LABELS: Record<CanonType, string> = {
   companion:            "Companion",
 };
 
+interface CanonRefundPreview {
+  canonId: string;
+  canonType: CanonType;
+  entityName: string | null;
+  userEmail: string;
+  errorMessage: string | null;
+  clearsAvatar: boolean;
+  alreadyRefunded: boolean;
+  refundableTokens: number;
+}
+
 function QualityBadge({ score }: { score: number | null }) {
   if (score === null) return <span className="text-gray-400">—</span>;
   const color = score >= 80 ? "text-emerald-600 font-bold" : score >= 60 ? "text-amber-600 font-bold" : "text-red-600 font-bold";
@@ -60,6 +72,7 @@ export default function CharacterCanonsPage() {
   const [backfilling, setBackfilling] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState("");
   const [regenerating, setRegenerating] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<CanonRow | null>(null);
   const LIMIT = 20;
 
   async function load(p = page, st = statusFilter, ty = typeFilter) {
@@ -271,6 +284,9 @@ export default function CharacterCanonsPage() {
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_COLORS[row.status] ?? "bg-gray-100 text-gray-600"}`}>
                       {STATUS_LABELS[row.status] ?? row.status}
                     </span>
+                    {row.status === "failed" && row.errorMessage && (
+                      <p className="text-red-500 text-[11px] mt-1 max-w-[180px] line-clamp-2" title={row.errorMessage}>{row.errorMessage}</p>
+                    )}
                   </td>
 
                   {/* Quality */}
@@ -286,8 +302,10 @@ export default function CharacterCanonsPage() {
 
                   {/* Actions */}
                   <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
                     <button
                       type="button"
+                      title="Re-run the identity analysis on the current avatar (free for the parent)"
                       onClick={() => void handleRegenerate(row.id)}
                       disabled={regenerating === row.id}
                       className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 hover:text-violet-800 disabled:opacity-50 px-2.5 py-1.5 rounded-lg hover:bg-violet-50 transition"
@@ -295,6 +313,17 @@ export default function CharacterCanonsPage() {
                       <RefreshCw className={`w-3.5 h-3.5 ${regenerating === row.id ? "animate-spin" : ""}`} />
                       {regenerating === row.id ? "…" : "Regenerate"}
                     </button>
+                    {(row.canonType === "hero" || row.canonType === "supporting_character") && (
+                      <button
+                        type="button"
+                        title="Delete this canon and avatar, optionally refunding the avatar token"
+                        onClick={() => setDeleting(row)}
+                        className="flex items-center text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -328,6 +357,115 @@ export default function CharacterCanonsPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {deleting && (
+        <DeleteCanonModal
+          canon={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => { setDeleting(null); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteCanonModal({ canon, onClose, onDeleted }: { canon: CanonRow; onClose: () => void; onDeleted: () => void }) {
+  const [preview, setPreview] = useState<CanonRefundPreview | null>(null);
+  const [refund, setRefund] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    fetch(`${BASE}/admin/character-canons/${canon.id}/refund-preview`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(j => setPreview(j.data ?? j))
+      .catch(() => setError("Could not load refund details"));
+  }, [canon.id]);
+
+  async function confirmDelete() {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = getAccessToken();
+      const willRefund = refund && (preview?.refundableTokens ?? 0) > 0;
+      const res = await fetch(`${BASE}/admin/character-canons/${canon.id}?refund=${willRefund}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message ?? `Delete failed (${res.status})`);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setBusy(false);
+    }
+  }
+
+  const tokens = preview?.refundableTokens ?? 0;
+  const subject = canon.canonType === "hero" ? "hero" : "character";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={busy ? undefined : onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h2 className="text-gray-900 text-lg font-extrabold">Delete canon &amp; avatar?</h2>
+          <button onClick={onClose} disabled={busy} className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          {canon.approvedAvatarUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={canon.approvedAvatarUrl} alt={canon.entityName} className="w-12 h-12 rounded-full object-cover border border-gray-200" />
+          )}
+          <div>
+            <p className="text-sm font-bold text-gray-900">{canon.entityName}</p>
+            <p className="text-xs text-gray-500">Owner: {preview?.userEmail || "…"}</p>
+          </div>
+        </div>
+
+        {!preview && !error ? (
+          <Loader2 className="w-4 h-4 text-violet-600 animate-spin mb-4" />
+        ) : preview ? (
+          <>
+            <p className="text-xs text-gray-500 mb-4">
+              {preview.clearsAvatar
+                ? `The canon and this ${subject}'s avatar are removed. The parent will need to generate a new avatar.`
+                : `The parent has already replaced this avatar, so only the canon is removed — their current avatar is kept.`}
+              {" "}Tip: try Regenerate first — it&apos;s free and often fixes a failed canon.
+            </p>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 mb-4">
+              {tokens > 0 ? (
+                <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                  <input type="checkbox" checked={refund} onChange={e => setRefund(e.target.checked)} className="accent-violet-600" />
+                  Refund <span className="font-bold">{tokens} Avatar Refresh token</span> to the owner
+                </label>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  {preview.alreadyRefunded ? "Already refunded for this canon." : "Nothing to refund."}
+                </p>
+              )}
+            </div>
+          </>
+        ) : null}
+
+        {error && <p className="text-xs text-red-600 mb-3">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} disabled={busy} className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:border-gray-300 transition">
+            Cancel
+          </button>
+          <button
+            onClick={confirmDelete}
+            disabled={busy || !preview}
+            className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50 transition flex items-center gap-2"
+          >
+            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {refund && tokens > 0 ? "Delete & refund" : "Delete"}
+          </button>
+        </div>
       </div>
     </div>
   );

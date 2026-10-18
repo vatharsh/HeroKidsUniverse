@@ -323,6 +323,16 @@ export class AdminController {
     };
   }
 
+  @Get('character-canons/:id/refund-preview')
+  canonRefundPreview(@Param('id') id: string) {
+    return this.adminService.getCanonRefundPreview(id);
+  }
+
+  @Delete('character-canons/:id')
+  deleteCanon(@Param('id') id: string, @Query('refund') refund?: string) {
+    return this.adminService.deleteCanon(id, { refund: refund === 'true' });
+  }
+
   @Post('character-canons/backfill')
   backfillCharacterCanons() {
     void this.characterCanonService.backfillAll()
