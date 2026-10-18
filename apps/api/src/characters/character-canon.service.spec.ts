@@ -5,6 +5,7 @@
  * not hardcoded to 70.
  */
 
+import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 
@@ -80,11 +81,17 @@ async function buildModule(options: {
       { provide: getRepositoryToken(Character), useValue: makeRepo() },
       { provide: getRepositoryToken(UniverseCompanion), useValue: makeRepo() },
       { provide: getRepositoryToken(PlatformSetting), useValue: settingsRepo },
+      // Only used to build the OpenAI client; tests never hit the network.
+      { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('test-key') } },
     ],
   }).compile();
 
+  const service = module.get<CharacterCanonService>(CharacterCanonService);
+  // The service builds its own OpenAI client — swap in the mocked one so tests never hit the network.
+  (service as unknown as { openai: unknown }).openai = imageProvider.client;
+
   return {
-    service: module.get<CharacterCanonService>(CharacterCanonService),
+    service,
     canonRepo,
     settingsRepo,
   };
