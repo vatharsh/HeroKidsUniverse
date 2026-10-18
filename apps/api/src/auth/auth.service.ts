@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
 
 import { Influencer, InfluencerStatus } from '../influencers/influencer.entity';
+import { INFLUENCER_PROGRAM_PAUSED_MESSAGE, isInfluencerProgramEnabled } from '../influencers/influencer-program';
 import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
 import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { User, UserRole } from '../users/user.entity';
@@ -110,6 +111,9 @@ export class AuthService {
     }
 
     if (user.role === UserRole.Influencer) {
+      if (!(await isInfluencerProgramEnabled(this.platformSettingsRepository))) {
+        throw new UnauthorizedException(INFLUENCER_PROGRAM_PAUSED_MESSAGE);
+      }
       const influencer = await this.influencersRepository.findOne({ where: { userId: user.id, isDeleted: false } });
       if (!influencer || !influencer.active || influencer.status !== InfluencerStatus.Active) {
         throw new UnauthorizedException('Influencer login is inactive');

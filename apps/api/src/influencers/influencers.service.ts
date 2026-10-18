@@ -12,6 +12,7 @@ import {
   Repository,
 } from 'typeorm';
 
+import { PlatformSetting } from '../admin/platform-setting.entity';
 import { Order } from '../merchandise/orders/order.entity';
 import { User, UserRole } from '../users/user.entity';
 import { CouponUsageRecord } from './coupon-usage-record.entity';
@@ -22,6 +23,7 @@ import { InfluencerPayoutCommission } from './influencer-payout-commission.entit
 import { InfluencerPayout, PayoutStatus } from './influencer-payout.entity';
 import { InfluencerWallet } from './influencer-wallet.entity';
 import { Influencer, InfluencerStatus } from './influencer.entity';
+import { isInfluencerProgramEnabled } from './influencer-program';
 
 export interface CouponValidationResult {
   valid: boolean;
@@ -150,6 +152,10 @@ export class InfluencersService implements OnModuleInit {
     }
 
     if (coupon.couponType !== CouponType.Platform) {
+      // Influencer coupons stop working while the programme is paused; platform coupons are unaffected.
+      if (!(await isInfluencerProgramEnabled(this.dataSource.getRepository(PlatformSetting)))) {
+        return { valid: false, errorMessage: 'This coupon is no longer available.' };
+      }
       if (!coupon.influencerId) {
         return { valid: false, errorMessage: 'Invalid coupon configuration.' };
       }

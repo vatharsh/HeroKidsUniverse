@@ -34,7 +34,7 @@ const NAV: NavItem[] = [
   { href: "/admin/qa",               icon: Activity,        label: "AI Quality"       },
   { href: "/admin/ai-prompts",       icon: ScrollText,      label: "Prompt Registry"  },
   { href: "/admin/character-canons", icon: ShieldCheck,     label: "Character Canons" },
-  { href: "/admin/influencers",      icon: Briefcase,       label: "Influencers", flagKey: "ENABLE_INFLUENCER_PROGRAM" },
+  { href: "/admin/influencers",      icon: Briefcase,       label: "Influencers"      },
   { href: "/admin/coupons",          icon: Tag,             label: "Coupons"          },
   { href: "/admin/pricing",          icon: DollarSign,      label: "Pricing"          },
   { href: "/admin/payments",         icon: BarChart3,       label: "Payments"         },

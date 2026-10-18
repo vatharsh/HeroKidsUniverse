@@ -1,13 +1,15 @@
-import { BadRequestException, Body, Controller, Get, Patch, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Patch, Query, UseGuards } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { InfluencerProgramGuard } from './influencer-program';
 import { InfluencersService } from './influencers.service';
 import { UsersService } from '../users/users.service';
 
 @Controller('influencer')
 @Roles('influencer')
+@UseGuards(InfluencerProgramGuard)
 export class InfluencerPortalController {
   constructor(
     private readonly influencersService: InfluencersService,

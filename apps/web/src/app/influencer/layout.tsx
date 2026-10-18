@@ -13,6 +13,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 const NAV = [
   { href: "/influencer/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -26,6 +27,7 @@ export default function InfluencerLayout({ children }: { children: ReactNode }) 
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const { flags, loading: flagsLoading } = usePublicPlatformSettings();
 
   useEffect(() => {
     if (loading) return;
@@ -42,10 +44,33 @@ export default function InfluencerLayout({ children }: { children: ReactNode }) 
     }
   }, [loading, router, user]);
 
-  if (loading || !user || user.role !== "influencer") {
+  if (loading || flagsLoading || !user || user.role !== "influencer") {
     return (
       <div className="min-h-screen bg-space flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Programme switched off in admin — the portal API is blocked too, so show a clear message instead of errors.
+  if (flags.ENABLE_INFLUENCER_PROGRAM !== true) {
+    return (
+      <div className="min-h-screen bg-space flex items-center justify-center px-4">
+        <div className="max-w-md w-full rounded-3xl border border-white/10 bg-white/5 p-8 text-center">
+          <p className="text-[11px] uppercase tracking-[0.28em] text-gold/80 font-bold mb-3">Influencer Portal</p>
+          <h1 className="font-[family-name:var(--font-display)] text-3xl text-white mb-3">Programme paused</h1>
+          <p className="text-white/60 text-sm mb-6">
+            The influencer programme is currently paused. Your account and earnings are safe — we&apos;ll let you know when it&apos;s back.
+          </p>
+          <button
+            type="button"
+            onClick={() => { void logout(); router.push("/"); }}
+            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 transition"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
+          </button>
+        </div>
       </div>
     );
   }

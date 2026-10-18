@@ -57,7 +57,7 @@ const GROUPS: SettingGroup[] = [
       { key: "ENABLE_VIDEO_EXPORT", label: "Video Export", description: "Show video export actions in the story reader.", type: "boolean" },
       { key: "ENABLE_MERCHANDISE", label: "Online Store (Merchandise & Checkout)", description: "Master switch for the merchandise store, cart and checkout. When off, customers can still buy credits and avatars, but merchandise pages, buttons and new merch orders are blocked.", type: "boolean" },
       { key: "ENABLE_PHYSICAL_ORDERS", label: "Physical Orders", description: "Allow physical (shipped) products in the store. Only applies when the Online Store is on.", type: "boolean" },
-      { key: "ENABLE_INFLUENCER_PROGRAM", label: "Influencer Program", description: "Show influencer admin tools.", type: "boolean" },
+      { key: "ENABLE_INFLUENCER_PROGRAM", label: "Influencer Program", description: "Master switch for the influencer programme. When off, influencers cannot log in or use their portal, and influencer coupon codes are rejected at checkout. Platform coupons and the admin Influencers tools keep working.", type: "boolean" },
       { key: "ENABLE_STORY_CONTINUATION", label: "Story Continuation", description: "Allow continuing existing universes.", type: "boolean" },
       { key: "ENABLE_UNIVERSE_MEMORY", label: "Universe Memory", description: "Persist and reuse memory for universes.", type: "boolean" },
       { key: "ENABLE_INDIAN_ENGLISH_NARRATION", label: "Indian English Narration", description: "Use Indian English prompts and narration style.", type: "boolean" },
