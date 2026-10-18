@@ -91,6 +91,7 @@ export interface User {
   characterSlotsTotal: number;
   characterSlotsUsed: number;
   avatarRefreshTokens: number;
+  previewCredits?: number;
   isPremium: boolean;
   referralCode: string;
   createdAt: string;

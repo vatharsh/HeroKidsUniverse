@@ -159,7 +159,7 @@ export default function HowItWorks() {
           >
             {user ? "Continue Your Universe →" : "Start Your Universe →"}
           </a>
-          <p className="text-ink-muted text-xs mt-3">3 free story credits · No credit card required</p>
+          <p className="text-ink-muted text-xs mt-3">Free 3-page preview story · No credit card required</p>
         </div>
       </div>
     </section>

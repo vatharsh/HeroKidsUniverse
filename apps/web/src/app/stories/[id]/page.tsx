@@ -422,6 +422,7 @@ interface Story {
   storyVisualState: StoryVisualState | null;
   videoUrl: string | null;
   videoStatus: "not_started" | "generating" | "completed" | "failed" | "null" | null;
+  isPreview?: boolean;
   hero: { name: string; age: number; gender: string; avatarUrl: string | null };
 }
 
@@ -1295,6 +1296,23 @@ export default function StoryReaderPage() {
             ›
           </button>
         </div>
+
+        {/* Free preview → invite to unlock full adventures */}
+        {isLastPage && story.isPreview && (
+          <div className="w-full max-w-md rounded-3xl border border-gold/30 bg-white/10 p-5 text-center">
+            <p className="text-gold text-xs font-bold uppercase tracking-[0.18em] mb-2">Free preview</p>
+            <p className="font-[family-name:var(--font-display)] text-white text-xl mb-2">
+              {story.hero?.name ?? "Your hero"}&apos;s adventure has only just begun!
+            </p>
+            <p className="text-white/70 text-sm mb-4">
+              Full stories are longer, with more scenes, more friends and a new chapter every time.
+            </p>
+            <a href="/dashboard#credits"
+              className="inline-block bg-gold hover:brightness-110 text-ink font-bold text-sm px-6 py-2.5 rounded-full transition">
+              Unlock full stories →
+            </a>
+          </div>
+        )}
 
         {/* Back to dashboard on last page */}
         {isLastPage && (

@@ -54,6 +54,7 @@ export class UsersService {
       characterSlotsTotal: user.characterSlotsTotal,
       characterSlotsUsed: user.characterSlotsUsed,
       avatarRefreshTokens: user.avatarRefreshTokens,
+      previewCredits: user.previewCredits,
       referralCode: user.referralCode,
       createdAt: user.createdAt,
     };

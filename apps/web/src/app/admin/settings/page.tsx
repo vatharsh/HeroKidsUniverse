@@ -77,7 +77,9 @@ const GROUPS: SettingGroup[] = [
     title: "Generation Limits",
     description: "Limits used by signup, planning, and image generation.",
     items: [
-      { key: "FREE_SIGNUP_CREDITS", label: "Free Signup Credits", description: "Credits awarded when a new account is created.", type: "number" },
+      { key: "FREE_SIGNUP_CREDITS", label: "Free Signup Credits", description: "Full story credits awarded when a new account is created (0 = previews only).", type: "number" },
+      { key: "FREE_PREVIEW_STORIES", label: "Free Preview Stories", description: "Free preview stories awarded at signup. Used only when the user has no regular credits.", type: "number" },
+      { key: "FREE_PREVIEW_PAGES", label: "Preview Story Pages", description: "Number of pages in a free preview story.", type: "number" },
       { key: "BASIC_PLAN_PAGES", label: "Basic Plan Pages", description: "Default page count for the Basic plan.", type: "number" },
       { key: "STANDARD_PLAN_PAGES", label: "Standard Plan Pages", description: "Default page count for the Standard plan.", type: "number" },
       { key: "PREMIUM_PLAN_PAGES", label: "Premium Plan Pages", description: "Default page count for the Premium plan.", type: "number" },

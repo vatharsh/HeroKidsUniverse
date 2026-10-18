@@ -50,6 +50,10 @@ export class User {
   @Column({ type: 'int', default: 0 })
   credits!: number;
 
+  /** Free preview stories (shorter, FREE_PREVIEW_PAGES long) — separate from paid credits. */
+  @Column({ type: 'int', default: 0 })
+  previewCredits!: number;
+
   @Column({ type: 'int', default: 3 })
   characterSlotsTotal!: number;
 

@@ -327,6 +327,7 @@ function FailedJobsBanner({
 
 interface WalletUser {
   credits: number;
+  previewCredits?: number;
   characterSlotsTotal: number;
   characterSlotsUsed: number;
   avatarRefreshTokens: number;
@@ -334,7 +335,8 @@ interface WalletUser {
 
 function WalletBar({ user, onToggleTopUp }: { user: WalletUser; showTopUp?: boolean; onToggleTopUp: () => void }) {
   const slotsRemaining = user.characterSlotsTotal < 0 ? null : Math.max(0, user.characterSlotsTotal - user.characterSlotsUsed);
-  const lowCredits = user.credits < 3;
+  const hasPreview = user.credits < 1 && (user.previewCredits ?? 0) > 0;
+  const lowCredits = user.credits < 3 && !hasPreview;
   const noRefreshes = user.avatarRefreshTokens === 0;
 
   return (
@@ -346,9 +348,9 @@ function WalletBar({ user, onToggleTopUp }: { user: WalletUser; showTopUp?: bool
             <Zap className={`w-4 h-4 ${lowCredits ? "text-amber-600" : "text-brand"}`} />
           </div>
           <div>
-            <p className={`font-black text-lg leading-none ${lowCredits ? "text-amber-700" : "text-ink"}`}>{user.credits}</p>
+            <p className={`font-black text-lg leading-none ${lowCredits ? "text-amber-700" : "text-ink"}`}>{hasPreview ? user.previewCredits : user.credits}</p>
             <p className={`text-xs ${lowCredits ? "text-amber-600" : "text-ink-muted"}`}>
-              {lowCredits ? "Credits low!" : "Story Credits"}
+              {hasPreview ? "Free preview story" : lowCredits ? "Credits low!" : "Story Credits"}
             </p>
           </div>
         </div>
@@ -725,8 +727,9 @@ function DashboardPageInner() {
                     className={`text-sm flex items-center gap-1 transition ${user.credits < 3 ? "text-amber-400 font-semibold" : "text-white/40 hover:text-white/70"}`}
                   >
                     <Zap className="w-3.5 h-3.5" />
-                    {user.credits} credit{user.credits !== 1 ? "s" : ""}
-                    {user.credits < 3 && " · Buy More →"}
+                    {user.credits < 1 && (user.previewCredits ?? 0) > 0
+                      ? "1 free preview story"
+                      : <>{user.credits} credit{user.credits !== 1 ? "s" : ""}{user.credits < 3 && " · Buy More →"}</>}
                   </button>
                 )}
               </div>

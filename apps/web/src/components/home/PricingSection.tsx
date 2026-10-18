@@ -143,7 +143,7 @@ export default function PricingSection() {
             Start free. Pay only for the stories you love.
           </p>
           <div className="inline-flex items-center gap-2 bg-brand-50 text-brand border border-brand/20 text-sm font-medium px-4 py-2 rounded-full">
-            ✨ Try 3 free stories on signup — no credit card required
+            ✨ Try a free 3-page preview story on signup — no credit card required
           </div>
         </div>
 

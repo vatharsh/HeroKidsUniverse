@@ -23,6 +23,7 @@ export interface AuthUserResponse {
   characterSlotsTotal: number;
   characterSlotsUsed: number;
   avatarRefreshTokens: number;
+  previewCredits: number;
   role?: string;
 }
 
@@ -64,8 +65,9 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(registerDto.password, 12);
-    const [freeSignupCredits, sandboxSetting] = await Promise.all([
+    const [freeSignupCredits, freePreviewStories, sandboxSetting] = await Promise.all([
       this.getSettingNumber('FREE_SIGNUP_CREDITS', Number(SETTING_DEFAULTS.FREE_SIGNUP_CREDITS.value)),
+      this.getSettingNumber('FREE_PREVIEW_STORIES', Number(SETTING_DEFAULTS.FREE_PREVIEW_STORIES.value)),
       this.platformSettingsRepository.findOne({ where: { key: 'SANDBOX_MODE' } }),
     ]);
     const isSandbox = sandboxSetting ? sandboxSetting.value === 'true' : true;
@@ -76,6 +78,7 @@ export class AuthService {
         name: registerDto.name,
         role: UserRole.Parent,
         credits: freeSignupCredits,
+        previewCredits: freePreviewStories,
         referredBy,
         isSandbox,
       }),
@@ -88,6 +91,17 @@ export class AuthService {
           delta: freeSignupCredits,
           reason: CreditTransactionReason.Signup,
           referenceId: null,
+        }),
+      );
+    }
+    if (freePreviewStories > 0) {
+      // Previews aren't credits, so delta stays 0 — the row just records the grant for support/audit.
+      await this.creditTransactionsRepository.save(
+        this.creditTransactionsRepository.create({
+          userId: user.id,
+          delta: 0,
+          reason: CreditTransactionReason.Signup,
+          referenceId: `free_preview:${freePreviewStories}`,
         }),
       );
     }
@@ -160,6 +174,7 @@ export class AuthService {
       characterSlotsTotal: user.characterSlotsTotal,
       characterSlotsUsed: user.characterSlotsUsed,
       avatarRefreshTokens: user.avatarRefreshTokens,
+      previewCredits: user.previewCredits,
       referralCode: user.referralCode,
       createdAt: user.createdAt,
     };
@@ -195,6 +210,7 @@ export class AuthService {
       characterSlotsTotal: user.characterSlotsTotal,
       characterSlotsUsed: user.characterSlotsUsed,
       avatarRefreshTokens: user.avatarRefreshTokens,
+      previewCredits: user.previewCredits,
       role: user.role,
     };
   }
@@ -205,6 +221,7 @@ export class AuthService {
     const def = SETTING_DEFAULTS[key];
     const envAliases: Record<string, string[]> = {
       FREE_SIGNUP_CREDITS: ['FREE_SIGNUP_CREDITS'],
+      FREE_PREVIEW_STORIES: ['FREE_PREVIEW_STORIES'],
     };
     for (const envKey of envAliases[key] ?? [key]) {
       const raw = this.configService.get<string>(envKey) ?? process.env[envKey];

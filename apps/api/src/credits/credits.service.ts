@@ -33,6 +33,7 @@ export class CreditsService {
         ? null
         : Math.max(0, user.characterSlotsTotal - user.characterSlotsUsed),
       avatarRefreshTokens: user.avatarRefreshTokens,
+      previewCredits: user.previewCredits,
       transactions,
     };
   }

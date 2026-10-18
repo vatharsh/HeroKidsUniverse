@@ -247,6 +247,10 @@ export class Story {
   @Column({ type: 'boolean', default: false })
   isSandbox!: boolean;
 
+  /** Generated from a free preview credit — shorter story, used to upsell full stories. */
+  @Column({ type: 'boolean', default: false })
+  isPreview!: boolean;
+
   @Column({ type: 'float', nullable: true })
   overallConfidence!: number | null;
 

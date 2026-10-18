@@ -37,6 +37,7 @@ export const PUBLIC_SETTING_KEYS = [
   'ENABLE_PHYSICAL_ORDERS',
   'ENABLE_VIDEO_EXPORT',
   'ENABLE_INFLUENCER_PROGRAM',
+  'FREE_PREVIEW_PAGES',
 ] as const;
 
 export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
@@ -60,7 +61,9 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   ENABLE_STORY_CONTINUATION:      { value: 'true', type: 'boolean', description: 'Allow story continuation from existing arcs' },
   ENABLE_UNIVERSE_MEMORY:         { value: 'true', type: 'boolean', description: 'Persist and reuse universe memory' },
   ENABLE_VIDEO_EXPORT:            { value: 'true', type: 'boolean', description: 'Show video export controls for stories' },
-  FREE_SIGNUP_CREDITS:            { value: '3',   type: 'number',  description: 'Credits awarded automatically on signup' },
+  FREE_SIGNUP_CREDITS:            { value: '0',   type: 'number',  description: 'Full story credits awarded automatically on signup' },
+  FREE_PREVIEW_STORIES:           { value: '1',   type: 'number',  description: 'Free preview stories awarded on signup (used only when the user has no regular credits)' },
+  FREE_PREVIEW_PAGES:             { value: '3',   type: 'number',  description: 'Number of pages in a free preview story' },
   MAX_IMAGES_PER_STORY_DEV:       { value: '10',  type: 'number',  description: 'Maximum generated images per story in development' },
   MAX_IMAGES_PER_STORY_PROD:      { value: '10',  type: 'number',  description: 'Maximum generated images per story in production' },
   PREMIUM_PLAN_PAGES:             { value: '10',  type: 'number',  description: 'Default number of pages for the Premium plan' },

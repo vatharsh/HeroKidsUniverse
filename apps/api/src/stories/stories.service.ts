@@ -122,11 +122,14 @@ export class StoriesService {
         lock: { mode: 'pessimistic_write' },
       });
 
-      if (user.credits < 1) {
+      // Paid credits are always used first; the free preview (a shorter story) only when none are left.
+      const isPreview = user.credits < 1 && user.previewCredits > 0;
+      if (user.credits < 1 && !isPreview) {
         throw new HttpException('Not enough credits', HttpStatus.PAYMENT_REQUIRED);
       }
 
-      user.credits -= 1;
+      if (isPreview) user.previewCredits -= 1;
+      else user.credits -= 1;
       await manager.save(user);
 
       const story = await manager.save(
@@ -143,15 +146,16 @@ export class StoriesService {
           pages: [],
           characterIds,
           skipCompanion: createStoryDto.skipCompanion ?? null,
-          creditsUsed: 1,
+          creditsUsed: isPreview ? 0 : 1,
           isSandbox,
+          isPreview,
         }),
       );
 
       await manager.save(
         manager.create(CreditTransaction, {
           userId,
-          delta: -1,
+          delta: isPreview ? 0 : -1,
           reason: CreditTransactionReason.StoryGeneration,
           referenceId: story.id,
         }),

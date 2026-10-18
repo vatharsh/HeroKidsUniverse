@@ -192,11 +192,7 @@ export class GenerationService implements OnModuleInit {
               .set({ status: JobStatus.Failed, currentStep: 'Failed', errorMessage: errorMsg, completedAt: new Date() })
               .where('"storyId" = :id AND status NOT IN (:...done)', { id: s.id, done: [JobStatus.Completed, JobStatus.Failed] })
               .execute();
-            // Refund the credit
-            await this.usersRepo.increment({ id: s.userId }, 'credits', 1);
-            await this.creditsRepo.save(
-              this.creditsRepo.create({ userId: s.userId, delta: 1, reason: CreditTransactionReason.Refund, referenceId: s.id }),
-            );
+            await this.refundStoryCharge(s);
           }),
         );
         this.logger.warn(`Rescued ${zombies.length} zombie story/stories on startup (marked failed, credits refunded)`);
@@ -329,7 +325,9 @@ export class GenerationService implements OnModuleInit {
       const heroGender = hero.gender ?? 'child';
 
       const storyUser = await this.usersRepo.findOne({ where: { id: userId } });
-      const pageCount = await this.getPlanPageCount(storyUser?.plan ?? 'basic');
+      const pageCount = story.isPreview
+        ? await this.getNumberSetting('FREE_PREVIEW_PAGES', Number(SETTING_DEFAULTS.FREE_PREVIEW_PAGES.value))
+        : await this.getPlanPageCount(storyUser?.plan ?? 'basic');
 
       const themeDescription = story.theme
         ? (THEME_LABELS[story.theme] ?? 'an exciting adventure')
@@ -618,15 +616,8 @@ export class GenerationService implements OnModuleInit {
       });
 
       try {
-        await this.usersRepo.increment({ id: userId }, 'credits', 1);
-        await this.creditsRepo.save(
-          this.creditsRepo.create({
-            userId,
-            delta: 1,
-            reason: CreditTransactionReason.StoryGeneration,
-            referenceId: storyId,
-          }),
-        );
+        const failedStory = await this.storiesRepo.findOne({ where: { id: storyId } });
+        if (failedStory) await this.refundStoryCharge(failedStory);
       } catch (refundErr) {
         this.logger.error(`Credit refund failed for user ${userId}, story ${storyId}`, refundErr);
       }
@@ -1738,6 +1729,23 @@ export class GenerationService implements OnModuleInit {
     }
 
     return estimatedCostUsd;
+  }
+
+  /** Gives back whatever a failed story cost: the preview for preview stories, otherwise its credits. */
+  private async refundStoryCharge(story: Story): Promise<void> {
+    if (story.isPreview) {
+      await this.usersRepo.increment({ id: story.userId }, 'previewCredits', 1);
+    } else if (story.creditsUsed > 0) {
+      await this.usersRepo.increment({ id: story.userId }, 'credits', story.creditsUsed);
+    }
+    await this.creditsRepo.save(
+      this.creditsRepo.create({
+        userId: story.userId,
+        delta: story.isPreview ? 0 : story.creditsUsed,
+        reason: CreditTransactionReason.Refund,
+        referenceId: story.id,
+      }),
+    );
   }
 
   private async getPlanPageCount(plan: string): Promise<number> {

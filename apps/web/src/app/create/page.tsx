@@ -10,6 +10,7 @@ import AvatarPicker from "@/components/shared/AvatarPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { prepareImageUpload } from "@/lib/image-upload";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -252,6 +253,8 @@ function CreatePageInner() {
   const searchParams = useSearchParams();
   const preselectedUniverseId = searchParams.get("universeId");
   const { user, loading: authLoading } = useAuth();
+  const { flags } = usePublicPlatformSettings();
+  const previewPages = Number(flags.FREE_PREVIEW_PAGES ?? 3);
 
   // Hero state
   const [hero, setHero]               = useState<ExistingHero | null>(null);
@@ -1614,14 +1617,21 @@ function CreatePageInner() {
                 )}
                 <div className="flex items-center gap-2 pt-3 border-t border-ink/8 text-ink-muted">
                   <CreditCard className="w-4 h-4" />
-                  <span className="text-xs">1 story credit will be used</span>
-                  {user && <span className="ml-auto text-xs">{user.credits} credits remaining</span>}
+                  {user && user.credits < 1 && (user.previewCredits ?? 0) > 0 ? (
+                    <span className="text-xs">Your free preview story will be used — a short {previewPages}-page adventure</span>
+                  ) : (
+                    <>
+                      <span className="text-xs">1 story credit will be used</span>
+                      {user && <span className="ml-auto text-xs">{user.credits} credits remaining</span>}
+                    </>
+                  )}
                 </div>
                 {/* Plan & page count info */}
                 {(() => {
                   const plan = (user as any)?.plan ?? "basic";
-                  const pages = plan === "premium" ? 10 : plan === "standard" ? 8 : 6;
-                  const planLabel = plan === "premium" ? "Premium" : plan === "standard" ? "Standard" : "Basic";
+                  const isPreview = !!user && user.credits < 1 && (user.previewCredits ?? 0) > 0;
+                  const pages = isPreview ? previewPages : plan === "premium" ? 10 : plan === "standard" ? 8 : 6;
+                  const planLabel = isPreview ? "Free preview" : plan === "premium" ? "Premium" : plan === "standard" ? "Standard" : "Basic";
                   return (
                     <div className="flex items-center justify-between pt-3 border-t border-ink/8">
                       <span className="text-ink-muted text-xs">Your plan</span>
