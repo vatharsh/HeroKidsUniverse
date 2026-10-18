@@ -37,6 +37,8 @@ interface SpeechBubbleMeta {
   faceSide?: 'left' | 'right';
   bubbleRect?: { x: number; y: number; width: number; height: number };
   layoutConfidence?: number;
+  /** 'detected' = placed from the real head/mouth positions in the finished image. */
+  layoutSource?: 'detected';
   /** Legacy */
   placementHint?: string;
   priority?: number;
@@ -114,6 +116,7 @@ function getSpeechBubbles(page: StoryPage): Array<{
   anchorPoint?: { x: number; y: number };
   bubbleRect?: { x: number; y: number; width: number; height: number };
   layoutConfidence?: number;
+  layoutSource?: 'detected';
 }> {
   if (page.speechBubbles && page.speechBubbles.length > 0) {
     return page.speechBubbles
@@ -130,6 +133,7 @@ function getSpeechBubbles(page: StoryPage): Array<{
         anchorPoint: b.anchorPoint,
         bubbleRect: b.bubbleRect,
         layoutConfidence: b.layoutConfidence,
+        layoutSource: b.layoutSource,
       }));
   }
   if (page.dialogue && page.dialogue.length > 0) {
@@ -323,9 +327,11 @@ interface BubbleProps {
   tailUp?: boolean;
   tailOnRight?: boolean;
   hideTail?: boolean;
+  /** Stretch to the full width of the slot it's placed in. */
+  fill?: boolean;
 }
 
-function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRight = false, hideTail = false }: BubbleProps) {
+function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRight = false, hideTail = false, fill = false }: BubbleProps) {
   const borderColor = bubbleStyle === "whisper" ? "#555" : "#000";
   const fillColor   = bubbleStyle === "surprised" ? "#fff9c4" : bubbleStyle === "whisper" ? "#f0f0f0" : "#fff";
 
@@ -355,7 +361,7 @@ function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRi
   const innerRight = tailOnRight ? 16 : undefined;
 
   return (
-    <div className="relative flex flex-col" style={{ display: "inline-flex", flexDirection: "column" }}>
+    <div className="relative flex flex-col" style={{ display: fill ? "flex" : "inline-flex", flexDirection: "column", width: fill ? "100%" : undefined }}>
       {/* Upward tail sits ABOVE the box — rendered before so it's visually behind */}
       {!hideTail && tailUp && bubbleStyle !== "thinking" && (
         <>
@@ -398,6 +404,75 @@ function SpeechBubble({ speakerName, text, bubbleStyle, tailUp = false, tailOnRi
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const READER_FRAME_ASPECT = 376 / 499; // width / height of the reader's picture frame
+
+/** Where an image of `imageAspect` (w/h) sits inside the frame when shown with object-contain, in % of the frame. */
+function containedImageBox(imageAspect: number): React.CSSProperties {
+  if (imageAspect >= READER_FRAME_ASPECT) {
+    const height = (READER_FRAME_ASPECT / imageAspect) * 100;
+    return { position: "absolute", left: 0, width: "100%", top: `${(100 - height) / 2}%`, height: `${height}%` };
+  }
+  const width = (imageAspect / READER_FRAME_ASPECT) * 100;
+  return { position: "absolute", top: 0, height: "100%", left: `${(100 - width) / 2}%`, width: `${width}%` };
+}
+
+type PlacedBubble = {
+  speakerName: string; text: string; bubbleStyle: BubbleStyle;
+  anchorPoint: { x: number; y: number };
+  bubbleRect: { x: number; y: number; width: number; height: number };
+};
+
+/**
+ * Bubbles placed from detected head/mouth positions. Coordinates are % of the image, so this layer must sit
+ * exactly over the displayed image. Each bubble is pinned by the edge facing its speaker, so the tail always
+ * starts on the bubble no matter how tall the text renders.
+ */
+function DetectedBubbleLayer({ bubbles, imageAspect }: { bubbles: PlacedBubble[]; imageAspect: number }) {
+  return (
+    <div className="pointer-events-none" style={{ ...containedImageBox(imageAspect), zIndex: 20 }}>
+      <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ zIndex: 1 }}>
+        {bubbles.map((b, i) => {
+          const r = b.bubbleRect;
+          const a = b.anchorPoint;
+          const below = a.y > r.y + r.height / 2;
+          const base = { x: Math.min(r.x + r.width - 5, Math.max(r.x + 5, a.x)), y: below ? r.y + r.height : r.y };
+          // The backend already stops the tail at the edge of the speaker's head, so draw it all the way.
+          const tip = a;
+          if (b.bubbleStyle === "thinking") {
+            return [0.3, 0.58, 0.85].map((t, k) => {
+              const rx = [1.7, 1.25, 0.85][k];
+              return (
+                <ellipse key={`${i}-${k}`} cx={base.x + (a.x - base.x) * t} cy={base.y + (a.y - base.y) * t}
+                  rx={rx} ry={rx * imageAspect} fill="#fff" stroke="#000" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+              );
+            });
+          }
+          const half = Math.min(2.4, r.width / 6);
+          return (
+            <polygon key={i} points={`${base.x - half},${base.y} ${base.x + half},${base.y} ${tip.x},${tip.y}`}
+              fill={b.bubbleStyle === "surprised" ? "#fff9c4" : b.bubbleStyle === "whisper" ? "#f0f0f0" : "#fff"}
+              stroke="#000" strokeWidth={2.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          );
+        })}
+      </svg>
+      {bubbles.map((b, i) => {
+        const r = b.bubbleRect;
+        const below = b.anchorPoint.y > r.y + r.height / 2;
+        return (
+          <div key={i} className="absolute" style={{
+            left: `${r.x}%`,
+            width: `${r.width}%`,
+            ...(below ? { bottom: `${100 - (r.y + r.height)}%` } : { top: `${r.y}%` }),
+            zIndex: 2,
+          }}>
+            <SpeechBubble speakerName={b.speakerName} text={b.text} bubbleStyle={b.bubbleStyle} hideTail fill />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -480,6 +555,7 @@ export default function StoryReaderPage() {
   const [story, setStory]         = useState<Story | null>(null);
   const [error, setError]         = useState("");
   const [page, setPage]           = useState(0);
+  const [imageAspect, setImageAspect] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied]       = useState(false);
   const [recap, setRecap]         = useState<Recap | null>(null);
@@ -1152,6 +1228,10 @@ export default function StoryReaderPage() {
                 <img
                   src={currentPage.imageUrl}
                   alt={`Page ${page + 1}`}
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    if (img.naturalWidth && img.naturalHeight) setImageAspect(img.naturalWidth / img.naturalHeight);
+                  }}
                   className="absolute inset-0 w-full h-full object-contain z-10 transition-all duration-500"
                   style={hasPreciseBubbleLayout(currentPage) ? {} : getCropStyle(currentPage.cropHint)}
                 />
@@ -1186,6 +1266,11 @@ export default function StoryReaderPage() {
             {currentPage && (() => {
               const bubbles = getSpeechBubbles(currentPage);
               if (bubbles.length === 0) return null;
+              const detected = bubbles.filter((b): b is typeof b & PlacedBubble =>
+                b.layoutSource === "detected" && !!b.anchorPoint && !!b.bubbleRect);
+              if (!currentPage.backgroundUrl && detected.length === bubbles.length) {
+                return <DetectedBubbleLayer bubbles={detected} imageAspect={imageAspect} />;
+              }
               const usedCorners = new Set<string>();
               const isOverlayMode = !!currentPage.backgroundUrl;
               return (

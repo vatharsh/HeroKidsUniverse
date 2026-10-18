@@ -65,6 +65,8 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   FREE_PREVIEW_STORIES:           { value: '1',   type: 'number',  description: 'Free preview stories awarded on signup (used only when the user has no regular credits)' },
   FREE_PREVIEW_PAGES:             { value: '3',   type: 'number',  description: 'Number of pages in a free preview story' },
   STORY_GENERATION_MODEL:         { value: 'gemini-3.8-flash', type: 'string', description: 'Gemini model that writes stories (fallbacks are same-tier only)' },
+  SPEECH_BUBBLE_DETECTION_ENABLED: { value: 'true', type: 'boolean', description: 'Find each character\'s head and mouth in the finished image and place speech bubbles next to the real speaker' },
+  BUBBLE_DETECTION_MODEL:         { value: 'gemini-3.8-flash', type: 'string', description: 'Gemini vision model used to locate characters for speech bubble placement' },
   STORY_IMAGE_ASPECT_RATIO:       { value: '1:1', type: 'string', description: 'Aspect ratio requested for every story illustration (e.g. 1:1, 4:3, 3:4, 16:9) so all pages match' },
   MAX_IMAGES_PER_STORY_DEV:       { value: '10',  type: 'number',  description: 'Maximum generated images per story in development' },
   MAX_IMAGES_PER_STORY_PROD:      { value: '10',  type: 'number',  description: 'Maximum generated images per story in production' },

@@ -141,6 +141,8 @@ export interface StoryPage {
     anchorPoint?: { x: number; y: number };
     bubbleRect?: { x: number; y: number; width: number; height: number };
     layoutConfidence?: number;
+    /** 'detected' = placed from real head/mouth positions found in the finished image. */
+    layoutSource?: 'detected';
     placementHint?: string;
     priority?: number;
   }>;
@@ -152,6 +154,12 @@ export interface StoryPage {
     companions?: string[];
   };
   imagePromptUsed?: string;
+  /** Where each character's head/mouth is in this page's image (percent), from vision detection. */
+  characterLayout?: Array<{
+    name: string;
+    head: { x: number; y: number; width: number; height: number };
+    mouth: { x: number; y: number } | null;
+  }>;
   characterDirections?: PageCharacterDirection[];
   storyStateUpdate?: PageStoryStateUpdate;
 }

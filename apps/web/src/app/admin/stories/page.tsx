@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import { BookOpen, Loader2, MessageSquare, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
@@ -50,6 +50,28 @@ export default function StoriesPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [deleting, setDeleting] = useState<AdminStory | null>(null);
+  const [relayouting, setRelayouting] = useState<string | null>(null);
+  const [relayoutMsg, setRelayoutMsg] = useState<{ id: string; text: string } | null>(null);
+
+  /** Re-places speech bubbles from the story's current images (no image regeneration). */
+  async function fixBubbles(story: AdminStory) {
+    setRelayouting(story.id);
+    setRelayoutMsg(null);
+    try {
+      const res = await fetch(`${BASE}/admin/stories/${story.id}/relayout-bubbles`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAccessToken()}` },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.message ?? `Failed (${res.status})`);
+      const d = json?.data ?? json;
+      setRelayoutMsg({ id: story.id, text: `${d.bubblesPlaced} placed${d.bubblesUnplaced ? `, ${d.bubblesUnplaced} not found` : ""}` });
+    } catch (e) {
+      setRelayoutMsg({ id: story.id, text: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setRelayouting(null);
+    }
+  }
 
   function fetchData(p = page, s = statusFilter) {
     const token = getAccessToken();
@@ -122,6 +144,15 @@ export default function StoriesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <a href={`/admin/stories/${s.id}/debug`} className="text-violet-600 hover:text-violet-800 text-xs font-medium transition">Debug</a>
+                      <button
+                        onClick={() => void fixBubbles(s)}
+                        disabled={relayouting === s.id}
+                        title="Re-place speech bubbles next to the right speaker (no images regenerated)"
+                        className="text-gray-400 hover:text-violet-600 transition p-1 rounded hover:bg-violet-50 disabled:opacity-50"
+                      >
+                        {relayouting === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+                      </button>
+                      {relayoutMsg?.id === s.id && <span className="text-[10px] text-gray-500 whitespace-nowrap">{relayoutMsg.text}</span>}
                       <button
                         onClick={() => setDeleting(s)}
                         title="Delete story"

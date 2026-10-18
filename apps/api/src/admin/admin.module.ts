@@ -8,6 +8,7 @@ import { StoryGenerationCost } from '../ai/entities/story-generation-cost.entity
 import { CreditsModule } from '../credits/credits.module';
 import { CreditTransaction } from '../credits/credit-transaction.entity';
 import { GenerationJob } from '../generation/generation-job.entity';
+import { GenerationModule } from '../generation/generation.module';
 import { Hero } from '../heroes/hero.entity';
 import { HeroPower } from '../powers/hero-power.entity';
 import { HeroesModule } from '../heroes/heroes.module';
@@ -41,6 +42,7 @@ import { UploadModule } from '../upload/upload.module';
     CreditsModule,
     InfluencersModule,
     UploadModule,
+    GenerationModule,
     TypeOrmModule.forFeature([
       User,
       Story,

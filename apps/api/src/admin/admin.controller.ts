@@ -14,6 +14,7 @@ import { HeroPower } from '../powers/hero-power.entity';
 import { OrderV2Service } from '../merchandise/orders/order-v2.service';
 import { Story } from '../stories/story.entity';
 import { AdminService } from './admin.service';
+import { GenerationService } from '../generation/generation.service';
 
 @Controller('admin')
 @Roles('admin')
@@ -27,6 +28,7 @@ export class AdminController {
     private readonly characterCanonService: CharacterCanonService,
     private readonly heroesService: HeroesService,
     private readonly qaService: AIQualityAssuranceService,
+    private readonly generationService: GenerationService,
     @InjectRepository(Story) private readonly storiesRepo: Repository<Story>,
     @InjectRepository(Hero) private readonly heroesRepo: Repository<Hero>,
     @InjectRepository(HeroPower) private readonly powersRepo: Repository<HeroPower>,
@@ -117,6 +119,12 @@ export class AdminController {
         storyVisualState: story?.storyVisualState ?? null,
       },
     };
+  }
+
+  /** Re-places speech bubbles from the story's current images (no image regeneration). */
+  @Post('stories/:id/relayout-bubbles')
+  relayoutBubbles(@Param('id') id: string) {
+    return this.generationService.relayoutStoryBubbles(id);
   }
 
   @Get('stories/:id/refund-preview')

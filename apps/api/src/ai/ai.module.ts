@@ -6,6 +6,7 @@ import { IMAGE_GENERATION_PROVIDER } from './interfaces/image-generation.provide
 import { NARRATION_PROVIDER } from './interfaces/narration.provider';
 import { STORY_GENERATION_PROVIDER } from './interfaces/story-generation.provider';
 import { PromptRegistryModule } from './prompt-registry.module';
+import { GeminiCharacterLocator } from './providers/gemini-character-locator.service';
 import { GeminiStoryProvider } from './providers/gemini-story.provider';
 import { GeminiTTSProvider } from './providers/gemini-tts.provider';
 import { ImageProviderDispatcher } from './providers/image-provider-dispatcher.service';
@@ -26,10 +27,11 @@ import { OpenAITTSProvider } from './providers/openai-tts.provider';
     OpenAITTSProvider,
     GeminiTTSProvider,
     NarrationProviderDispatcher,
+    GeminiCharacterLocator,
     { provide: STORY_GENERATION_PROVIDER, useClass: GeminiStoryProvider },
     { provide: IMAGE_GENERATION_PROVIDER, useClass: ImageProviderDispatcher },
     { provide: NARRATION_PROVIDER, useClass: NarrationProviderDispatcher },
   ],
-  exports: [STORY_GENERATION_PROVIDER, IMAGE_GENERATION_PROVIDER, NARRATION_PROVIDER],
+  exports: [STORY_GENERATION_PROVIDER, IMAGE_GENERATION_PROVIDER, NARRATION_PROVIDER, GeminiCharacterLocator],
 })
 export class AiModule {}

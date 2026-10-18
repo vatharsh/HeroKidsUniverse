@@ -39,6 +39,8 @@ import { Universe } from '../universes/universe.entity';
 import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
 import { User } from '../users/user.entity';
 import { UploadService } from '../upload/upload.service';
+import { CastMember, GeminiCharacterLocator } from '../ai/providers/gemini-character-locator.service';
+import { layoutBubbles } from './bubble-layout';
 import { GenerationJob, JobStatus } from './generation-job.entity';
 
 const THEME_LABELS: Record<StoryTheme, string> = {
@@ -139,6 +141,7 @@ export class GenerationService implements OnModuleInit {
     @InjectRepository(CreditTransaction) private readonly creditsRepo: Repository<CreditTransaction>,
     @InjectRepository(GenerationJob) private readonly jobsRepo: Repository<GenerationJob>,
     @InjectRepository(PlatformSetting) private readonly platformSettingsRepo: Repository<PlatformSetting>,
+    private readonly characterLocator: GeminiCharacterLocator,
   ) {}
 
   async onModuleInit() {
@@ -1388,6 +1391,14 @@ export class GenerationService implements OnModuleInit {
     }
 
     const speechBubbleLayoutEnabled = await this.getBooleanSetting('ENABLE_SPEECH_BUBBLE_LAYOUT_QA', false);
+    const bubbleDetectionEnabled = await this.getBooleanSetting('SPEECH_BUBBLE_DETECTION_ENABLED', true);
+    const storyCast = this.buildDetectionCast({
+      heroName,
+      heroAge,
+      heroGender: hero.gender ?? null,
+      visualState: effectiveVisualState ?? null,
+      supporting: supportingCharInfoForAgePrefix,
+    });
 
     const pages: StoryPage[] = [];
     for (const scene of scenes) {
@@ -1472,16 +1483,28 @@ export class GenerationService implements OnModuleInit {
           }
         }
 
-        const speechBubbles = speechBubbleLayoutEnabled
-          ? await this.enrichSpeechBubbleLayout({
-              pageNumber: page.pageNumber,
-              imageUrl: isBackgroundOnly ? undefined : pageImageUrl,
-              imageBase64: isBackgroundOnly ? undefined : pageImageBase64,
-              sceneDescription: page.sceneDescription,
-              characterDirections: page.characterDirections,
-              speechBubbles: page.speechBubbles,
-            })
-          : page.speechBubbles;
+        let speechBubbles: StoryPage['speechBubbles'] = page.speechBubbles;
+        let characterLayout: StoryPage['characterLayout'];
+        if (bubbleDetectionEnabled && !isBackgroundOnly && (pageImageBase64 || pageImageUrl) && page.speechBubbles?.length) {
+          const placed = await this.placeBubblesFromImage({
+            pageNumber: page.pageNumber,
+            imageBase64: pageImageBase64,
+            imageUrl: pageImageUrl,
+            speechBubbles: page.speechBubbles as NonNullable<StoryPage['speechBubbles']>,
+            cast: this.withPageCast(storyCast, page.characterDirections),
+          });
+          speechBubbles = placed.speechBubbles;
+          characterLayout = placed.characterLayout;
+        } else if (speechBubbleLayoutEnabled) {
+          speechBubbles = await this.enrichSpeechBubbleLayout({
+            pageNumber: page.pageNumber,
+            imageUrl: isBackgroundOnly ? undefined : pageImageUrl,
+            imageBase64: isBackgroundOnly ? undefined : pageImageBase64,
+            sceneDescription: page.sceneDescription,
+            characterDirections: page.characterDirections,
+            speechBubbles: page.speechBubbles,
+          });
+        }
 
         pages.push({
           pageNumber: page.pageNumber,
@@ -1498,6 +1521,7 @@ export class GenerationService implements OnModuleInit {
           sceneId: scene.sceneId,
           background: page.background,
           speechBubbles,
+          characterLayout,
           storyStateSnapshot: pageStateSnapshotMap.get(page.pageNumber),
           characterDirections: page.characterDirections,
           storyStateUpdate: page.storyStateUpdate,
@@ -1528,6 +1552,131 @@ export class GenerationService implements OnModuleInit {
     }
 
     throw lastError instanceof Error ? lastError : new Error('Image generation failed');
+  }
+
+  // ── Speech bubble placement from the finished image ───────────────────────
+
+  /** Who might be in a picture, described well enough for a vision model to tell them apart. */
+  private buildDetectionCast(params: {
+    heroName: string;
+    heroAge: number;
+    heroGender: string | null;
+    visualState: StoryVisualState | null;
+    supporting: Array<{ name: string; age: number | null }>;
+  }): CastMember[] {
+    const outfits = params.visualState?.characterOutfits ?? {};
+    const cast: CastMember[] = [{
+      name: params.heroName,
+      description: [
+        `${params.heroAge}-year-old ${params.heroGender ?? 'child'}, the hero`,
+        params.visualState?.costume ? `wearing ${params.visualState.costume}` : null,
+      ].filter(Boolean).join(', '),
+    }];
+    for (const c of params.supporting) {
+      cast.push({
+        name: c.name,
+        description: [c.age ? `about ${c.age} years old` : null, outfits[c.name] ? `wearing ${outfits[c.name]}` : null]
+          .filter(Boolean).join(', ') || 'supporting character',
+      });
+    }
+    if (params.visualState?.companion) {
+      const [name, type] = params.visualState.companion.split('(').map((s) => s.replace(')', '').trim());
+      cast.push({ name, description: type ? `the hero's companion, a ${type}` : "the hero's companion" });
+    }
+    return cast;
+  }
+
+  /** Adds characters named only on this page (e.g. the villain) so their bubbles can be placed too. */
+  private withPageCast(cast: CastMember[], directions?: StoryPage['characterDirections']): CastMember[] {
+    const known = new Set(cast.map((c) => c.name.toLowerCase()));
+    const extra = (directions ?? [])
+      .filter((d) => d.name && !known.has(d.name.toLowerCase()))
+      .map((d) => ({ name: d.name, description: [d.role, d.expression].filter(Boolean).join(', ') || 'story character' }));
+    return [...cast, ...extra];
+  }
+
+  private async getImageAspect(): Promise<number> {
+    const ratio = await this.getStringSetting('STORY_IMAGE_ASPECT_RATIO', SETTING_DEFAULTS.STORY_IMAGE_ASPECT_RATIO.value);
+    const [w, h] = ratio.split(':').map(Number);
+    return w > 0 && h > 0 ? w / h : 1;
+  }
+
+  /**
+   * Finds every character's head and mouth in the finished page image, then places each bubble next to its
+   * real speaker (never over a face). Falls back to the unplaced bubbles if detection fails.
+   */
+  private async placeBubblesFromImage(params: {
+    pageNumber: number;
+    imageBase64?: string;
+    imageUrl?: string;
+    speechBubbles: NonNullable<StoryPage['speechBubbles']>;
+    cast: CastMember[];
+  }): Promise<{ speechBubbles: StoryPage['speechBubbles']; characterLayout: StoryPage['characterLayout'] }> {
+    try {
+      const located = await this.characterLocator.locate({
+        imageBase64: params.imageBase64,
+        imageUrl: params.imageBase64 ? undefined : params.imageUrl,
+        cast: params.cast,
+      });
+      const placements = layoutBubbles(params.speechBubbles, located, await this.getImageAspect());
+      const speechBubbles = params.speechBubbles.map((bubble, i) => {
+        const placed = placements[i];
+        if (!placed) return bubble;
+        return {
+          ...bubble,
+          anchorPoint: placed.anchorPoint,
+          bubbleRect: placed.bubbleRect,
+          layoutConfidence: placed.layoutConfidence,
+          layoutSource: 'detected' as const,
+        };
+      });
+      const missing = placements.filter((p) => !p).length;
+      if (missing) this.logger.warn(`Bubble layout page ${params.pageNumber}: ${missing} speaker(s) not found in image`);
+      return { speechBubbles, characterLayout: located };
+    } catch (err) {
+      this.logger.warn(`Bubble detection failed for page ${params.pageNumber}: ${err instanceof Error ? err.message : String(err)}`);
+      return { speechBubbles: params.speechBubbles, characterLayout: undefined };
+    }
+  }
+
+  /** Re-places speech bubbles on an existing story from its current images — no images are regenerated. */
+  async relayoutStoryBubbles(storyId: string): Promise<{ pages: number; bubblesPlaced: number; bubblesUnplaced: number }> {
+    const story = await this.storiesRepo.findOne({ where: { id: storyId } });
+    if (!story) throw new Error('Story not found');
+    const hero = await this.heroesRepo.findOne({ where: { id: story.heroId } });
+    const supportingIds = (story.characterIds ?? []) as string[];
+    const supporting = supportingIds.length
+      ? await this.charactersRepo.find({ where: supportingIds.map((id) => ({ id })) })
+      : [];
+    const cast = this.buildDetectionCast({
+      heroName: hero?.name ?? 'Hero',
+      heroAge: hero?.dob ? this.computeAge(hero.dob) : 8,
+      heroGender: hero?.gender ?? null,
+      visualState: story.storyVisualState ?? null,
+      supporting: supporting.map((c) => ({ name: c.name, age: c.dob ? this.computeAge(c.dob) : null })),
+    });
+
+    let bubblesPlaced = 0;
+    let bubblesUnplaced = 0;
+    const pages: StoryPage[] = [];
+    for (const page of story.pages ?? []) {
+      if (!page.imageUrl || !page.speechBubbles?.length) {
+        pages.push(page);
+        continue;
+      }
+      // Drop any earlier guessed/fake placement before re-placing from the real image.
+      const clean = page.speechBubbles.map(({ anchorPoint, bubbleRect, layoutConfidence, layoutSource, ...rest }) => rest);
+      const placed = await this.placeBubblesFromImage({
+        pageNumber: page.pageNumber,
+        imageUrl: page.imageUrl,
+        speechBubbles: clean,
+        cast: this.withPageCast(cast, page.characterDirections),
+      });
+      for (const b of placed.speechBubbles ?? []) (b.layoutSource ? bubblesPlaced++ : bubblesUnplaced++);
+      pages.push({ ...page, speechBubbles: placed.speechBubbles, characterLayout: placed.characterLayout });
+    }
+    await this.storiesRepo.update(story.id, { pages });
+    return { pages: pages.length, bubblesPlaced, bubblesUnplaced };
   }
 
   private async enrichSpeechBubbleLayout(params: {
