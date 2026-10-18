@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media-url";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -68,7 +69,7 @@ export default function AccountUniversesPage() {
             <div key={u.id} className="bg-white rounded-2xl border border-ink/10 shadow-card overflow-hidden hover:shadow-lg transition-shadow">
               <div className="bg-gradient-to-br from-space to-brand/40 h-28 flex items-center justify-center">
                 {u.coverImageUrl
-                  ? <img src={u.coverImageUrl} alt={u.name} className="w-full h-full object-cover" />
+                  ? <img src={resolveMediaUrl(u.coverImageUrl)} alt={u.name} className="w-full h-full object-cover" />
                   : <span className="text-5xl opacity-60">🌌</span>}
               </div>
               <div className="p-5">

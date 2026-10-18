@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media-url";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -139,7 +140,7 @@ export default function StoryDebugPage() {
                 {/* Image preview */}
                 <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                   {pg.imageUrl ? (
-                    <img src={pg.imageUrl} alt={`Page ${pg.pageNumber}`} className="w-full h-48 object-cover" />
+                    <img src={resolveMediaUrl(pg.imageUrl)} alt={`Page ${pg.pageNumber}`} className="w-full h-48 object-cover" />
                   ) : (
                     <div className="w-full h-48 bg-gray-100 flex items-center justify-center text-gray-400 text-xs">No image</div>
                   )}

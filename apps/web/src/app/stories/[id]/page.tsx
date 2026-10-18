@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAccessToken } from "@/lib/api";
+import { resolveMediaUrl } from "@/lib/media-url";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -426,6 +427,22 @@ interface Story {
   hero: { name: string; age: number; gender: string; avatarUrl: string | null };
 }
 
+/** Locally stored media comes back as relative /api/... paths — point them at the API, not this site. */
+function withResolvedMedia(story: Story): Story {
+  const resolve = (url?: string | null) => (url ? resolveMediaUrl(url) : url ?? undefined);
+  return {
+    ...story,
+    coverImageUrl: story.coverImageUrl ? resolveMediaUrl(story.coverImageUrl) : null,
+    hero: story.hero ? { ...story.hero, avatarUrl: story.hero.avatarUrl ? resolveMediaUrl(story.hero.avatarUrl) : null } : story.hero,
+    pages: (story.pages ?? []).map((pg) => ({
+      ...pg,
+      imageUrl: resolve(pg.imageUrl),
+      backgroundUrl: resolve(pg.backgroundUrl),
+      audioUrl: resolve(pg.audioUrl),
+    })),
+  };
+}
+
 interface Recap {
   cliffhanger: string | null;
   memoriesEarned: Array<{ id: string; type: string; title: string; detail: string | null }>;
@@ -514,9 +531,9 @@ export default function StoryReaderPage() {
     }
 
     const { data } = await res.json();
-    setStory(data);
+    setStory(withResolvedMedia(data));
     setVideoStatus(data.videoStatus ?? null);
-    setVideoUrl(data.videoUrl ?? null);
+    setVideoUrl(data.videoUrl ? resolveMediaUrl(data.videoUrl) : null);
 
     if (TERMINAL.has(data.status)) {
       clearInterval(pollRef.current);

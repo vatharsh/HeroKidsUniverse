@@ -9,6 +9,7 @@ import Footer from "@/components/layout/Footer";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
+import { resolveMediaUrl } from "@/lib/media-url";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -368,7 +369,7 @@ function UniversePageInner() {
                     <a key={ep.id} href={`/stories/${ep.id}`}
                       className="group bg-white rounded-2xl shadow-card overflow-hidden hover:shadow-lg transition-all hover:-translate-y-0.5">
                       {ep.coverImageUrl ? (
-                        <img src={ep.coverImageUrl} alt={ep.title ?? "Episode cover"}
+                        <img src={resolveMediaUrl(ep.coverImageUrl)} alt={ep.title ?? "Episode cover"}
                           className="w-full h-40 object-cover group-hover:scale-[1.02] transition-transform duration-300" />
                       ) : (
                         <div className="w-full h-40 bg-gradient-to-br from-space via-brand/40 to-space flex items-center justify-center">
