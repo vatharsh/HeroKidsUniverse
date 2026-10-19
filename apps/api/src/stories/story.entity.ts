@@ -180,6 +180,10 @@ export interface StoryVisualState {
   castSheets?: Record<string, string>;
   /** The exact name|outfit|look each sheet was drawn from — a later story reuses a sheet only on an exact match. */
   castSheetKeys?: Record<string, string>;
+  /** Which story shape this episode was written to (see story-shapes.ts) — the next episodes avoid it. */
+  storyShape?: string;
+  /** The villain of this episode, so the recent-episodes list can name them. */
+  villainName?: string;
 }
 
 export interface StoryScene {

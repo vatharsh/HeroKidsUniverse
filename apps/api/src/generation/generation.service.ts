@@ -31,6 +31,8 @@ import { UniverseCompanion } from '../companions/entities/universe-companion.ent
 import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { Hero } from '../heroes/hero.entity';
 import { HeroPower } from '../powers/hero-power.entity';
+import { UniverseVillain, VillainStatus } from '../universes/universe-villain.entity';
+import { pickStoryShape } from './story-shapes';
 import { Quest, QuestStatus } from '../quests/quest.entity';
 import { Story, StoryMode, StoryPage, StoryScene, StoryStatus, StoryTheme, StoryVisualState } from '../stories/story.entity';
 import { ArcStatus, StoryArc } from '../story-arcs/story-arc.entity';
@@ -131,6 +133,7 @@ export class GenerationService implements OnModuleInit {
     @InjectRepository(UniverseMemory) private readonly memoriesRepo: Repository<UniverseMemory>,
     @InjectRepository(HeroPower) private readonly powersRepo: Repository<HeroPower>,
     @InjectRepository(Quest) private readonly questsRepo: Repository<Quest>,
+    @InjectRepository(UniverseVillain) private readonly villainsRepo: Repository<UniverseVillain>,
     @InjectRepository(Character) private readonly charactersRepo: Repository<Character>,
     @InjectRepository(CharacterVisualProfile) private readonly visualProfilesRepo: Repository<CharacterVisualProfile>,
     @InjectRepository(UniverseCompanion) private readonly companionsRepo: Repository<UniverseCompanion>,
@@ -419,6 +422,17 @@ export class GenerationService implements OnModuleInit {
           transformation: null,
           characterOutfits: Object.keys(characterOutfits).length ? characterOutfits : existingVisualState?.characterOutfits,
         };
+      }
+
+      if (storyVisualState && universeContext) {
+        // A returning villain must look exactly like last time, whatever the writer described.
+        const returning = universeContext.returningVillain;
+        if (returning?.look) {
+          storyVisualState.characterLooks = { ...(storyVisualState.characterLooks ?? {}), [returning.name]: returning.look };
+        }
+        if (universeContext.storyShape) storyVisualState.storyShape = universeContext.storyShape.key;
+        const villainName = normalizedGenerated.villain?.name?.trim() || returning?.name;
+        if (villainName) storyVisualState.villainName = villainName;
       }
 
       if (storyVisualState) {
@@ -1680,7 +1694,8 @@ export class GenerationService implements OnModuleInit {
     const members: Member[] = [{
       name: params.heroName,
       descriptor: `${params.heroAge}-year-old ${gender(params.hero.gender)}, the hero of the story`,
-      outfit: params.visualState?.costume ?? null,
+      // The hero's gear (sword, amulet…) is drawn into the sheet so every page shows the same item.
+      outfit: [params.visualState?.costume, params.visualState?.weapon ? `carrying ${params.visualState.weapon}` : null].filter(Boolean).join(', ') || null,
       referenceUrl: params.hero.avatarUrl,
       appearance: params.hero.avatarUrl ? null : this.usableDescription(params.hero.avatarDescription),
     }];
@@ -2235,36 +2250,76 @@ export class GenerationService implements OnModuleInit {
   private async buildUniverseContext(story: Story): Promise<UniverseContext | undefined> {
     if (!story.universeId) return undefined;
 
-    const [universe, memories, quests, powers, lastStory, companion] = await Promise.all([
+    const [universe, memories, quests, powers, recentStories, companion, villains] = await Promise.all([
       this.universesRepo.findOne({ where: { id: story.universeId } }),
       this.memoriesRepo.find({ where: { universeId: story.universeId }, order: { createdAt: 'DESC' }, take: 10 }),
-      this.questsRepo.find({ where: { universeId: story.universeId, status: QuestStatus.Open }, order: { createdAt: 'DESC' } }),
+      // Only the newest few: a long list of open quests pulled every episode into the same "find the relic" plot.
+      this.questsRepo.find({ where: { universeId: story.universeId, status: QuestStatus.Open }, order: { createdAt: 'DESC' }, take: 3 }),
       this.powersRepo.find({ where: { universeId: story.universeId }, order: { createdAt: 'DESC' } }),
-      this.storiesRepo.findOne({
+      this.storiesRepo.find({
         where: { universeId: story.universeId, userId: story.userId, status: StoryStatus.Completed },
         order: { createdAt: 'DESC' },
+        take: 6,
+        select: { id: true, title: true, cliffhanger: true, storyVisualState: true },
       }),
       this.companionsRepo.findOne({
         where: { universeId: story.universeId, isActive: true },
         order: { createdAt: 'DESC' },
       }),
+      this.villainsRepo.find({ where: { universeId: story.universeId }, order: { updatedAt: 'DESC' } }),
     ]);
 
     if (!universe) return undefined;
+
+    const lastStory = recentStories[0] ?? null;
+    const hasCustomStory = !!story.storyContext;
+    const storyShape = hasCustomStory ? null : pickStoryShape(recentStories.map((s) => s.storyVisualState?.storyShape));
+    const returningVillain = this.pickReturningVillain(villains, recentStories.map((s) => s.storyVisualState?.villainName));
+    if (returningVillain) {
+      const escapedIn = villains.find((v) => v.name === returningVillain.name)?.lastStoryId;
+      if (escapedIn) {
+        returningVillain.lastEpisode = (await this.storiesRepo.findOne({ where: { id: escapedIn }, select: { id: true, title: true } }))?.title ?? null;
+      }
+    }
+    const gear = powers.filter((p) => p.kind === 'artifact');
+    const abilities = powers.filter((p) => p.kind !== 'artifact');
 
     return {
       universeName: universe.name,
       heroTitle: universe.heroTitle,
       recentMemories: memories.map((m) => m.detail ? `${m.title}: ${m.detail}` : m.title),
       openQuests: quests.map((q) => q.title),
-      heroPowers: powers.map((p) => p.emoji ? `${p.emoji} ${p.name}` : p.name),
+      heroPowers: abilities.map((p) => p.emoji ? `${p.emoji} ${p.name}` : p.name),
+      heroGear: gear.map((g) => ({ name: g.name, emoji: g.emoji, description: g.description, look: g.look })),
       storyContext: story.storyContext,
       storyMode: story.storyMode,
       lastCliffhanger: lastStory?.cliffhanger ?? null,
       lastStoryTitle: lastStory?.title ?? null,
+      recentEpisodes: recentStories
+        .filter((s) => s.title)
+        .map((s) => ({ title: s.title as string, shape: s.storyVisualState?.storyShape ?? null, villain: s.storyVisualState?.villainName ?? null })),
+      storyShape,
+      returningVillain,
+      pastVillains: villains.filter((v) => v.name !== returningVillain?.name).map((v) => v.name).slice(0, 12),
       companion: companion ? { name: companion.name, type: companion.type } : null,
       visualState: universe.visualState ?? null,
     };
+  }
+
+  /**
+   * Brings back a villain who escaped — not straight away (they must have been absent for at least
+   * one episode) and only now and then, so returning villains feel like an event.
+   */
+  private pickReturningVillain(
+    villains: UniverseVillain[],
+    recentVillainNames: Array<string | null | undefined>,
+    random: () => number = Math.random,
+  ): UniverseContext['returningVillain'] {
+    const lastVillain = recentVillainNames[0]?.toLowerCase();
+    const candidates = villains.filter((v) => v.status === VillainStatus.Escaped && v.name.toLowerCase() !== lastVillain);
+    if (!candidates.length || random() > 0.4) return null;
+    const villain = candidates[0];
+    return { name: villain.name, look: villain.look, scheme: villain.scheme, lastEpisode: null };
   }
 
   private async buildSupportingCharacterContext(
@@ -2693,10 +2748,35 @@ export class GenerationService implements OnModuleInit {
       ...powerNamesFromMemories,
       ...powerNamesFromPages,
     ]));
-    const powers = allPowerNames.map((name) =>
-      this.powersRepo.create({ universeId: story.universeId as string, name, description: null, emoji: null, earnedInStoryId: story.id }),
+    // The structured reward (usually a physical artifact) carries its kind, emoji, description and look.
+    const reward = generated.reward && typeof generated.reward === 'object' ? generated.reward : null;
+    const rewardName = typeof reward?.name === 'string' ? reward.name.trim() : '';
+    const owned = new Set(
+      (await this.powersRepo.find({ where: { universeId: story.universeId }, select: { name: true } })).map((p) => p.name.toLowerCase()),
     );
-    if (powers.length > 0) await this.powersRepo.save(powers);
+    const newPowers: HeroPower[] = [];
+    if (rewardName && !owned.has(rewardName.toLowerCase())) {
+      const detail = (generated.newMemories ?? []).find((m) => m?.type === MemoryType.PowerEarned && m.title?.trim().toLowerCase() === rewardName.toLowerCase())?.detail;
+      newPowers.push(this.powersRepo.create({
+        universeId: story.universeId,
+        name: rewardName,
+        kind: reward?.kind === 'power' ? 'power' : 'artifact',
+        emoji: typeof reward?.emoji === 'string' && reward.emoji.trim() ? reward.emoji.trim().slice(0, 8) : null,
+        description: (typeof reward?.description === 'string' && reward.description.trim()) || detail || null,
+        look: typeof reward?.look === 'string' && reward.look.trim() ? reward.look.trim() : null,
+        earnedInStoryId: story.id,
+      }));
+      owned.add(rewardName.toLowerCase());
+    }
+    for (const name of allPowerNames) {
+      if (owned.has(name.toLowerCase())) continue;
+      owned.add(name.toLowerCase());
+      newPowers.push(this.powersRepo.create({ universeId: story.universeId, name, kind: 'power', description: null, emoji: null, look: null, earnedInStoryId: story.id }));
+    }
+    if (newPowers.length > 0) await this.powersRepo.save(newPowers);
+
+    await this.recordVillain(story, generated);
+    await this.closeCompletedQuests(story, generated);
 
     // The writer sometimes returns { title, detail } objects instead of strings — they were saved as raw JSON.
     const quests = (generated.newQuests ?? [])
@@ -2706,6 +2786,48 @@ export class GenerationService implements OnModuleInit {
         this.questsRepo.create({ universeId: story.universeId as string, title: title!, description: detail, openedInStoryId: story.id, completedInStoryId: null }),
       );
     if (quests.length > 0) await this.questsRepo.save(quests);
+  }
+
+  /** Saves this episode's villain, or updates them if they've appeared before (so they can return). */
+  private async recordVillain(story: Story, generated: StoryGenerationOutput): Promise<void> {
+    const v = generated.villain && typeof generated.villain === 'object' ? generated.villain : null;
+    const name = typeof v?.name === 'string' ? v.name.trim() : '';
+    if (!name || !story.universeId) return;
+    const outcomes = Object.values(VillainStatus) as string[];
+    const status = (outcomes.includes(String(v?.outcome)) ? v?.outcome : VillainStatus.Defeated) as VillainStatus;
+    const look = (typeof v?.look === 'string' && v.look.trim()) || generated.storyVisualState?.characterLooks?.[name] || null;
+    const scheme = typeof v?.scheme === 'string' && v.scheme.trim() ? v.scheme.trim() : null;
+
+    const existing = await this.villainsRepo
+      .createQueryBuilder('v')
+      .where('v.universeId = :universeId AND LOWER(v.name) = LOWER(:name)', { universeId: story.universeId, name })
+      .getOne();
+    if (existing) {
+      existing.status = status;
+      existing.appearances += 1;
+      existing.lastStoryId = story.id;
+      existing.scheme = scheme ?? existing.scheme;
+      existing.look = existing.look ?? look; // the first look sticks so they're recognisable
+      await this.villainsRepo.save(existing);
+      return;
+    }
+    await this.villainsRepo.save(this.villainsRepo.create({
+      universeId: story.universeId, name, look, scheme, status, appearances: 1, firstStoryId: story.id, lastStoryId: story.id,
+    }));
+  }
+
+  /** Quests were opened every episode but never closed — mark the ones this story resolved. */
+  private async closeCompletedQuests(story: Story, generated: StoryGenerationOutput): Promise<void> {
+    if (!story.universeId) return;
+    const titles = new Set([
+      ...(generated.questsCompleted ?? []),
+      ...(generated.newMemories ?? []).filter((m) => m?.type === MemoryType.QuestCompleted).map((m) => m.title),
+    ].filter((t): t is string => typeof t === 'string' && !!t.trim()).map((t) => t.trim().toLowerCase().replace(/[.!]+$/, '')));
+    if (!titles.size) return;
+    const open = await this.questsRepo.find({ where: { universeId: story.universeId, status: QuestStatus.Open } });
+    const done = open.filter((q) => titles.has(q.title.trim().toLowerCase().replace(/[.!]+$/, '')));
+    if (!done.length) return;
+    await this.questsRepo.save(done.map((q) => ({ ...q, status: QuestStatus.Completed, completedInStoryId: story.id })));
   }
 
   /** Accepts a plain string or a { title|name, detail|description } object from the writer. */

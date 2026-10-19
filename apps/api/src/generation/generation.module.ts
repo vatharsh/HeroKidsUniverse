@@ -16,6 +16,7 @@ import { Quest } from '../quests/quest.entity';
 import { Story } from '../stories/story.entity';
 import { StoryArc } from '../story-arcs/story-arc.entity';
 import { UniverseMemory } from '../universes/universe-memory.entity';
+import { UniverseVillain } from '../universes/universe-villain.entity';
 import { Universe } from '../universes/universe.entity';
 import { PlatformSetting } from '../admin/platform-setting.entity';
 import { User } from '../users/user.entity';
@@ -34,6 +35,7 @@ import { GenerationService } from './generation.service';
       Hero,
       Universe,
       UniverseMemory,
+      UniverseVillain,
       HeroPower,
       Quest,
       AiUsageLog,

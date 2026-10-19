@@ -75,6 +75,7 @@ import { StoryArcsModule } from './story-arcs/story-arcs.module';
 import { Story } from './stories/story.entity';
 import { StoriesModule } from './stories/stories.module';
 import { UniverseMemory } from './universes/universe-memory.entity';
+import { UniverseVillain } from './universes/universe-villain.entity';
 import { Universe } from './universes/universe.entity';
 import { UniversesModule } from './universes/universes.module';
 import { UploadModule } from './upload/upload.module';
@@ -105,6 +106,7 @@ import { UsersModule } from './users/users.module';
           CreditTransaction,
           Universe,
           UniverseMemory,
+          UniverseVillain,
           Quest,
           HeroPower,
           StoryArc,

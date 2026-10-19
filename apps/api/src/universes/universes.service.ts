@@ -47,13 +47,14 @@ export class UniversesService {
   async findMine(userId: string): Promise<Universe[]> {
     return this.universesRepository.find({
       where: { userId },
-      relations: { memories: true, quests: true, powers: true, arcs: true },
+      relations: { memories: true, quests: true, powers: true, arcs: true, villains: true },
       order: {
         createdAt: 'ASC',
         memories: { createdAt: 'DESC' },
         quests: { createdAt: 'DESC' },
         powers: { createdAt: 'DESC' },
         arcs: { createdAt: 'DESC' },
+        villains: { updatedAt: 'DESC' },
       },
     });
   }

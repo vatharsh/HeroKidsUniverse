@@ -37,8 +37,28 @@ interface Power {
   name: string;
   emoji: string | null;
   description: string | null;
+  kind?: "power" | "artifact";
+  look?: string | null;
   createdAt: string;
 }
+
+interface Villain {
+  id: string;
+  name: string;
+  look: string | null;
+  scheme: string | null;
+  status: "defeated" | "escaped" | "befriended" | "captured";
+  appearances: number;
+  lastStoryId: string | null;
+  updatedAt: string;
+}
+
+const VILLAIN_STATUS: Record<Villain["status"], { label: string; className: string }> = {
+  defeated:   { label: "✓ Defeated",          className: "bg-green-100 text-green-700" },
+  captured:   { label: "🔒 Captured",          className: "bg-blue-100 text-blue-700" },
+  befriended: { label: "🤝 Befriended",        className: "bg-amber-100 text-amber-700" },
+  escaped:    { label: "⚠ Escaped — may return", className: "bg-red-100 text-red-700" },
+};
 
 interface Arc {
   id: string;
@@ -65,6 +85,7 @@ interface Universe {
   quests: Quest[];
   powers: Power[];
   arcs: Arc[];
+  villains?: Villain[];
 }
 
 // ── Memory type display ───────────────────────────────────────────────────────
@@ -199,7 +220,14 @@ function UniversePageInner() {
   const completedQuests = quests.filter((q) => q.status === "completed");
   const heroName = universe.heroTitle ?? universe.name.replace(" Universe", "").replace(" Chronicles", "").trim();
 
-  const villains = memories.filter((m) => m.type === "villain_defeated");
+  // Villains now have their own records (with status, so escaped ones can return); older universes
+  // may only have "villain defeated" memories, which the backfill copies over.
+  const villainMemories = memories.filter((m) => m.type === "villain_defeated");
+  const villains: Villain[] = universe.villains?.length
+    ? universe.villains
+    : villainMemories.map((m) => ({ id: m.id, name: m.title, look: null, scheme: m.detail, status: "defeated" as const, appearances: 1, lastStoryId: m.storyId, updatedAt: m.createdAt }));
+  const gear = powers.filter((p) => p.kind === "artifact");
+  const abilities = powers.filter((p) => p.kind !== "artifact");
   // Map storyId → episode title for villain/timeline cross-referencing
   const storyTitleMap = Object.fromEntries(episodes.map((e) => [e.id, e.title ?? "Untitled Episode"]));
 
@@ -207,7 +235,7 @@ function UniversePageInner() {
     { id: "episodes" as const, label: "Episodes",  icon: <BookOpen className="w-4 h-4" />, count: episodes.length },
     { id: "timeline" as const, label: "Timeline",  icon: <Clock className="w-4 h-4" />,    count: memories.length },
     { id: "quests"   as const, label: "Quests",    icon: <Target className="w-4 h-4" />,   count: openQuests.length },
-    { id: "powers"   as const, label: "Powers",    icon: <Zap className="w-4 h-4" />,      count: powers.length },
+    { id: "powers"   as const, label: "Powers & Gear", icon: <Zap className="w-4 h-4" />,  count: powers.length },
     { id: "villains" as const, label: "Villains",  icon: <Sword className="w-4 h-4" />,    count: villains.length },
     { id: "arcs"     as const, label: "Story Arcs",icon: <Trophy className="w-4 h-4" />,   count: arcs.length },
   ];
@@ -291,7 +319,7 @@ function UniversePageInner() {
               { icon: "⚡", value: powers.length,   label: "Powers" },
               { icon: "📜", value: openQuests.length,        label: "Open Quests" },
               { icon: "🌟", value: memories.length, label: "Memories" },
-              { icon: "⚔️", value: memories.filter(m => m.type === "villain_defeated").length, label: "Villains Defeated" },
+              { icon: "⚔️", value: villains.length, label: "Villains" },
             ].map((s) => (
               <div key={s.label} className="bg-white/8 border border-white/10 rounded-2xl px-5 py-3 text-center min-w-[80px]">
                 <p className="text-lg">{s.icon}</p>
@@ -535,30 +563,42 @@ function UniversePageInner() {
         {/* ── Powers ────────────────────────────────────────────────────── */}
         {activeTab === "powers" && (
           <div>
-            <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">Powers & Items</h2>
-            <p className="text-ink-muted text-sm mb-8">Earned through adventures. Available in every future episode.</p>
+            <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">Powers & Gear</h2>
+            <p className="text-ink-muted text-sm mb-8">Earned through adventures. {heroName} can bring them into every future episode.</p>
             {powers.length === 0 ? (
-              <EmptyState icon="⚡" title="No powers earned yet"
-                body="Powers and magical items are earned through adventures. Generate episodes and watch your hero grow stronger."
+              <EmptyState icon="⚡" title="Nothing earned yet"
+                body="Swords, shields, ancient amulets and special powers are earned through adventures. Generate episodes and watch your hero's collection grow."
                 universeId={universe.id} />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {powers.map((power) => (
-                  <div key={power.id} className="bg-white rounded-2xl shadow-card p-6 flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-gold-light/30 border border-gold/20 flex items-center justify-center text-2xl flex-shrink-0">
-                      {power.emoji ?? "✨"}
+              <div className="space-y-10">
+                {[{ title: "Gear", items: gear, fallback: "🗡️" }, { title: "Powers", items: abilities, fallback: "✨" }]
+                  .filter((group) => group.items.length > 0)
+                  .map((group) => (
+                    <div key={group.title}>
+                      <h3 className="font-[family-name:var(--font-display)] text-ink text-xl mb-4">{group.title}</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {group.items.map((power) => (
+                          <div key={power.id} className="bg-white rounded-2xl shadow-card p-6 flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-gold-light/30 border border-gold/20 flex items-center justify-center text-2xl flex-shrink-0">
+                              {power.emoji ?? group.fallback}
+                            </div>
+                            <div>
+                              <p className="font-[family-name:var(--font-display)] text-ink text-lg">{power.name}</p>
+                              {power.description && (
+                                <p className="text-ink-muted text-sm mt-1">{power.description}</p>
+                              )}
+                              {power.look && (
+                                <p className="text-ink-muted text-xs mt-1 italic">{power.look}</p>
+                              )}
+                              <p className="text-ink-muted text-xs mt-2">
+                                Earned {new Date(power.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-[family-name:var(--font-display)] text-ink text-lg">{power.name}</p>
-                      {power.description && (
-                        <p className="text-ink-muted text-sm mt-1">{power.description}</p>
-                      )}
-                      <p className="text-ink-muted text-xs mt-2">
-                        Earned {new Date(power.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </div>
@@ -567,8 +607,8 @@ function UniversePageInner() {
         {/* ── Villains ──────────────────────────────────────────────────── */}
         {activeTab === "villains" && (
           <div>
-            <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">Villains Defeated</h2>
-            <p className="text-ink-muted text-sm mb-8">Every villain {heroName} has outsmarted, calmed, or overcome.</p>
+            <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-2">Villains</h2>
+            <p className="text-ink-muted text-sm mb-8">Everyone who has stood in {heroName}&apos;s way. Watch out — villains who escaped can come back.</p>
             {villains.length === 0 ? (
               <EmptyState icon="⚔️" title="No villains yet"
                 body="Villains appear when your hero faces challenges. Generate an episode and see who dares to stand in the way!"
@@ -576,7 +616,8 @@ function UniversePageInner() {
             ) : (
               <div className="grid gap-5">
                 {villains.map((v) => {
-                  const storyTitle = v.storyId ? storyTitleMap[v.storyId] : null;
+                  const storyTitle = v.lastStoryId ? storyTitleMap[v.lastStoryId] : null;
+                  const status = VILLAIN_STATUS[v.status] ?? VILLAIN_STATUS.defeated;
                   return (
                     <div key={v.id} className="bg-white rounded-2xl shadow-card overflow-hidden flex">
                       {/* Red accent bar */}
@@ -588,26 +629,32 @@ function UniversePageInner() {
                               ⚔️
                             </div>
                             <div>
-                              <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight">{v.title}</p>
-                              <span className="inline-block bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full mt-1">
-                                ✓ Defeated
-                              </span>
+                              <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight">{v.name}</p>
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
+                                <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full ${status.className}`}>
+                                  {status.label}
+                                </span>
+                                {v.appearances > 1 && (
+                                  <span className="text-xs text-ink-muted font-semibold">Met {v.appearances} times</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <span className="text-xs text-ink-muted whitespace-nowrap flex-shrink-0">
-                            {new Date(v.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                            {new Date(v.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                           </span>
                         </div>
-                        {v.detail && (
-                          <p className="text-ink-muted text-sm mt-4 leading-relaxed italic border-l-2 border-red-200 pl-3">
-                            &ldquo;{v.detail}&rdquo;
+                        {v.look && <p className="text-ink-muted text-sm mt-4">{v.look}</p>}
+                        {v.scheme && (
+                          <p className="text-ink-muted text-sm mt-3 leading-relaxed italic border-l-2 border-red-200 pl-3">
+                            Wanted to {v.scheme.replace(/^(to )/i, "")}
                           </p>
                         )}
-                        {storyTitle && v.storyId && (
-                          <a href={`/stories/${v.storyId}`}
+                        {storyTitle && v.lastStoryId && (
+                          <a href={`/stories/${v.lastStoryId}`}
                             className="inline-flex items-center gap-1.5 mt-4 bg-ink/5 hover:bg-brand/10 text-ink-mid hover:text-brand text-xs font-semibold px-3 py-1.5 rounded-full transition-all">
                             <BookOpen className="w-3 h-3" />
-                            From: {storyTitle}
+                            Last seen in: {storyTitle}
                             <ChevronRight className="w-3 h-3" />
                           </a>
                         )}

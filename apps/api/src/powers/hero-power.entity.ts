@@ -19,6 +19,14 @@ export class HeroPower {
   @Column({ type: 'text', nullable: true })
   emoji!: string | null;
 
+  /** 'artifact' = a physical item the hero carries (sword, amulet, compass); 'power' = an ability. */
+  @Column({ type: 'varchar', length: 20, default: 'power' })
+  kind!: 'power' | 'artifact';
+
+  /** How an artifact looks, so every picture draws the same item. */
+  @Column({ type: 'text', nullable: true })
+  look!: string | null;
+
   @Column({ type: 'uuid', nullable: true })
   earnedInStoryId!: string | null;
 

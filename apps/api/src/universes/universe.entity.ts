@@ -13,6 +13,7 @@ import { Quest } from '../quests/quest.entity';
 import { StoryArc } from '../story-arcs/story-arc.entity';
 import { User } from '../users/user.entity';
 import { UniverseMemory } from './universe-memory.entity';
+import { UniverseVillain } from './universe-villain.entity';
 
 export interface UniverseVisualState {
   costume: string | null;
@@ -73,4 +74,7 @@ export class Universe {
 
   @OneToMany(() => StoryArc, (arc) => arc.universe)
   arcs!: StoryArc[];
+
+  @OneToMany(() => UniverseVillain, (villain) => villain.universe)
+  villains!: UniverseVillain[];
 }

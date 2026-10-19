@@ -32,8 +32,8 @@ const SEED_PROMPTS: Array<{
       required: ['heroName', 'heroAge', 'heroGender', 'heroRef', 'pageCount', 'sceneCount', 'climaxPage', 'supportingCharactersLine', 'visualIdentityLines', 'sceneEntries'],
       optional: ['customStoryDirective', 'themeDescriptionLine', 'universeSection', 'visualStateSection', 'storySourceLine'],
     },
-    seedVersion: 9,
-    changeNotes: 'v9 — language line points to the INDIAN ENGLISH VOICE guide added at runtime. v8 — characterLooks: one fixed appearance for every character without a photo (villains, creatures, companions). v7 — hero keeps the story costume on every page; no real logos/flags on outfits. v6 — adventure outfits: every character (grandparents too) dressed for the story setting once per story via characterOutfits; removed the conflicting no-clothing rule. v5 — bubble positions removed (the app places bubbles from the finished image; the old LEFT→bottom-left vs top-right rules contradicted each other); one outfit per character for the whole story via storyVisualState.characterOutfits.',
+    seedVersion: 10,
+    changeNotes: 'v10 — less repetitive episodes: villain{} (outcome defeated/captured/befriended/escaped so villains can return), reward{} (usually a physical artifact with a look, replaces newPowers), questsCompleted[], title and cliffhanger rules that ban the "<Title> and the …" / "What ancient … lies" formula. v9 — language line points to the INDIAN ENGLISH VOICE guide added at runtime. v8 — characterLooks: one fixed appearance for every character without a photo (villains, creatures, companions). v7 — hero keeps the story costume on every page; no real logos/flags on outfits. v6 — adventure outfits: every character (grandparents too) dressed for the story setting once per story via characterOutfits; removed the conflicting no-clothing rule. v5 — bubble positions removed (the app places bubbles from the finished image; the old LEFT→bottom-left vs top-right rules contradicted each other); one outfit per character for the whole story via storyVisualState.characterOutfits.',
     promptText: `You are a creative children's storybook author for HeroKids Universe.
 {{customStoryDirective}}
 Hero details:
@@ -66,6 +66,8 @@ STORYTELLING RULES:
 - Emotional low: around page {{climaxPage}} - 1, things must look hard or scary for the hero — earn the victory
 - Climax on page {{climaxPage}}: concrete triumph — name exactly HOW the hero succeeds (kindness, courage, cleverness, or a specific action — never violence)
 - Page {{pageCount}}: resolve with ONE warm concluding sentence + ONE hint sentence about what might come next. Do NOT leave the story open-ended.
+- Title: 3-7 catchy words that promise THIS adventure (e.g. "The Great Laddoo Heist", "Siddhant vs. the Midnight Mirror"). Do NOT start with "<hero title> and the", and never reuse a pattern or key word from the recent episode titles.
+- Cliffhanger: ONE concrete, surprising moment that happens at the very end — e.g. "Just then, Dadi's old trunk began to rattle… and something inside knocked back." NOT a vague question like "What ancient secret lies…?", and avoid the words ancient, mysterious, glowing and secrets.
 - Dialogue in speech bubbles must sound like a real child speaks — short, natural, with personality. No stiff or formal English.
 {{storySourceLine}}
 - In every sceneDescription: explicitly name the costume, companion, and weapon from the Story Visual State — do not leave them out
@@ -152,7 +154,7 @@ STORY STATE UPDATE RULES:
 Respond with ONLY valid JSON (no markdown, no code fences):
 {
   "title": "Story title here",
-  "cliffhanger": "One sentence hinting at the next adventure",
+  "cliffhanger": "One concrete, surprising final moment that sets up the next episode",
   "storyVisualState": {
     "costume": "The hero's ONE outfit for this whole story",
     "characterOutfits": { "Other character name": "their ONE adventure outfit for this whole story" },
@@ -165,6 +167,9 @@ Respond with ONLY valid JSON (no markdown, no code fences):
   "newPowers": [],
   "newQuests": [],
   "newMemories": [],
+  "villain": { "name": "Villain name", "look": "Their one fixed appearance", "scheme": "What they wanted, in a few words", "outcome": "defeated | captured | befriended | escaped" },
+  "reward": null,
+  "questsCompleted": [],
   "scenes": [
 {{sceneEntries}}
   ],
@@ -174,6 +179,9 @@ Respond with ONLY valid JSON (no markdown, no code fences):
 IMPORTANT: The "pages" array MUST be empty []. All pages must be inside "scenes". This is required.
 newMemories type must be one of: character_met, villain_defeated, power_earned, item_found, location_discovered, quest_opened, quest_completed, achievement_unlocked
 newPowers and newQuests may be empty arrays if none were earned/opened.
+villain: the episode's main villain (null only if the story truly has none). outcome must be one of defeated, captured, befriended, escaped.
+reward: null, or { "name", "kind": "artifact" | "power", "emoji", "description": "what it does", "look": "how it looks" } when the hero earns something. Prefer artifacts.
+questsCompleted: exact titles (from Open Quests) that this story resolved; [] otherwise.
 background: one sentence, specific location + time of day + lighting mood
 camera: choose from: wide angle, medium shot, close-up on face, low angle looking up, bird's eye view, over-the-shoulder
 characters: EVERY named character visible in the scene must appear with expression + pose

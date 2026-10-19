@@ -135,6 +135,16 @@ export interface UniverseContext {
   storyMode: StoryMode;
   lastCliffhanger: string | null;
   lastStoryTitle: string | null;
+  /** Last few episodes, newest first — the writer must not repeat their titles, settings or villains. */
+  recentEpisodes?: Array<{ title: string; shape: string | null; villain: string | null }>;
+  /** The kind of plot this episode must follow (picked to differ from recent episodes). */
+  storyShape?: { key: string; label: string; brief: string } | null;
+  /** A villain who escaped before and comes back this episode, with their fixed look. */
+  returningVillain?: { name: string; look: string | null; scheme: string | null; lastEpisode: string | null } | null;
+  /** Villain names already used in this universe (a new villain must have a different name and type). */
+  pastVillains?: string[];
+  /** Physical items the hero has earned and can carry. */
+  heroGear?: Array<{ name: string; emoji: string | null; description: string | null; look: string | null }>;
   companion?: {
     name: string;
     type: string;
@@ -179,6 +189,12 @@ export interface StoryGenerationOutput {
   newPowers?: string[];
   newQuests?: string[];
   newMemories?: Array<{ type: string; title: string; detail?: string }>;
+  /** This episode's main villain and how their story ended. */
+  villain?: { name?: string; look?: string; scheme?: string; outcome?: string } | null;
+  /** What the hero earned — usually a physical artifact. */
+  reward?: { name?: string; kind?: string; emoji?: string; description?: string; look?: string } | null;
+  /** Titles of open quests this episode resolved. */
+  questsCompleted?: string[];
   pages: Array<{
     pageNumber: number;
     text: string;

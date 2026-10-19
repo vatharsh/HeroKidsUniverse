@@ -918,7 +918,7 @@ export default function StoryReaderPage() {
             {/* Powers earned */}
             {recap.powersEarned.length > 0 && (
               <div className="bg-white/8 border border-gold/20 rounded-2xl p-5">
-                <p className="text-gold text-xs font-bold uppercase tracking-wide mb-3">⚡ Powers Earned</p>
+                <p className="text-gold text-xs font-bold uppercase tracking-wide mb-3">⚡ Earned this episode</p>
                 <div className="flex flex-wrap gap-2">
                   {recap.powersEarned.map((p) => (
                     <span key={p.id} className="bg-gold/20 text-white text-sm font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5">

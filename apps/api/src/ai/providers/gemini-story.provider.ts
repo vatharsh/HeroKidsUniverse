@@ -235,6 +235,43 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
         ].join('\n')
       : '';
 
+    // Gear, villains and episode variety — shared by custom and universe-driven stories.
+    const gearLines = ctx?.heroGear?.length
+      ? [
+          "Hero's Gear (physical items the hero owns — bring 1 or 2 that fit this adventure and USE them in the plot):",
+          ...ctx.heroGear.map((g) => `- ${g.emoji ? `${g.emoji} ` : ''}${g.name}${g.description ? ` — ${g.description}` : ''}${g.look ? ` (looks like: ${g.look})` : ''}`),
+          'Put the gear the hero carries in storyVisualState.weapon, with its look, so the illustrator draws it.',
+        ]
+      : [];
+    const villainLines = ctx?.returningVillain
+      ? [
+          `RETURNING VILLAIN — ${ctx.returningVillain.name} is back! They escaped${ctx.returningVillain.lastEpisode ? ` at the end of "${ctx.returningVillain.lastEpisode}"` : ''}${ctx.returningVillain.scheme ? ` after trying to ${ctx.returningVillain.scheme}` : ''}.`,
+          `- ${ctx.returningVillain.name} is this episode's villain, with a NEW scheme. Characters should recognise them ("Not ${ctx.returningVillain.name} again!").`,
+          ctx.returningVillain.look ? `- Their look never changes: put exactly "${ctx.returningVillain.look}" in storyVisualState.characterLooks["${ctx.returningVillain.name}"].` : '',
+        ].filter(Boolean)
+      : [
+          'VILLAIN: create a NEW named villain with a clear, specific goal and a funny or memorable quirk.',
+          ctx?.pastVillains?.length ? `- Already used in this universe (do NOT reuse these names or the same kind of creature): ${ctx.pastVillains.join(', ')}` : '',
+        ].filter(Boolean);
+    const episodeVarietyLines = !ctx ? [] : [
+      ...(ctx.recentEpisodes?.length
+        ? [
+            'RECENT EPISODES (newest first) — this episode must feel DIFFERENT from all of them: new setting, new kind of problem, new title pattern:',
+            ...ctx.recentEpisodes.map((e) => `- "${e.title}"${e.shape ? ` [${e.shape}]` : ''}${e.villain ? ` — villain: ${e.villain}` : ''}`),
+          ]
+        : []),
+      ...(ctx.storyShape && !hasCustomStory
+        ? ['', `STORY SHAPE FOR THIS EPISODE — ${ctx.storyShape.label}: ${ctx.storyShape.brief}`]
+        : []),
+      '',
+      ...villainLines,
+      '- How the villain\'s story ends must fit the plot. Vary it: outsmarted and "defeated", "captured", "befriended" once they are understood, or "escaped" vowing to return (about one episode in three). Report it in villain.outcome.',
+      '',
+      ...gearLines,
+      '',
+      'REWARD (optional — about every other episode): if the hero earns something, it is usually a PHYSICAL object with one clear use — e.g. a sword that cuts through enchanted vines, a shield that reflects light, a bow that shoots rope arrows, an ancient amulet that lights up near danger, a compass that points to whoever is lost, a flute that calms animals, a staff, a helmet, gauntlets, a map that redraws itself. Only occasionally a new ability. Never a duplicate of the hero\'s gear. Gear is used to protect, unlock, climb, cut through obstacles or signal — never to hurt anyone. Describe it in reward (kind "artifact" or "power") with an emoji and its look.',
+    ];
+
     const cliffhangerLine = !hasCustomStory && ctx?.lastCliffhanger
       ? `\nLast Episode Cliffhanger (MUST pick up from this exact moment): "${ctx.lastCliffhanger}"\nLast Episode Title: "${ctx.lastStoryTitle ?? 'Previous Episode'}"`
       : '';
@@ -255,6 +292,8 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
               ctx.openQuests.length ? ctx.openQuests.map((q) => `- ${q}`).join('\n') : '- None',
               companionLine,
               '',
+              ...episodeVarietyLines,
+              '',
               'UNIVERSE INTEGRATION RULES:',
               '- The custom adventure above is the story — follow it faithfully.',
               `- But it lives inside "${ctx.universeName}". The tone, world, and identity of this universe must be present.`,
@@ -263,8 +302,8 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
               "- The hero's companion (if any) may join the adventure.",
               '- Add 1–3 entries to newMemories so this adventure becomes part of universe history.',
               '- If the hero earns a new power, add it to newPowers[] AND add a newMemories entry with type "power_earned".',
-              '- If a villain or antagonist is defeated, add a newMemories entry with type "villain_defeated" and the villain\'s name as title.',
-              '- If a new quest opens, add it to newQuests[] AND add a newMemories entry with type "quest_opened".',
+              '- Report the villain in villain{}; add a "villain_defeated" memory only if villain.outcome is "defeated" or "captured".',
+              '- If a new quest opens, add it to newQuests[] AND add a newMemories entry with type "quest_opened". If the story resolves one of the open quests, list its exact title in questsCompleted[].',
             ].join('\n')
           : [
               `UNIVERSE: ${ctx.universeName}`,
@@ -278,18 +317,20 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
               "Hero's Current Powers & Items:",
               ctx.heroPowers.length ? ctx.heroPowers.map((p) => `- ${p}`).join('\n') : '- None yet',
               '',
-              'Open Quests (may optionally advance one of these):',
+              'Open Quests (may optionally advance ONE of these — or ignore them and follow the story shape):',
               ctx.openQuests.length ? ctx.openQuests.map((q) => `- ${q}`).join('\n') : '- None',
               companionLine,
               '',
+              ...episodeVarietyLines,
+              '',
               'IMPORTANT CONTINUITY RULES:',
               '- Reference past events naturally in the story if relevant',
-              '- The hero may use existing powers in new ways',
+              '- The hero may use existing powers and gear in new ways',
               '- If storyMode is "continue_arc", the story MUST open exactly where the last episode ended — page 1 must directly react to the cliffhanger above',
               '- If storyMode is "new_arc", introduce a fresh threat but keep universe consistent',
               '- If the hero earns a new power in this story, add its name to newPowers[] AND add a newMemories entry with type "power_earned" and the same name as title',
-              '- If a villain, monster, or antagonist is defeated or outsmarted, add a newMemories entry with type "villain_defeated" and the villain\'s name as title',
-              '- The story may open a new quest — add its title to newQuests[] AND add a newMemories entry with type "quest_opened"',
+              '- Report the villain in villain{}; add a "villain_defeated" memory only if villain.outcome is "defeated" or "captured"',
+              '- The story may open a new quest — add its title to newQuests[] AND add a newMemories entry with type "quest_opened". If it resolves an open quest, list that exact title in questsCompleted[]',
             ].join('\n'))
       : '';
 
@@ -524,7 +565,7 @@ STORY STATE UPDATE RULES:
 Respond with ONLY valid JSON (no markdown, no code fences):
 {
   "title": "Story title here",
-  "cliffhanger": "One sentence hinting at the next adventure",
+  "cliffhanger": "One concrete, surprising final moment that sets up the next episode",
   "storyVisualState": {
     "costume": "Describe the hero's full costume for this story",
     "companion": "Companion name and type, or null",
@@ -532,8 +573,11 @@ Respond with ONLY valid JSON (no markdown, no code fences):
     "powers": ["Power 1", "Power 2"],
     "inventory": ["Item 1", "Item 2"]
   },
-  "newPowers": ["Power name if hero earned one — else empty array"],
+  "newPowers": [],
   "newQuests": ["Quest title if a new quest opened — else empty array"],
+  "villain": { "name": "Villain name", "look": "Their one fixed appearance", "scheme": "What they wanted, in a few words", "outcome": "defeated | captured | befriended | escaped" },
+  "reward": { "name": "Item or power name", "kind": "artifact | power", "emoji": "🗡️", "description": "What it does, one line", "look": "How it looks" },
+  "questsCompleted": ["Exact title of an open quest this story resolved — else empty array"],
   "newMemories": [
     { "type": "power_earned", "title": "Same power name as in newPowers", "detail": "How the hero earned it" },
     { "type": "villain_defeated", "title": "Villain name", "detail": "How the hero defeated them" },
@@ -548,7 +592,7 @@ ${v.sceneEntries}
 IMPORTANT: The "pages" array MUST be empty []. All pages must be inside "scenes". This is required.
 newMemories: each entry MUST have "type" and "title" (non-empty string). "detail" is optional. Leave array empty [] if no new memories.
 newMemories type must be one of: character_met, villain_defeated, power_earned, item_found, location_discovered, quest_opened, quest_completed, achievement_unlocked
-newPowers and newQuests may be empty arrays if none were earned/opened.
+newPowers and newQuests may be empty arrays if none were earned/opened. reward is null when nothing was earned.
 background: one sentence, specific location + time of day + lighting mood
 camera: choose from: wide angle, medium shot, close-up on face, low angle looking up, bird's eye view, over-the-shoulder
 characters: EVERY named character visible in the scene must appear with expression + pose
