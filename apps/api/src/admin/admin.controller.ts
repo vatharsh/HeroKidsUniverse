@@ -14,6 +14,7 @@ import { HeroPower } from '../powers/hero-power.entity';
 import { OrderV2Service } from '../merchandise/orders/order-v2.service';
 import { Story } from '../stories/story.entity';
 import { AdminService } from './admin.service';
+import { TtsVoicesService } from './tts-voices.service';
 import { GenerationService } from '../generation/generation.service';
 
 @Controller('admin')
@@ -29,6 +30,7 @@ export class AdminController {
     private readonly heroesService: HeroesService,
     private readonly qaService: AIQualityAssuranceService,
     private readonly generationService: GenerationService,
+    private readonly ttsVoices: TtsVoicesService,
     @InjectRepository(Story) private readonly storiesRepo: Repository<Story>,
     @InjectRepository(Hero) private readonly heroesRepo: Repository<Hero>,
     @InjectRepository(HeroPower) private readonly powersRepo: Repository<HeroPower>,
@@ -382,6 +384,11 @@ export class AdminController {
   @Get('settings')
   getSettings() {
     return this.adminService.getSettings();
+  }
+
+  @Get('tts-voices')
+  listTtsVoices(@Query('language') language?: string) {
+    return this.ttsVoices.listGeminiVoices(language || 'en-IN');
   }
 
   @Patch('settings/:key')

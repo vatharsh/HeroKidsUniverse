@@ -30,6 +30,7 @@ import { AdminService } from './admin.service';
 import { PlatformSetting } from './platform-setting.entity';
 import { PlatformSettingsController } from './platform-settings.controller';
 import { PromptRegistryController } from './prompt-registry.controller';
+import { TtsVoicesService } from './tts-voices.service';
 import { UploadModule } from '../upload/upload.module';
 
 @Module({
@@ -64,6 +65,6 @@ import { UploadModule } from '../upload/upload.module';
     ]),
   ],
   controllers: [AdminController, PlatformSettingsController, PromptRegistryController],
-  providers: [AdminService],
+  providers: [AdminService, TtsVoicesService],
 })
 export class AdminModule {}

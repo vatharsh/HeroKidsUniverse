@@ -64,8 +64,9 @@ interface LogItem {
 
 interface PaginatedResult<T> { items: T[]; total: number; page: number; limit: number; totalPages: number; }
 
-type SettingType = "string" | "number" | "boolean";
-interface SettingDef { key: string; label: string; description: string; type: SettingType; }
+type SettingType = "string" | "number" | "boolean" | "select";
+interface SettingOption { value: string; label: string; hint?: string; }
+interface SettingDef { key: string; label: string; description: string; type: SettingType; options?: SettingOption[]; }
 interface SettingGroup { title: string; description: string; items: SettingDef[]; }
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
@@ -1552,27 +1553,91 @@ const QA_GROUPS: SettingGroup[] = [
   },
 ];
 
+const STORY_MODEL_GROUP: SettingGroup = {
+  title: "Story Writing Models",
+  description: "Which Gemini models write the story and place the speech bubbles. Changes take effect on the next story.",
+  items: [
+    {
+      key: "STORY_GENERATION_MODEL", label: "Story Model", type: "select",
+      description: "Writes the story text, dialogue and page plans.",
+      options: [
+        { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash (recommended)", hint: "Best writing quality we've tested; about $0.005 per story." },
+        { value: "gemini-3.7-flash", label: "Gemini 3.7 Flash", hint: "Previous Flash — similar cost, slightly weaker writing." },
+        { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash", hint: "Older Flash — only as a fallback." },
+        { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview)", hint: "Slower and several times the cost; not needed for 8-page stories." },
+        { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", hint: "Cheapest and fastest, but noticeably flatter stories." },
+      ],
+    },
+    {
+      key: "STORY_HINGLISH_LEVEL", label: "Hindi in Dialogue", type: "select",
+      description: "Everyday Hindi words in what characters say.",
+      options: [
+        { value: "light", label: "Light (recommended)", hint: "At most two expressions per page, like \"Arre!\" or \"Chalo!\"." },
+        { value: "none", label: "None", hint: "Plain Indian English only." },
+      ],
+    },
+    {
+      key: "BUBBLE_DETECTION_MODEL", label: "Speech Bubble Detection Model", type: "select",
+      description: "Finds each speaker's head and mouth in the finished image so bubbles point at the right person.",
+      options: [
+        { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash (recommended)", hint: "Most accurate placement; a fraction of a cent per page." },
+        { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", hint: "Cheaper; misses small or turned-away faces more often." },
+      ],
+    },
+    { key: "SPEECH_BUBBLE_DETECTION_ENABLED", label: "Detect Speakers for Bubbles", description: "Off = bubbles use the planned layout without looking at the image.", type: "boolean" },
+  ],
+};
+
 const IMAGE_BACKEND_GROUP: SettingGroup = {
-  title: "Image Generation Backend",
+  title: "Image Generation",
   description: "Switch image models without redeploying. Changes take effect within 30 seconds.",
   items: [
     {
-      key: "IMAGE_GENERATION_BACKEND",
-      label: "Story Image Backend",
-      description: "openai = gpt-image-1 (stable, well-tested) | gemini = Nano Banana 2 / gemini-3.1-flash-image (multi-reference, better face consistency).",
-      type: "string",
+      key: "IMAGE_GENERATION_BACKEND", label: "Story Image Provider", type: "select",
+      description: "Who draws the story pages and character sheets.",
+      options: [
+        { value: "gemini", label: "Google Gemini (recommended)", hint: "Uses the Gemini image model below — multi-reference, best face consistency." },
+        { value: "openai", label: "OpenAI gpt-image-1", hint: "Older pipeline; uses OpenAI Image Quality below." },
+      ],
     },
     {
-      key: "AVATAR_GENERATION_BACKEND",
-      label: "Avatar Generation Backend",
-      description: "openai = gpt-image-1 (default, highest quality) | gemini = Nano Banana 2 / gemini-3.1-flash-image. Independent from story image backend.",
-      type: "string",
+      key: "IMAGE_GENERATION_MODEL", label: "Gemini Image Model", type: "select",
+      description: "Used when the provider is Gemini. Price is per 1K image; an 8-page story uses about 10–12 images.",
+      options: [
+        { value: "gemini-nano-banana-2.1", label: "Nano Banana 2.1 — $0.034 (recommended)", hint: "Best value; ~$0.40 of images per story." },
+        { value: "gemini-3.1-flash-lite-image", label: "Gemini 3.1 Flash-Lite Image — $0.034", hint: "Same price, weaker character consistency." },
+        { value: "gemini-3.1-flash-image", label: "Nano Banana 2 (3.1 Flash Image) — $0.067", hint: "Double the cost of 2.1 for similar results." },
+        { value: "gemini-3-pro-image", label: "Nano Banana Pro (3 Pro Image) — $0.134", hint: "Highest detail, 4× the cost — over budget for regular stories." },
+      ],
     },
     {
-      key: "OPENAI_IMAGE_QUALITY",
-      label: "OpenAI Image Quality",
-      description: "low | medium | high — only applies when backend = openai.",
-      type: "string",
+      key: "STORY_IMAGE_ASPECT_RATIO", label: "Page Shape", type: "select",
+      description: "Aspect ratio of every story illustration, so all pages match.",
+      options: [
+        { value: "1:1", label: "Square 1:1 (recommended)", hint: "Fits the reader, PDF and both video formats." },
+        { value: "4:3", label: "Landscape 4:3" },
+        { value: "3:4", label: "Portrait 3:4" },
+        { value: "16:9", label: "Wide 16:9" },
+      ],
+    },
+    { key: "CHARACTER_SHEETS_ENABLED", label: "3D Character Sheets", description: "Draw each character once in their story outfit before the pages and use it as the reference for every page (+1 image per new character).", type: "boolean" },
+    { key: "MAX_EXPRESSION_VARIANTS", label: "Max Redraws per Story", description: "Extra page redraws for a changed expression or pose. Each one costs an image.", type: "number" },
+    {
+      key: "AVATAR_GENERATION_BACKEND", label: "Avatar Provider", type: "select",
+      description: "Who draws the character avatar from the uploaded photo. Independent from story images.",
+      options: [
+        { value: "openai", label: "OpenAI gpt-image-1 (recommended)", hint: "Keeps the cartoon style consistent with stories." },
+        { value: "gemini", label: "Google Gemini", hint: "Tends towards realistic portraits." },
+      ],
+    },
+    {
+      key: "OPENAI_IMAGE_QUALITY", label: "OpenAI Image Quality", type: "select",
+      description: "Applies to avatars, and to story pages when the provider is OpenAI.",
+      options: [
+        { value: "low", label: "Low", hint: "Fastest and cheapest." },
+        { value: "medium", label: "Medium (recommended)" },
+        { value: "high", label: "High", hint: "Slower and several times the cost per image." },
+      ],
     },
     {
       key: "OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK",
@@ -1583,13 +1648,13 @@ const IMAGE_BACKEND_GROUP: SettingGroup = {
     {
       key: "OPENAI_IMAGE_COST_PER_IMAGE",
       label: "OpenAI Cost Per Image (USD)",
-      description: "Used for spend tracking when backend = openai.",
+      description: "Used for spend tracking when the provider is OpenAI.",
       type: "number",
     },
     {
       key: "GEMINI_IMAGE_COST_PER_IMAGE",
       label: "Gemini Cost Per Image (USD)",
-      description: "Used for spend tracking when backend = gemini (Nano Banana 2).",
+      description: "Spend-tracking fallback for Gemini image models without a known price.",
       type: "number",
     },
   ],
@@ -1597,16 +1662,50 @@ const IMAGE_BACKEND_GROUP: SettingGroup = {
 
 const NARRATION_GROUP: SettingGroup = {
   title: "Narration / TTS",
-  description: "Switch TTS provider and voice without redeploying. Changes take effect within 30 seconds.",
+  description: "Switch narration provider, model and voice without redeploying. Changes take effect within 30 seconds.",
   items: [
-    { key: "TTS_PROVIDER",     label: "TTS Provider",     description: "openai = gpt-4o-mini-tts | gemini = gemini-2.5-flash-preview-tts. Gemini supports true Indian English accent.", type: "string" },
-    { key: "TTS_VOICE",        label: "OpenAI Voice",     description: "Voice used when TTS_PROVIDER=openai. Options: nova, alloy, echo, fable, onyx, shimmer.", type: "string" },
-    { key: "GEMINI_TTS_VOICE", label: "Gemini Voice",     description: "Voice used when TTS_PROVIDER=gemini. Options: Kore, Puck, Charon, Fenrir, Aoede, Zephyr. Kore = warm female storyteller.", type: "string" },
+    {
+      key: "TTS_PROVIDER", label: "Narration Provider", type: "select",
+      description: "Who reads the story aloud.",
+      options: [
+        { value: "gemini", label: "Google Gemini (recommended)", hint: "Real Indian-English voices." },
+        { value: "openai", label: "OpenAI gpt-4o-mini-tts", hint: "American-sounding voices with an accent hint." },
+      ],
+    },
+    {
+      key: "GEMINI_TTS_MODEL", label: "Gemini Narration Model", type: "select",
+      description: "Used when the provider is Gemini. Price is per minute of audio; a story is about 3 minutes.",
+      options: [
+        { value: "gemini-3.8-flash-tts", label: "3.8 Flash TTS — $0.0135/min (recommended)", hint: "Most natural storytelling; ~$0.04 per story." },
+        { value: "gemini-3.8-flash-lite-tts", label: "3.8 Flash-Lite TTS — $0.009/min", hint: "A third cheaper, a little flatter." },
+      ],
+    },
+    { key: "GEMINI_TTS_VOICE", label: "Gemini Voice", description: "Indian-English voice used when the provider is Gemini.", type: "select" },
+    {
+      key: "TTS_VOICE", label: "OpenAI Voice", type: "select",
+      description: "Used when the provider is OpenAI.",
+      options: ["nova", "alloy", "echo", "fable", "onyx", "shimmer"].map(v => ({ value: v, label: v[0].toUpperCase() + v.slice(1) })),
+    },
     { key: "TTS_SPEED_RATIO",  label: "Speech Speed",     description: "TTS speech rate (0.25–4.0). 0.9 = slightly slower for children.", type: "number" },
-    { key: "TTS_ACCENT_STYLE", label: "Accent Style",     description: "Accent hint: indian_english | neutral_english.", type: "string" },
-    { key: "TTS_TONE",         label: "Narration Tone",   description: "Tone hint: warm_bedtime_story | energetic | calm.", type: "string" },
-    { key: "GEMINI_TTS_COST_PER_CHAR", label: "Gemini TTS Cost Per Char (USD)", description: "Used for spend tracking when TTS_PROVIDER=gemini. Default $0.000001875.", type: "number" },
-    { key: "OPENAI_TTS_COST_PER_CHAR", label: "OpenAI TTS Cost Per Char (USD)", description: "Used for spend tracking when TTS_PROVIDER=openai. Default $0.000015.", type: "number" },
+    {
+      key: "TTS_ACCENT_STYLE", label: "Accent Style", type: "select",
+      description: "Accent hint added to narration instructions.",
+      options: [
+        { value: "indian_english", label: "Indian English (recommended)" },
+        { value: "neutral_english", label: "Neutral English" },
+      ],
+    },
+    {
+      key: "TTS_TONE", label: "Narration Tone", type: "select",
+      description: "Tone hint added to narration instructions.",
+      options: [
+        { value: "warm_bedtime_story", label: "Warm bedtime story (recommended)" },
+        { value: "energetic", label: "Energetic" },
+        { value: "calm", label: "Calm" },
+      ],
+    },
+    { key: "GEMINI_TTS_COST_PER_CHAR", label: "Gemini TTS Cost Per Char (USD)", description: "Spend-tracking fallback for Gemini TTS models without a known per-second price.", type: "number" },
+    { key: "OPENAI_TTS_COST_PER_CHAR", label: "OpenAI TTS Cost Per Char (USD)", description: "Used for spend tracking when the provider is OpenAI. Default $0.000015.", type: "number" },
   ],
 };
 
@@ -1640,6 +1739,7 @@ const ADVANCED_GROUP: SettingGroup = {
 };
 
 const ALL_SETTINGS_KEYS = [
+  ...STORY_MODEL_GROUP.items.map(i => i.key),
   ...QA_GROUPS.flatMap(g => g.items.map(i => i.key)),
   ...IMAGE_BACKEND_GROUP.items.map(i => i.key),
   ...NARRATION_GROUP.items.map(i => i.key),
@@ -1660,6 +1760,7 @@ function AiSettingRow({
 }) {
   const val = settings[item.key] ?? "";
   const isDirty = draft[item.key] !== undefined && draft[item.key] !== saved[item.key];
+  const selectedHint = item.type === "select" ? item.options?.find(o => o.value === val)?.hint : undefined;
   return (
     <div className={`px-5 py-3 flex items-center gap-4 transition-colors ${isDirty ? "bg-amber-50/60" : ""}`}>
       <div className="flex-1 min-w-0">
@@ -1668,6 +1769,7 @@ function AiSettingRow({
           {isDirty && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">unsaved</span>}
         </p>
         <p className="text-[10px] text-gray-400 mt-0.5">{item.description}</p>
+        {selectedHint && <p className="text-[10px] text-violet-600 mt-0.5">{selectedHint}</p>}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {item.type === "boolean" ? (
@@ -1681,6 +1783,13 @@ function AiSettingRow({
           <input type="number" value={val}
             onChange={e => onChange(item.key, e.target.value)}
             className={`w-20 text-right font-mono text-xs rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-500 border ${isDirty ? "border-amber-300 bg-amber-50" : "border-gray-200"}`} />
+        ) : item.type === "select" && item.options?.length ? (
+          <select value={val}
+            onChange={e => onChange(item.key, e.target.value)}
+            className={`w-72 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-500 border bg-white ${isDirty ? "border-amber-300 bg-amber-50" : "border-gray-200"}`}>
+            {!item.options.some(o => o.value === val) && <option value={val}>{val || "— not set —"} (current)</option>}
+            {item.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         ) : (
           <input type="text" value={val}
             onChange={e => onChange(item.key, e.target.value)}
@@ -1726,6 +1835,13 @@ function SettingsTab() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [pendingPreset, setPendingPreset] = useState<PresetKey | null>(null);
   const loaded = useRef(false);
+  const [voiceOptions, setVoiceOptions] = useState<SettingOption[]>([]);
+
+  // Gemini voices come from Google's voice library, so the list is fetched rather than hard-coded.
+  const narrationGroup: SettingGroup = {
+    ...NARRATION_GROUP,
+    items: NARRATION_GROUP.items.map(i => i.key === "GEMINI_TTS_VOICE" ? { ...i, options: voiceOptions } : i),
+  };
 
   // Derive active preset from saved state (what's in DB).
   const activePreset = (saved["QA_PRESET"] || "balanced") as PresetKey;
@@ -1756,6 +1872,13 @@ function SettingsTab() {
       setSaved(m);
       setDraft({});
     }).catch(() => null).finally(() => setLoading(false));
+    apiFetch("/admin/tts-voices?language=en-IN").then((voices: Array<{ id: string; name: string; gender?: string; description?: string }>) => {
+      setVoiceOptions(voices.map(v => ({
+        value: v.id,
+        label: `${v.name}${v.gender ? ` · ${v.gender}` : ""}${v.id === "en-in-concierge-5" ? " (recommended)" : ""}`,
+        hint: v.description,
+      })));
+    }).catch(() => null);
   }, []); // eslint-disable-line
 
   function change(key: string, value: string) {
@@ -1946,11 +2069,14 @@ function SettingsTab() {
         )}
       </div>
 
+      {/* ── Story Writing Models ── */}
+      <AiSettingGroupCard group={STORY_MODEL_GROUP} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />
+
       {/* ── Image Generation Backend ── */}
       <AiSettingGroupCard group={IMAGE_BACKEND_GROUP} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />
 
       {/* ── Narration / TTS ── */}
-      <AiSettingGroupCard group={NARRATION_GROUP} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />
+      <AiSettingGroupCard group={narrationGroup} settings={settings} draft={draft} saved={saved} saving={saving} onChange={change} />
 
       {/* ── Generation Behaviour ── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
