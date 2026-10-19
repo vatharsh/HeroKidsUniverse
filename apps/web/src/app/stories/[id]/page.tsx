@@ -567,6 +567,8 @@ export default function StoryReaderPage() {
   const [videoUrl, setVideoUrl]                 = useState<string | null>(null);
   const [landscapeVideo, setLandscapeVideo]     = useState<{ status: string | null; url: string | null }>({ status: null, url: null });
   const [videoMenuOpen, setVideoMenuOpen]       = useState(false);
+  /** Formats the parent asked to create in this visit — downloaded automatically when ready. */
+  const autoDownloadRef = useRef<Set<"vertical" | "landscape">>(new Set());
   const videoPollerRef                          = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const pollRef        = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const recapFetchedRef = useRef(false);
@@ -593,6 +595,44 @@ export default function StoryReaderPage() {
       headers: { Authorization: `Bearer ${token}` },
     });
     router.push("/dashboard");
+  }
+
+  /** Starts a file download (the server sends Content-Disposition: attachment, so this never opens a player). */
+  function downloadVideo(url: string, format: "vertical" | "landscape") {
+    const name = `${(story?.title ?? "herokids-story").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60)}-${format === "vertical" ? "phone" : "landscape"}`;
+    const a = document.createElement("a");
+    a.href = `${url}${url.includes("?") ? "&" : "?"}name=${encodeURIComponent(name)}`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  /** Polls both video formats until neither is being generated. */
+  function pollVideoStatus(token: string) {
+    clearInterval(videoPollerRef.current);
+    videoPollerRef.current = setInterval(async () => {
+      const r = await fetch(`${BASE}/stories/${id}/video-status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return;
+      const { data } = await r.json();
+      const verticalUrl = data.videoUrl ? resolveMediaUrl(data.videoUrl) : null;
+      const landscapeUrl = data.landscape?.url ? resolveMediaUrl(data.landscape.url) : null;
+      setVideoStatus(data.videoStatus);
+      setVideoUrl(verticalUrl);
+      setLandscapeVideo({ status: data.landscape?.status ?? null, url: landscapeUrl });
+      // A video the parent just asked for downloads by itself as soon as it's ready.
+      for (const [format, status, url] of [["vertical", data.videoStatus, verticalUrl], ["landscape", data.landscape?.status, landscapeUrl]] as const) {
+        if (autoDownloadRef.current.has(format) && status !== "generating") {
+          autoDownloadRef.current.delete(format);
+          if (status === "completed" && url) downloadVideo(url, format);
+        }
+      }
+      if (data.videoStatus !== "generating" && data.landscape?.status !== "generating") {
+        clearInterval(videoPollerRef.current);
+      }
+    }, 5000);
   }
 
   const fetchStory = useCallback(async () => {
@@ -985,29 +1025,12 @@ export default function StoryReaderPage() {
     }
   }
 
-  /** Polls both video formats until neither is being generated. */
-  function pollVideoStatus(token: string) {
-    clearInterval(videoPollerRef.current);
-    videoPollerRef.current = setInterval(async () => {
-      const r = await fetch(`${BASE}/stories/${id}/video-status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!r.ok) return;
-      const { data } = await r.json();
-      setVideoStatus(data.videoStatus);
-      setVideoUrl(data.videoUrl ? resolveMediaUrl(data.videoUrl) : null);
-      setLandscapeVideo({ status: data.landscape?.status ?? null, url: data.landscape?.url ? resolveMediaUrl(data.landscape.url) : null });
-      if (data.videoStatus !== "generating" && data.landscape?.status !== "generating") {
-        clearInterval(videoPollerRef.current);
-      }
-    }, 5000);
-  }
-
   async function handleGenerateVideo(format: "vertical" | "landscape" = "vertical") {
     const token = getAccessToken();
     if (!token) return;
     if (format === "vertical") setVideoStatus("generating");
     else setLandscapeVideo((v) => ({ ...v, status: "generating" }));
+    autoDownloadRef.current.add(format);
     await fetch(`${BASE}/stories/${id}/generate-video?format=${format}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -1165,12 +1188,15 @@ export default function StoryReaderPage() {
                           {v.label}
                           {v.recommended && <span className="ml-1.5 text-[10px] font-bold text-gold">RECOMMENDED</span>}
                         </p>
-                        <p className="text-white/45 text-[11px]">{v.status === "generating" ? "Creating… about 1–2 minutes" : v.hint}</p>
+                        <p className="text-white/45 text-[11px]">{v.status === "generating" ? "Creating… downloads automatically in 1–2 min" : v.hint}</p>
                       </div>
                       {v.status === "generating" ? (
                         <Loader2 className="w-4 h-4 text-white/60 animate-spin" />
                       ) : v.url && v.status !== "failed" ? (
-                        <a href={v.url} download className="text-xs font-bold bg-gold text-space px-3 py-1.5 rounded-full hover:brightness-110">Download</a>
+                        <button type="button" onClick={() => downloadVideo(v.url!, v.format)}
+                          className="text-xs font-bold bg-gold text-space px-3 py-1.5 rounded-full hover:brightness-110">
+                          Download
+                        </button>
                       ) : (
                         <button type="button" onClick={() => void handleGenerateVideo(v.format)}
                           className="text-xs font-bold bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-full">

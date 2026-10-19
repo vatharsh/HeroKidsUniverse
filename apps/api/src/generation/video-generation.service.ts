@@ -137,7 +137,8 @@ export class VideoGenerationService implements OnModuleInit {
       const outPath = path.join(tmpDir, `story-${format}.mp4`);
       await this.runFfmpeg(this.buildArgs(segments, format, outPath));
 
-      const url = await this.uploadService.uploadVideo(userId, storyId, outPath);
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'herokids-story';
+      const url = await this.uploadService.uploadVideo(userId, storyId, outPath, `${slug}-${format === 'vertical' ? 'phone' : 'landscape'}.mp4`);
       const previous = format === 'vertical' ? story.videoUrl : story.videoVariants?.landscape?.url;
       await this.setStatus(story, format, 'completed', url);
       if (previous && previous !== url) await this.uploadService.deleteObject(previous);

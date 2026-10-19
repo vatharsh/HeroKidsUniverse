@@ -202,13 +202,17 @@ export class UploadService implements OnApplicationBootstrap {
     return { url: `/uploads/payouts/${influencerId}/${filename}`, fileType };
   }
 
-  async uploadVideo(userId: string, storyId: string, filePath: string): Promise<string> {
+  /**
+   * `downloadName` is sent as Content-Disposition: attachment, so clicking the link downloads the video
+   * (browsers ignore the <a download> attribute for files on another origin such as R2).
+   */
+  async uploadVideo(userId: string, storyId: string, filePath: string, downloadName = 'herokids-story.mp4'): Promise<string> {
     const buffer = await readFile(filePath);
     const randomId = randomUUID();
 
     if (this.useR2) {
       const key = `videos/${storyId}/${randomId}.mp4`;
-      await this.putR2Object(key, buffer, 'video/mp4');
+      await this.putR2Object(key, buffer, 'video/mp4', `attachment; filename="${downloadName.replace(/[^a-z0-9.-]/gi, '-')}"`);
       return this.getPublicUrl(key);
     }
 
@@ -221,7 +225,7 @@ export class UploadService implements OnApplicationBootstrap {
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
-  private async putR2Object(key: string, body: Buffer, contentType: string): Promise<void> {
+  private async putR2Object(key: string, body: Buffer, contentType: string, contentDisposition?: string): Promise<void> {
     await this.s3Client!.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -229,6 +233,7 @@ export class UploadService implements OnApplicationBootstrap {
         Body: body,
         ContentType: contentType,
         CacheControl: IMMUTABLE_CACHE,
+        ...(contentDisposition ? { ContentDisposition: contentDisposition } : {}),
       }),
     );
   }

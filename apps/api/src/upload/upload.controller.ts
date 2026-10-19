@@ -1,4 +1,5 @@
 import {
+  Query,
   Controller,
   Get,
   NotFoundException,
@@ -75,10 +76,13 @@ export class UploadController {
 
   @Public()
   @Get('files/videos/:filename')
-  serveVideoFile(@Param('filename') filename: string, @Res() res: Response) {
+  serveVideoFile(@Param('filename') filename: string, @Query('name') name: string | undefined, @Res() res: Response) {
     const filePath = join(VIDEO_UPLOAD_DIR, filename);
     if (!existsSync(filePath)) throw new NotFoundException('File not found');
     res.setHeader('Content-Type', 'video/mp4');
+    // Download rather than play in the browser (matches the R2 objects' Content-Disposition).
+    const safeName = (name ?? 'herokids-story').replace(/[^a-z0-9-]/gi, '-').slice(0, 80) || 'herokids-story';
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.mp4"`);
     res.setHeader('Accept-Ranges', 'bytes');
     createReadStream(filePath).pipe(res);
   }
