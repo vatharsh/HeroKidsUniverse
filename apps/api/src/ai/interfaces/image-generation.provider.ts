@@ -1,9 +1,29 @@
 export const IMAGE_GENERATION_PROVIDER = 'IMAGE_GENERATION_PROVIDER';
 
+export interface CharacterSheetInput {
+  name: string;
+  /** Who they are, e.g. "12-year-old boy, the hero's elder brother". */
+  descriptor: string;
+  outfit?: string | null;
+  /** Appearance for characters with no photo (villains, creatures, companions). */
+  appearance?: string | null;
+  /** Avatar to take the face from (photo-based characters). */
+  referenceUrl?: string | null;
+  model?: string;
+  aspectRatio?: string;
+}
+
 export interface ImageGenerationInput {
   sceneDescription: string;
   /** e.g. "1:1", "4:3" — every page of a story must share one ratio (set by the dispatcher from settings). */
   aspectRatio?: string;
+  /** Image model id (set by the dispatcher from IMAGE_GENERATION_MODEL). */
+  model?: string;
+  /**
+   * Per-story character sheets for the characters in this picture. When present they replace the avatar
+   * references: each sheet shows exactly how that character looks (face AND outfit) in this story.
+   */
+  castReferences?: Array<{ name: string; url: string }>;
   heroName: string;
   heroAge: number;
   style?: string;
@@ -134,4 +154,6 @@ export interface ImageGenerationProvider {
   locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null>;
   checkApparentAge(input: ApparentAgeCheckInput): Promise<ApparentAgeCheckResult | null>;
   generateCostumedCanonical(input: CostumedCanonicalInput): Promise<ImageGenerationOutput>;
+  /** One full-body reference of a character in their story outfit (Gemini backend only). */
+  generateCharacterSheet?(input: CharacterSheetInput): Promise<ImageGenerationOutput>;
 }

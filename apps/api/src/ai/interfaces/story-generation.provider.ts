@@ -99,6 +99,8 @@ export interface StoryVisualStateOutput {
   inventory: string[];
   /** One outfit per named non-hero character, fixed for the whole story. */
   characterOutfits?: Record<string, string>;
+  /** Fixed appearance for characters with no photo (villains, creatures, companions). */
+  characterLooks?: Record<string, string>;
 }
 
 export interface SceneOutput {

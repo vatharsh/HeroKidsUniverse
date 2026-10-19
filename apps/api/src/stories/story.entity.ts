@@ -174,6 +174,10 @@ export interface StoryVisualState {
   currentLocation?: string;
   // Per-character outfit lock: { "Vedant": "black hoodie, jeans", "Daadi": "purple saree" }
   characterOutfits?: Record<string, string>;
+  /** Fixed appearance for characters with no photo (villains, creatures, companions). */
+  characterLooks?: Record<string, string>;
+  /** Per-story 3D character sheet image URL by character name (references for every page). */
+  castSheets?: Record<string, string>;
 }
 
 export interface StoryScene {

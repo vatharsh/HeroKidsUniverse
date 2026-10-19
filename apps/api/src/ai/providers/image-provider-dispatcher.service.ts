@@ -7,6 +7,7 @@ import type {
   ApparentAgeCheckInput,
   ApparentAgeCheckResult,
   AvatarGenerationInput,
+  CharacterSheetInput,
   CostumedCanonicalInput,
   FaceConsistencyResult,
   ImageGenerationInput,
@@ -39,6 +40,8 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
   private avatarCacheExpiresAt = 0;
   private cachedAspectRatio: string | null = null;
   private aspectCacheExpiresAt = 0;
+  private cachedImageModel: string | null = null;
+  private modelCacheExpiresAt = 0;
   private static readonly CACHE_TTL_MS = 30_000;
 
   constructor(
@@ -87,7 +90,33 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
 
   async generateImage(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     const { provider } = await this.resolveProvider();
-    return provider.generateImage({ ...input, aspectRatio: input.aspectRatio ?? await this.resolveAspectRatio() });
+    return provider.generateImage({
+      ...input,
+      aspectRatio: input.aspectRatio ?? await this.resolveAspectRatio(),
+      model: input.model ?? await this.resolveImageModel(),
+    });
+  }
+
+  /** Which backend + model will draw the next image — used for cost logging. */
+  async currentImageModel(): Promise<{ backend: string; model: string }> {
+    const { backend } = await this.resolveProvider();
+    return { backend, model: backend === 'gemini' ? await this.resolveImageModel() : 'gpt-image-1' };
+  }
+
+  async generateCharacterSheet(input: CharacterSheetInput): Promise<ImageGenerationOutput> {
+    const { provider, backend } = await this.resolveProvider();
+    if (backend !== 'gemini' || !provider.generateCharacterSheet) {
+      throw new Error('Character sheets need the Gemini image backend');
+    }
+    return provider.generateCharacterSheet({ ...input, model: input.model ?? await this.resolveImageModel() });
+  }
+
+  private async resolveImageModel(): Promise<string> {
+    if (Date.now() < this.modelCacheExpiresAt && this.cachedImageModel) return this.cachedImageModel;
+    const row = await this.settingsRepo.findOne({ where: { key: 'IMAGE_GENERATION_MODEL' } });
+    this.cachedImageModel = row?.value?.trim() || SETTING_DEFAULTS.IMAGE_GENERATION_MODEL.value;
+    this.modelCacheExpiresAt = Date.now() + ImageProviderDispatcher.CACHE_TTL_MS;
+    return this.cachedImageModel;
   }
 
   /** One ratio for every illustration — without it pages came back mixed (square and 16:9 in one story). */

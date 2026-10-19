@@ -5,6 +5,7 @@ import type {
   ApparentAgeCheckInput,
   ApparentAgeCheckResult,
   AvatarGenerationInput,
+  CharacterSheetInput,
   CostumedCanonicalInput,
   FaceConsistencyResult,
   ImageGenerationInput,
@@ -171,7 +172,9 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
       const charLines = input.supportingCharacters.map((label, i) => {
         const refNum = heroRefCount + i + 1;
         const hasRef = referenceCount >= refNum; // only claim LOCKED if the reference actually loaded
-        const desc = input.characterCanonSummaries?.[i] ?? input.characterAvatarDescriptions?.[i];
+        const rawDesc = input.characterCanonSummaries?.[i] ?? input.characterAvatarDescriptions?.[i];
+        // Vision descriptions are sometimes refusals ("I'm unable to describe…") — never feed those to the artist.
+        const desc = rawDesc && !/\b(unable to|can'?t|cannot|not able to|sorry)\b/i.test(rawDesc.slice(0, 120)) ? rawDesc : undefined;
         const descText = desc ? `: ${desc.slice(0, 300)}` : '';
         const lockText = hasRef
           ? ` (LOCKED — ref #${refNum} — face geometry, skin tone, hair IDENTICAL to ref. SAME PERSON every scene.)`
@@ -287,13 +290,23 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
   private async generateImageInternal(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     // Build reference image parts
     const refUrls: Array<{ url: string; label: string }> = [];
-    // Avatars show everyday clothes — take only the person from them; clothing comes from the story outfit.
-    const faceOnly = 'Copy this face, hair, skin tone, glasses and age exactly, but NOT the clothes — dress them in their story outfit.';
-    if (input.heroAvatarUrl) refUrls.push({ url: input.heroAvatarUrl, label: `HERO — ${input.heroName}. ${faceOnly}` });
-    (input.characterAvatarUrls ?? []).forEach((url, i) => {
-      const name = input.supportingCharacters?.[i]?.split('(')[0].trim() ?? `character ${i + 1}`;
-      refUrls.push({ url, label: `CHARACTER — ${name}. ${faceOnly}` });
-    });
+    if (input.castReferences?.length) {
+      // Character sheets already show each character in this story's outfit and art style — copy them whole.
+      for (const ref of input.castReferences) {
+        refUrls.push({
+          url: ref.url,
+          label: `CHARACTER SHEET — ${ref.name}. This is exactly how ${ref.name} looks in this story: copy the face, hair, skin tone, age, body proportions AND outfit exactly.`,
+        });
+      }
+    } else {
+      // Avatars show everyday clothes — take only the person from them; clothing comes from the story outfit.
+      const faceOnly = 'Copy this face, hair, skin tone, glasses and age exactly, but NOT the clothes — dress them in their story outfit.';
+      if (input.heroAvatarUrl) refUrls.push({ url: input.heroAvatarUrl, label: `HERO — ${input.heroName}. ${faceOnly}` });
+      (input.characterAvatarUrls ?? []).forEach((url, i) => {
+        const name = input.supportingCharacters?.[i]?.split('(')[0].trim() ?? `character ${i + 1}`;
+        refUrls.push({ url, label: `CHARACTER — ${name}. ${faceOnly}` });
+      });
+    }
     if (input.styleReferenceUrl) {
       refUrls.push({
         url: input.styleReferenceUrl,
@@ -306,8 +319,10 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
     const loadedRefs = refUrls
       .map((ref, i) => ({ ...ref, data: refData[i] }))
       .filter((ref): ref is typeof ref & { data: NonNullable<typeof ref.data> } => ref.data !== null);
-    // Only face references count toward the hero/character "ref #N" numbering in the prompt.
-    const faceRefCount = loadedRefs.filter((ref) => !ref.label.startsWith('EARLIER PAGE')).length;
+    // Only avatar references use the prompt's "ref #N" numbering; sheets are self-describing via their labels.
+    const faceRefCount = input.castReferences?.length
+      ? 0
+      : loadedRefs.filter((ref) => !ref.label.startsWith('EARLIER PAGE')).length;
 
     const promptText = this.buildPrompt(input, faceRefCount);
 
@@ -318,14 +333,18 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
       parts.push({ inlineData: { mimeType: ref.data.mimeType, data: ref.data.data } });
     });
     parts.push({ text: promptText });
+    return this.runImageModel(parts, input.model, input.aspectRatio);
+  }
 
+  /** One image from the model with retries on quota/overload. Returns base64 (Gemini gives no URL). */
+  private async runImageModel(parts: GeminiSDK[], modelId?: string, aspectRatio?: string): Promise<ImageGenerationOutput> {
     const genAI = this.getGenAI();
     // responseModalities must be set at model-init time, not in generateContent
     const model = genAI.getGenerativeModel({
-      model: NanoBananaImageProvider.IMAGE_MODEL,
+      model: modelId || NanoBananaImageProvider.IMAGE_MODEL,
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
-        ...(input.aspectRatio ? { imageConfig: { aspectRatio: input.aspectRatio } } : {}),
+        ...(aspectRatio ? { imageConfig: { aspectRatio } } : {}),
       } as GeminiSDK,
     });
 
@@ -499,5 +518,33 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
 
   generateCostumedCanonical(input: CostumedCanonicalInput): Promise<ImageGenerationOutput> {
     return this.openai.generateCostumedCanonical(input);
+  }
+
+  /**
+   * A character model sheet: one full-body 3D render of a character in their outfit for this story, on a
+   * plain background. Every page then copies this sheet, so face AND clothes stay identical page to page.
+   */
+  async generateCharacterSheet(input: CharacterSheetInput): Promise<ImageGenerationOutput> {
+    const parts: GeminiSDK[] = [];
+    if (input.referenceUrl) {
+      const ref = await this.urlToBase64(input.referenceUrl);
+      if (ref) {
+        parts.push({ text: `Reference image #1: ${input.name}'s face. Copy the face, hair, skin tone, glasses and age exactly. Ignore its clothes, background and drawing style.` });
+        parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.data } });
+      }
+    }
+    parts.push({
+      text: [
+        `Create a CHARACTER MODEL SHEET for a children's storybook: ${input.name}, ${input.descriptor}.`,
+        'Exactly ONE character, full body from head to toe, standing in a relaxed natural pose, three-quarter front view, friendly expression.',
+        'Plain soft light-grey studio background, even soft lighting, nothing else in the picture. No text, no labels, no logos.',
+        input.outfit ? `Outfit (draw exactly this): ${input.outfit}.` : '',
+        input.appearance ? `Appearance: ${input.appearance}.` : '',
+        `Look the age stated above — do not make them older or younger.`,
+        'No real-world logos, brands or foreign flags on the clothes.',
+        `Art style: ${STORYBOOK_STYLE}.`,
+      ].filter(Boolean).join('\n'),
+    });
+    return this.runImageModel(parts, input.model, input.aspectRatio ?? '3:4');
   }
 }

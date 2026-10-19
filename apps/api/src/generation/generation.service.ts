@@ -356,6 +356,9 @@ export class GenerationService implements OnModuleInit {
         storyVisualState: existingVisualState,
       });
       const normalizedGenerated = this.normalizeGeneratedStory(generated, heroName, existingVisualState);
+      // In universe stories the writer often calls the hero by their title ("Commander") — make that the hero,
+      // otherwise the title becomes a separate invented person in sheets, pictures and bubbles.
+      this.normalizeHeroAliases(normalizedGenerated, heroName, universeContext?.heroTitle ?? null);
 
       // Build per-character outfit lock from user-authored visual profiles
       const characterOutfits: Record<string, string> = {};
@@ -393,6 +396,7 @@ export class GenerationService implements OnModuleInit {
           inventory: normalizedGenerated.storyVisualState.inventory ?? [],
           transformation: null,
           characterOutfits: Object.keys(characterOutfits).length ? characterOutfits : undefined,
+          characterLooks: normalizedGenerated.storyVisualState.characterLooks,
         };
       } else if (universeContext) {
         storyVisualState = {
@@ -494,6 +498,7 @@ export class GenerationService implements OnModuleInit {
         pagesWithImages = sceneResult.pages;
         totalImageCostUsd = sceneResult.totalCostUsd;
         generatedScenes = sceneResult.scenes;
+        if (sceneResult.castSheets && storyVisualState) storyVisualState = { ...storyVisualState, castSheets: sceneResult.castSheets };
         this.logger.log(
           `Story ${storyId}: scene-based generation — ${sceneResult.scenes.length} scenes, ${pagesWithImages.length} pages, ${totalImageCostUsd.toFixed(4)} USD`,
         );
@@ -722,13 +727,7 @@ export class GenerationService implements OnModuleInit {
       }
     }
 
-    const imageBackend = await this.getStringSetting('IMAGE_GENERATION_BACKEND', 'openai');
-    const imageProvider = imageBackend === 'gemini' ? 'gemini' : 'openai';
-    const imageModel = imageBackend === 'gemini'
-      ? 'gemini-3.1-flash-image'
-      : (this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1');
-    const imageCostKey = imageBackend === 'gemini' ? 'GEMINI_IMAGE_COST_PER_IMAGE' : 'OPENAI_IMAGE_COST_PER_IMAGE';
-    const costPerImage = await this.getNumberSetting(imageCostKey as keyof typeof SETTING_DEFAULTS, Number(SETTING_DEFAULTS[imageCostKey as keyof typeof SETTING_DEFAULTS]?.value ?? SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value));
+    const { imageBackend, imageProvider, imageModel, costPerImage } = await this.resolveImageModelCost();
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
     const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
     const ageQAEnabled = await this.getBooleanSetting('APPARENT_AGE_QA_ENABLED', true);
@@ -1036,18 +1035,9 @@ export class GenerationService implements OnModuleInit {
     characterBibles?: string[],
     supportingCharAges?: (number | null)[],
     onPageDone?: (pageNum: number, total: number) => Promise<void>,
-  ): Promise<{ pages: StoryPage[]; scenes: StoryScene[]; totalCostUsd: number }> {
+  ): Promise<{ pages: StoryPage[]; scenes: StoryScene[]; totalCostUsd: number; castSheets?: Record<string, string> }> {
     const scenes = generated.scenes ?? [];
-    const imageBackend = await this.getStringSetting('IMAGE_GENERATION_BACKEND', 'openai');
-    const imageProvider = imageBackend === 'gemini' ? 'gemini' : 'openai';
-    const imageModel = imageBackend === 'gemini'
-      ? 'gemini-3.1-flash-image'
-      : (this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1');
-    const imageCostKey = imageBackend === 'gemini' ? 'GEMINI_IMAGE_COST_PER_IMAGE' : 'OPENAI_IMAGE_COST_PER_IMAGE';
-    const costPerImage = await this.getNumberSetting(
-      imageCostKey as keyof typeof SETTING_DEFAULTS,
-      Number(SETTING_DEFAULTS[imageCostKey as keyof typeof SETTING_DEFAULTS]?.value ?? SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value),
-    );
+    const { imageBackend, imageProvider, imageModel, costPerImage } = await this.resolveImageModelCost();
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
     const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
     const imageQuality = await this.getStringSetting('OPENAI_IMAGE_QUALITY', 'medium');
@@ -1187,9 +1177,34 @@ export class GenerationService implements OnModuleInit {
       age: supportingCharAges?.[i] ?? null,
     }));
 
+    // Character sheets: one 3D reference per character in their outfit for this story.
+    let castSheets: Record<string, string> = {};
+    if (!isBackgroundOnly && imageBackend === 'gemini' && await this.getBooleanSetting('CHARACTER_SHEETS_ENABLED', true)) {
+      const built = await this.buildCastSheets({
+        story, hero, heroName, heroAge,
+        visualState: effectiveVisualState ?? null,
+        supportingNames: supportingCharInfoForAgePrefix.map((c) => c.name),
+        supportingAges: supportingCharInfoForAgePrefix.map((c) => c.age),
+        supportingAvatarUrls: characterAvatarUrls,
+        scenes: illustratedScenes,
+        imageProvider, imageModel, costPerImage, isSandbox,
+      });
+      castSheets = built.sheets;
+      totalCostUsd += built.costUsd;
+      if (Object.keys(castSheets).length) {
+        await this.storiesRepo.update(story.id, { storyVisualState: { ...(storyVisualState ?? ({} as StoryVisualState)), castSheets } });
+      }
+    }
+
     const buildSceneImageInput = (scene: SceneOutput, styleReferenceUrl?: string): ImageGenerationInput => {
       const firstPage = scene.pages[0];
+      const sceneRefs = this.sheetRefsFor(
+        castSheets, heroName,
+        scene.pages.flatMap((p) => p.characterDirections ?? []),
+        [scene.illustrationBrief, ...scene.pages.map((p) => p.sceneDescription ?? '')].join(' '),
+      );
       return {
+        castReferences: sceneRefs.length ? sceneRefs : undefined,
         // Change 3: embed hero+character ages in the first mention of each name
         sceneDescription: this.prefixAgesInSceneDescription(
           scene.illustrationBrief, heroName, heroAge, supportingCharInfoForAgePrefix,
@@ -1401,6 +1416,7 @@ export class GenerationService implements OnModuleInit {
     });
 
     const pages: StoryPage[] = [];
+    let expressionRedrawsLeft = await this.getNumberSetting('MAX_EXPRESSION_VARIANTS', Number(SETTING_DEFAULTS.MAX_EXPRESSION_VARIANTS.value));
     for (const scene of scenes) {
       const sceneImageUrl = sceneIllustrationMap.get(scene.sceneId);
       const sceneImageBase64 = sceneImageBase64Map.get(scene.sceneId);
@@ -1411,11 +1427,14 @@ export class GenerationService implements OnModuleInit {
         let pageImageBase64: string | undefined = sceneImageBase64;
         // Gemini marks 'reuse' when character poses/expressions are essentially unchanged
         // from the scene base image — only speech bubbles differ, so no new image is needed.
-        const needsPageSpecificExpression =
+        const wantsPageSpecificExpression =
           page.imageVariant !== 'reuse' &&
           page.pageNumber !== firstPageNumber &&
           ((page.speechBubbles?.length ?? 0) > 0 ||
             page.characterDirections?.some((c) => c.isSpeaking || c.mouthState === 'speaking'));
+        // Each redraw is a full image — cap them per story (sheets keep the reused scene image consistent).
+        const needsPageSpecificExpression = wantsPageSpecificExpression && expressionRedrawsLeft > 0;
+        if (needsPageSpecificExpression) expressionRedrawsLeft--;
 
         if (!isBackgroundOnly && sceneImageUrl && needsPageSpecificExpression) {
           try {
@@ -1433,6 +1452,10 @@ export class GenerationService implements OnModuleInit {
               style: STORYBOOK_STYLE,
               // Anchor to this scene's own illustration so hair/costume/face stay identical to the base scene image
               styleReferenceUrl: sceneImageUrl,
+              castReferences: (() => {
+                const refs = this.sheetRefsFor(castSheets, heroName, page.characterDirections ?? [], page.sceneDescription ?? '');
+                return refs.length ? refs : undefined;
+              })(),
               storyVisualState: effectiveVisualState ?? undefined,
               dialogue: page.dialogue,
               characters: page.characters,
@@ -1531,7 +1554,7 @@ export class GenerationService implements OnModuleInit {
 
     pages.sort((a, b) => a.pageNumber - b.pageNumber);
 
-    return { pages, scenes: storedScenes, totalCostUsd };
+    return { pages, scenes: storedScenes, totalCostUsd, castSheets: Object.keys(castSheets).length ? castSheets : undefined };
   }
 
   private async generateImageWithRetry(input: ImageGenerationInput, attempts = 2) {
@@ -1552,6 +1575,224 @@ export class GenerationService implements OnModuleInit {
     }
 
     throw lastError instanceof Error ? lastError : new Error('Image generation failed');
+  }
+
+  // ── Image model + cost ─────────────────────────────────────────────────────
+
+  /** List price per 1K image (USD) — the GEMINI_IMAGE_COST_PER_IMAGE setting is only a fallback for unknown models. */
+  private static readonly GEMINI_IMAGE_PRICES: Record<string, number> = {
+    'gemini-nano-banana-2.1': 0.0336,
+    'gemini-3.1-flash-lite-image': 0.0336,
+    'gemini-3.1-flash-image': 0.067,
+    'gemini-3-pro-image': 0.134,
+  };
+
+  private async resolveImageModelCost() {
+    const imageBackend = await this.getStringSetting('IMAGE_GENERATION_BACKEND', 'openai');
+    const imageProvider = imageBackend === 'gemini' ? 'gemini' : 'openai';
+    const imageModel = imageBackend === 'gemini'
+      ? await this.getStringSetting('IMAGE_GENERATION_MODEL', SETTING_DEFAULTS.IMAGE_GENERATION_MODEL.value)
+      : (this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1');
+    const knownPrice = imageBackend === 'gemini' ? GenerationService.GEMINI_IMAGE_PRICES[imageModel] : undefined;
+    const imageCostKey = imageBackend === 'gemini' ? 'GEMINI_IMAGE_COST_PER_IMAGE' : 'OPENAI_IMAGE_COST_PER_IMAGE';
+    const costPerImage = knownPrice ?? await this.getNumberSetting(
+      imageCostKey as keyof typeof SETTING_DEFAULTS,
+      Number(SETTING_DEFAULTS[imageCostKey as keyof typeof SETTING_DEFAULTS]?.value ?? SETTING_DEFAULTS['OPENAI_IMAGE_COST_PER_IMAGE'].value),
+    );
+    return { imageBackend, imageProvider, imageModel, costPerImage };
+  }
+
+  // ── Character sheets ───────────────────────────────────────────────────────
+
+  /** Renames every reference to the hero's title (e.g. "Commander", "Commander Siddhant") to the hero's name. */
+  private normalizeHeroAliases(generated: StoryGenerationOutput, heroName: string, heroTitle: string | null): void {
+    const heroWords = new Set(heroName.toLowerCase().split(/\s+/));
+    const aliases = new Set<string>();
+    if (heroTitle?.trim()) {
+      aliases.add(heroTitle.trim().toLowerCase());
+      for (const word of heroTitle.toLowerCase().split(/\s+/)) if (word.length > 2 && !heroWords.has(word)) aliases.add(word);
+      aliases.add(`${heroTitle} ${heroName}`.toLowerCase());
+    }
+    if (!aliases.size) return;
+    const fix = (name?: string) => (name && aliases.has(name.trim().toLowerCase()) ? heroName : name);
+    const pages = [...(generated.pages ?? []), ...(generated.scenes ?? []).flatMap((sc) => sc.pages)];
+    for (const page of pages as Array<Record<string, any>>) {
+      for (const b of page.speechBubbles ?? []) b.speakerName = fix(b.speakerName);
+      for (const d of page.dialogue ?? []) d.speaker = fix(d.speaker);
+      for (const d of page.characterDirections ?? []) d.name = fix(d.name);
+      for (const c of page.characters ?? []) c.name = fix(c.name);
+    }
+    for (const map of [generated.storyVisualState?.characterOutfits, generated.storyVisualState?.characterLooks]) {
+      if (!map) continue;
+      for (const key of Object.keys(map)) if (aliases.has(key.toLowerCase())) delete map[key];
+    }
+  }
+
+  /** Vision descriptions sometimes come back as refusals ("I'm unable to describe…") — never use those. */
+  private usableDescription(text?: string | null): string | null {
+    if (!text?.trim()) return null;
+    return /\b(unable to|can'?t|cannot|not able to|sorry|i'?m not)\b/i.test(text.slice(0, 120)) ? null : text.trim();
+  }
+
+  /**
+   * One 3D reference per character in their outfit for THIS story, drawn before any page. Pages then copy
+   * these sheets, so faces, outfits and art style stay identical — including villains and companions,
+   * who have no photo at all. Returns name → uploaded image URL.
+   */
+  private async buildCastSheets(params: {
+    story: Story;
+    hero: Hero;
+    heroName: string;
+    heroAge: number;
+    visualState: StoryVisualState | null;
+    supportingNames: string[];
+    supportingAges: (number | null)[];
+    supportingAvatarUrls: string[];
+    scenes: SceneOutput[];
+    imageProvider: string;
+    imageModel: string;
+    costPerImage: number;
+    isSandbox: boolean;
+  }): Promise<{ sheets: Record<string, string>; costUsd: number }> {
+    const generateSheet = this.imageProvider.generateCharacterSheet?.bind(this.imageProvider);
+    if (!generateSheet) return { sheets: {}, costUsd: 0 };
+
+    const relationships = new Map<string, string>();
+    const ids = (params.story.characterIds ?? []) as string[];
+    if (ids.length) {
+      const chars = await this.charactersRepo.find({ where: ids.map((id) => ({ id })) });
+      for (const c of chars) if (c.relationship) relationships.set(c.name.toLowerCase(), c.relationship);
+    }
+    const outfits = params.visualState?.characterOutfits ?? {};
+    const looks = params.visualState?.characterLooks ?? {};
+    const gender = (g?: string | null) => (g === 'girl' ? 'girl' : g === 'boy' ? 'boy' : 'child');
+
+    type Member = { name: string; descriptor: string; outfit?: string | null; appearance?: string | null; referenceUrl?: string | null };
+    const members: Member[] = [{
+      name: params.heroName,
+      descriptor: `${params.heroAge}-year-old ${gender(params.hero.gender)}, the hero of the story`,
+      outfit: params.visualState?.costume ?? null,
+      referenceUrl: params.hero.avatarUrl,
+      appearance: params.hero.avatarUrl ? null : this.usableDescription(params.hero.avatarDescription),
+    }];
+    params.supportingNames.forEach((name, i) => {
+      const age = params.supportingAges[i];
+      const relation = relationships.get(name.toLowerCase());
+      members.push({
+        name,
+        descriptor: [age ? `${age} years old` : null, relation ? `${params.heroName}'s ${relation.toLowerCase()}` : null]
+          .filter(Boolean).join(', ') || "a member of the hero's family",
+        outfit: outfits[name] ?? null,
+        referenceUrl: params.supportingAvatarUrls[i] || null,
+      });
+    });
+    // Characters with no photo who actually appear in the pictures (villains, creatures, companions).
+    const known = new Set(members.map((m) => m.name.toLowerCase()));
+    const appearing = new Map<string, number>();
+    for (const scene of params.scenes) {
+      for (const page of scene.pages) {
+        for (const d of page.characterDirections ?? []) {
+          if (!d.name || d.visible === false || known.has(d.name.toLowerCase())) continue;
+          appearing.set(d.name, (appearing.get(d.name) ?? 0) + 1);
+        }
+      }
+      // Villains/creatures the writer described but didn't list in characterDirections — count text mentions.
+      const sceneText = [scene.illustrationBrief, ...scene.pages.map((p) => p.sceneDescription ?? '')].join(' ').toLowerCase();
+      for (const name of Object.keys(looks)) {
+        if (known.has(name.toLowerCase())) continue;
+        if (sceneText.includes(name.toLowerCase().split(/\s+/)[0])) appearing.set(name, (appearing.get(name) ?? 0) + 1);
+      }
+    }
+    [...appearing.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).forEach(([name]) => {
+      members.push({
+        name,
+        descriptor: 'a character in this story',
+        appearance: looks[name] ?? (params.visualState?.companion?.startsWith(name) ? params.visualState.companion : null),
+        outfit: outfits[name] ?? null,
+      });
+    });
+
+    // Reuse a sheet from an earlier story of this hero when the character and outfit text are identical.
+    const sheetKey = (name: string, outfit?: string | null, appearance?: string | null) =>
+      [name, outfit ?? '', appearance ?? ''].map((x) => x.trim().toLowerCase()).join('|');
+    const reusable = new Map<string, string>();
+    const earlier = await this.storiesRepo.find({
+      where: { heroId: params.story.heroId, status: StoryStatus.Completed },
+      order: { createdAt: 'DESC' },
+      take: 10,
+    });
+    for (const prev of earlier) {
+      const vs = prev.storyVisualState;
+      for (const [name, url] of Object.entries(vs?.castSheets ?? {})) {
+        const outfit = name.toLowerCase() === params.heroName.toLowerCase() ? vs?.costume : vs?.characterOutfits?.[name];
+        const key = sheetKey(name, outfit, vs?.characterLooks?.[name]);
+        if (!reusable.has(key)) reusable.set(key, url);
+      }
+    }
+
+    const results = await this.mapWithConcurrency(members, 3, async (m) => {
+      const existing = reusable.get(sheetKey(m.name, m.outfit, m.appearance));
+      if (existing) return { name: m.name, url: existing, reused: true };
+      try {
+        const out = await generateSheet({ name: m.name, descriptor: m.descriptor, outfit: m.outfit, appearance: m.appearance, referenceUrl: m.referenceUrl });
+        if (!out.imageBase64) return null;
+        const slug = m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'character';
+        const url = await this.uploadService.uploadGeneratedImage(params.story.userId, params.story.id, `sheet-${slug}`, out.imageBase64);
+        await this.aiUsageLogsRepo.save(this.aiUsageLogsRepo.create({
+          userId: params.story.userId,
+          storyId: params.story.id,
+          universeId: params.story.universeId ?? null,
+          provider: params.imageProvider,
+          model: params.imageModel,
+          operation: AiOperation.CharacterSheetGeneration,
+          imagesGenerated: 1,
+          estimatedCostUsd: params.costPerImage,
+          isSandbox: params.isSandbox,
+        }));
+        return { name: m.name, url, reused: false };
+      } catch (err) {
+        this.logger.warn(`Character sheet failed for ${m.name}: ${err instanceof Error ? err.message : String(err)}`);
+        return null;
+      }
+    });
+
+    const sheets: Record<string, string> = {};
+    let costUsd = 0;
+    for (const r of results) {
+      if (!r) continue;
+      sheets[r.name] = r.url;
+      if (!r.reused) costUsd += params.costPerImage;
+    }
+    const reusedNames = results.filter((r) => r?.reused).map((r) => r!.name);
+    this.logger.log(
+      `Character sheets for story ${params.story.id}: ${Object.keys(sheets).join(', ') || 'none'}` +
+      (reusedNames.length ? ` (reused: ${reusedNames.join(', ')})` : ''),
+    );
+    return { sheets, costUsd };
+  }
+
+  /** The sheets for the characters in a picture — hero first, at most 4 (the model's character limit). */
+  private sheetRefsFor(
+    sheets: Record<string, string>,
+    heroName: string,
+    directions: Array<{ name?: string; visible?: boolean }>,
+    sceneText = '',
+  ): Array<{ name: string; url: string }> {
+    const first = (n: string) => n.toLowerCase().split(/\s+/)[0];
+    const find = (name: string) => {
+      const key = Object.keys(sheets).find((k) => k.toLowerCase() === name.toLowerCase())
+        ?? Object.keys(sheets).find((k) => first(k) === first(name));
+      return key ? { name: key, url: sheets[key] } : null;
+    };
+    const text = sceneText.toLowerCase();
+    const mentioned = Object.keys(sheets).filter((k) => text.includes(first(k)));
+    const names = [heroName, ...directions.filter((d) => d.name && d.visible !== false).map((d) => d.name as string), ...mentioned];
+    const refs: Array<{ name: string; url: string }> = [];
+    for (const n of names) {
+      const ref = find(n);
+      if (ref && !refs.some((r) => r.name === ref.name)) refs.push(ref);
+    }
+    return refs.slice(0, 4);
   }
 
   // ── Speech bubble placement from the finished image ───────────────────────
