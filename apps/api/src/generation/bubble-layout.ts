@@ -117,6 +117,9 @@ function candidateRects(head: Box, size: { width: number; height: number }, thin
         rects.push({ x: head.x - GAP - w, y: headCy + h * dy, width: w, height: h });          // left of head
         rects.push({ x: head.x + head.width + GAP, y: headCy + h * dy, width: w, height: h }); // right of head
       }
+      // Below the head (beside the body) — used when everything above is crowded by other characters
+      const below = head.y + head.height + GAP;
+      for (const t of [0.15, 0.5, 0.85]) rects.push({ x: headCx - w * t, y: below, width: w, height: h });
     }
     // Top band fallbacks (classic comic placement) across the width of the image
     for (const x of [MARGIN, 50 - w / 2, 100 - MARGIN - w]) rects.push({ x, y: MARGIN, width: w, height: h });
@@ -150,6 +153,7 @@ export function layoutBubbles(
 ): Array<PlacedBubble | null> {
   const faces = characters.map((c) => inflate(c.head, FACE_PADDING));
   const placed: Box[] = [];
+  const tails: Array<{ from: Point; to: Point }> = [];
 
   return bubbles.map((bubble) => {
     const speaker = findCharacter(characters, bubble.speakerName);
@@ -176,6 +180,8 @@ export function layoutBubbles(
       if (reach > 35) score += 25;                                                 // long tails are hard to follow
       if (others.some((o) => segmentHits(base, anchor, o.head))) score += 60;      // tail must not cross another face
       score += others.filter((o) => overlaps(rect, bodyOf(o.head))).length * 12;  // avoid covering other people
+      if (placed.some((other) => segmentHits(base, anchor, other))) score += 60;  // tail must not cross another bubble
+      if (tails.some((t) => segmentHits(t.from, t.to, rect))) score += 60;        // nor sit on an earlier tail
       if (!best || score < best.score) best = { rect, score };
     });
 
@@ -187,12 +193,14 @@ export function layoutBubbles(
       if (!fallback) return null;
       placed.push(fallback);
       const tip = thinking ? anchor : tailTip(tailBase(fallback, anchor), anchor, head);
+      tails.push({ from: tailBase(fallback, anchor), to: tip });
       return { bubbleRect: fallback, anchorPoint: tip, layoutConfidence: 0.4 };
     }
 
     const chosen = (best as { rect: Box; score: number }).rect;
     placed.push(chosen);
     const tip = thinking ? anchor : tailTip(tailBase(chosen, anchor), anchor, head);
+    tails.push({ from: tailBase(chosen, anchor), to: tip });
     return { bubbleRect: chosen, anchorPoint: tip, layoutConfidence: 1 };
   });
 }

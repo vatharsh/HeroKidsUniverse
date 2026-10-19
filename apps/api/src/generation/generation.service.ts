@@ -2426,15 +2426,35 @@ export class GenerationService implements OnModuleInit {
       .flatMap((p) => p.storyStateUpdate?.newPowers ?? [])
       .filter((name): name is string => typeof name === 'string' && name.trim() !== '')
       .map((name) => name.trim());
-    const allPowerNames = Array.from(new Set([...(generated.newPowers ?? []), ...powerNamesFromMemories, ...powerNamesFromPages]));
+    const allPowerNames = Array.from(new Set([
+      ...(generated.newPowers ?? []).map((p) => this.textField(p, 'name').title).filter((n): n is string => !!n),
+      ...powerNamesFromMemories,
+      ...powerNamesFromPages,
+    ]));
     const powers = allPowerNames.map((name) =>
       this.powersRepo.create({ universeId: story.universeId as string, name, description: null, emoji: null, earnedInStoryId: story.id }),
     );
     if (powers.length > 0) await this.powersRepo.save(powers);
 
-    const quests = (generated.newQuests ?? []).map((title) =>
-      this.questsRepo.create({ universeId: story.universeId as string, title, description: null, openedInStoryId: story.id, completedInStoryId: null }),
-    );
+    // The writer sometimes returns { title, detail } objects instead of strings — they were saved as raw JSON.
+    const quests = (generated.newQuests ?? [])
+      .map((q) => this.textField(q, 'title'))
+      .filter((q) => !!q.title)
+      .map(({ title, detail }) =>
+        this.questsRepo.create({ universeId: story.universeId as string, title: title!, description: detail, openedInStoryId: story.id, completedInStoryId: null }),
+      );
     if (quests.length > 0) await this.questsRepo.save(quests);
+  }
+
+  /** Accepts a plain string or a { title|name, detail|description } object from the writer. */
+  private textField(value: unknown, key: 'title' | 'name'): { title: string | null; detail: string | null } {
+    if (typeof value === 'string') return { title: value.trim() || null, detail: null };
+    if (value && typeof value === 'object') {
+      const v = value as Record<string, unknown>;
+      const title = [v[key], v.title, v.name].find((x): x is string => typeof x === 'string' && !!x.trim());
+      const detail = [v.detail, v.description].find((x): x is string => typeof x === 'string' && !!x.trim());
+      return { title: title?.trim() ?? null, detail: detail?.trim() ?? null };
+    }
+    return { title: null, detail: null };
   }
 }

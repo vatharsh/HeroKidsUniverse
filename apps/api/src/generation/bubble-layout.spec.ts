@@ -70,6 +70,22 @@ describe('layoutBubbles', () => {
     }
   });
 
+  it('keeps a tail from running through another bubble (two speakers stacked on one side)', () => {
+    // Surge p6 layout: Sparky above, Doctor Dusk directly below him on the right.
+    const sparky: LocatedCharacter = { name: 'Sparky', head: { x: 71, y: 32, width: 8, height: 11 }, mouth: { x: 74, y: 40 } };
+    const dusk: LocatedCharacter = { name: 'Doctor Dusk', head: { x: 80, y: 55, width: 9, height: 11 }, mouth: { x: 84, y: 62 } };
+    const rayaan: LocatedCharacter = { name: 'Rayaan', head: { x: 37, y: 34, width: 25, height: 24 }, mouth: { x: 49, y: 53 } };
+    const [s1, d1] = layoutBubbles([
+      { speakerName: 'Sparky', text: 'ROOOAR!' },
+      { speakerName: 'Doctor Dusk', text: 'NOOOO!' },
+    ], [rayaan, sparky, dusk]);
+    const base = { x: Math.min(d1!.bubbleRect.x + d1!.bubbleRect.width - 3, Math.max(d1!.bubbleRect.x + 3, d1!.anchorPoint.x)), y: d1!.bubbleRect.y + d1!.bubbleRect.height };
+    for (let i = 1; i < 20; i++) {
+      const p = { x: base.x + ((d1!.anchorPoint.x - base.x) * i) / 20, y: base.y + ((d1!.anchorPoint.y - base.y) * i) / 20 };
+      expect(inside(p, s1!.bubbleRect)).toBe(false);
+    }
+  });
+
   it('matches speakers by first name and returns null for speakers not in the picture', () => {
     const [byFirstName, missing] = layoutBubbles([
       { speakerName: 'Vedant', text: 'Commander, our next adventure is calling!' },
