@@ -4,6 +4,7 @@ import { DataSource, In, Repository } from 'typeorm';
 
 import { IMAGE_GENERATION_PROVIDER } from '../ai/interfaces/image-generation.provider';
 import type { ImageGenerationProvider } from '../ai/interfaces/image-generation.provider';
+import { logAvatarUsage, releaseAvatarGeneration, reserveAvatarGeneration } from '../avatars/avatar-allowance';
 import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { UploadService } from '../upload/upload.service';
 import { User, UserPlan } from '../users/user.entity';
@@ -79,7 +80,11 @@ export class CharactersService {
 
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
+      // The first avatar comes with the character slot; if it fails the user gets a refresh back to retry.
+      const reservation = await reserveAvatarGeneration(this.dataSource, userId, 'character', { referenceId: character.id, includedWithSlot: true });
       const result = await this.generateAvatar(userId, createCharacterDto.name, createCharacterDto.role, photo, undefined, character.id);
+      if (result.avatarUrl) await logAvatarUsage(this.dataSource, userId);
+      else await releaseAvatarGeneration(this.dataSource, reservation);
       character.avatarUrl = result.avatarUrl;
       character.avatarDescription = result.avatarDescription;
       character = await this.charactersRepository.save(character);
@@ -136,9 +141,14 @@ export class CharactersService {
     });
 
     if (photo) {
-      await this.consumeAvatarRefresh(userId, character.id);
+      const reservation = await reserveAvatarGeneration(this.dataSource, userId, 'character', { referenceId: character.id });
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
       const result = await this.generateAvatar(userId, character.name, character.role, photo, undefined, character.id);
+      if (!result.avatarUrl) {
+        await releaseAvatarGeneration(this.dataSource, reservation);
+        throw new BadRequestException('Avatar generation failed — you were not charged. Please try again.');
+      }
+      await logAvatarUsage(this.dataSource, userId);
       character.avatarUrl = result.avatarUrl;
       character.avatarDescription = result.avatarDescription;
     } else if (updateCharacterDto.avatarUrl !== undefined) {
@@ -164,13 +174,18 @@ export class CharactersService {
     const character = await this.findOne(userId, id);
     const oldAvatarUrl = character.avatarUrl;
 
-    const avatarRefreshTokens = await this.consumeAvatarRefresh(userId, character.id);
+    const reservation = await reserveAvatarGeneration(this.dataSource, userId, 'character', { referenceId: character.id });
     // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
     const result = await this.generateAvatar(userId, character.name, character.role, photo, adjustmentHint, character.id);
+    if (!result.avatarUrl) {
+      await releaseAvatarGeneration(this.dataSource, reservation);
+      throw new BadRequestException('Avatar refresh failed — you were not charged. Please try again.');
+    }
+    await logAvatarUsage(this.dataSource, userId);
     character.avatarUrl = result.avatarUrl;
     character.avatarDescription = result.avatarDescription;
-    if (!character.avatarUrl) throw new BadRequestException('Avatar refresh failed. Please try again.');
     await this.charactersRepository.save(character);
+    const { avatarRefreshTokens } = await this.usersRepository.findOneOrFail({ where: { id: userId } });
 
     if (oldAvatarUrl && oldAvatarUrl !== character.avatarUrl) {
       await this.uploadService.deleteObject(oldAvatarUrl);
@@ -262,33 +277,6 @@ export class CharactersService {
 
   private hasAvailableCharacterSlot(user: User): boolean {
     return user.plan === UserPlan.Premium || user.characterSlotsTotal < 0 || user.characterSlotsUsed < user.characterSlotsTotal;
-  }
-
-  private async consumeAvatarRefresh(userId: string, characterId: string): Promise<number> {
-    return this.dataSource.transaction(async (manager) => {
-      const user = await manager.findOne(User, {
-        where: { id: userId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!user) throw new NotFoundException('User not found');
-      if (user.avatarRefreshTokens < 1) {
-        throw new BadRequestException('You have no Avatar Refreshes remaining. Buy an Avatar Refresh pack to try another look.');
-      }
-
-      user.avatarRefreshTokens -= 1;
-      await manager.save(user);
-      await manager.save(
-        manager.create(CreditTransaction, {
-          userId,
-          delta: 0,
-          reason: CreditTransactionReason.AvatarRefreshUsed,
-          referenceId: characterId,
-          avatarRefreshTokensDelta: -1,
-        }),
-      );
-
-      return user.avatarRefreshTokens;
-    });
   }
 
   private serializeEconomy(user: User) {

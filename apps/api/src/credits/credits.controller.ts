@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -35,12 +35,22 @@ export class CreditsController {
 
   @Post('demo')
   claimDemoCredit(@CurrentUser() currentUser: CurrentUserPayload) {
+    assertTestPurchaseAllowed(currentUser);
     return this.creditsService.claimDemoCredit(currentUser.id);
   }
 
+  @Post('packs/quote')
+  quoteCoupon(@CurrentUser() currentUser: CurrentUserPayload, @Body('couponCode') couponCode: string) {
+    return this.creditPacksService.quoteCoupon(currentUser.id, couponCode ?? '');
+  }
+
   @Post('packs/:id/purchase/initiate')
-  initiatePurchase(@CurrentUser() currentUser: CurrentUserPayload, @Param('id') id: string) {
-    return this.creditPacksService.initiatePurchase(currentUser.id, id);
+  initiatePurchase(
+    @CurrentUser() currentUser: CurrentUserPayload,
+    @Param('id') id: string,
+    @Body('couponCode') couponCode?: string,
+  ) {
+    return this.creditPacksService.initiatePurchase(currentUser.id, id, couponCode);
   }
 
   @Post('packs/:id/purchase/mock')
@@ -48,8 +58,10 @@ export class CreditsController {
     @CurrentUser() currentUser: CurrentUserPayload,
     @Param('id') id: string,
     @Body('paymentMethod') paymentMethod?: string,
+    @Body('couponCode') couponCode?: string,
   ) {
-    return this.creditPacksService.mockPurchase(currentUser.id, id, paymentMethod);
+    assertTestPurchaseAllowed(currentUser);
+    return this.creditPacksService.mockPurchase(currentUser.id, id, paymentMethod, couponCode);
   }
 
   @Post('packs/:id/purchase/verify')
@@ -65,5 +77,12 @@ export class CreditsController {
       body.razorpayPaymentId,
       body.razorpaySignature,
     );
+  }
+}
+
+/** Free-credit test endpoints (mock purchase, demo credit) — never open to customers in production. */
+function assertTestPurchaseAllowed(user: CurrentUserPayload) {
+  if (process.env.NODE_ENV === 'production' && user.role !== 'admin') {
+    throw new ForbiddenException('Not available');
   }
 }

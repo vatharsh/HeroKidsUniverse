@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
+import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
 import {
   IMAGE_GENERATION_PROVIDER,
 } from '../ai/interfaces/image-generation.provider';
@@ -14,12 +15,10 @@ import type {
   ImageGenerationOutput,
   ImageGenerationProvider,
 } from '../ai/interfaces/image-generation.provider';
-import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { UploadService } from '../upload/upload.service';
 import { User } from '../users/user.entity';
 import { UserAvatar } from './entities/user-avatar.entity';
-
-const HERO_AVATAR_MAX      = 2;
+import { logAvatarUsage, releaseAvatarGeneration, reserveAvatarGeneration } from './avatar-allowance';
 
 @Injectable()
 export class AvatarsService {
@@ -46,7 +45,7 @@ export class AvatarsService {
     return {
       customAvatars:            avatars.map((a) => a.avatarUrl),
       heroGenerationsUsed:      user.heroAvatarGenerationsUsed,
-      heroGenerationsMax:       HERO_AVATAR_MAX,
+      heroGenerationsMax:       await this.freeHeroAvatarLimit(),
       avatarRefreshTokens:      user.avatarRefreshTokens,
       characterGenerationsUsed: user.characterAvatarGenerationsUsed,
       characterGenerationsMax:  user.avatarRefreshTokens,
@@ -59,53 +58,30 @@ export class AvatarsService {
     type: 'hero' | 'character',
     adjustmentHint?: string,
   ): Promise<{ avatarUrl: string }> {
-    const user = await this.userRepo.findOneOrFail({ where: { id: userId } });
-
-    // Hero gets HERO_AVATAR_MAX free generations; after that it costs a refresh token like characters
-    const heroFreeRemaining = type === 'hero'
-      ? Math.max(0, HERO_AVATAR_MAX - user.heroAvatarGenerationsUsed)
-      : 0;
-    const needsRefreshToken = type === 'character' || heroFreeRemaining === 0;
-
-    if (needsRefreshToken && user.avatarRefreshTokens < 1) {
-      throw new BadRequestException(
-        type === 'hero'
-          ? `Your ${HERO_AVATAR_MAX} free hero avatar generations have been used. Buy an Avatar Refresh pack to generate more.`
-          : 'You have no Avatar Refreshes remaining. Buy an Avatar Refresh pack to try another look.',
-      );
-    }
-
-    const output = await this.imageProvider.generateAvatar({
-      name: 'character',
-      photoBuffer: photo.buffer,
-      photoMimeType: photo.mimetype,
-      adjustmentHint: adjustmentHint?.trim() || undefined,
-    });
+    // Paid for up front (free allowance or a refresh) and refunded if anything fails.
+    const reservation = await reserveAvatarGeneration(this.dataSource, userId, type);
 
     let avatarUrl: string;
     try {
+      const output = await this.imageProvider.generateAvatar({
+        name: 'character',
+        photoBuffer: photo.buffer,
+        photoMimeType: photo.mimetype,
+        adjustmentHint: adjustmentHint?.trim() || undefined,
+      });
       avatarUrl = await this.persist(userId, output, type);
     } catch (err) {
+      await releaseAvatarGeneration(this.dataSource, reservation);
       this.logger.error(
-        `Avatar persist failed for user ${userId}: ${err instanceof Error ? err.message : 'unknown'}`,
+        `Avatar generation failed for user ${userId}: ${err instanceof Error ? err.message : 'unknown'}`,
       );
-      throw new BadRequestException('Avatar generation failed. Please try again.');
+      throw new BadRequestException('Avatar generation failed — you were not charged. Please try again.');
     }
 
-    // Save record and update counters only after successful upload
+    await logAvatarUsage(this.dataSource, userId);
     await this.avatarRepo.save(
       this.avatarRepo.create({ userId, avatarUrl, type }),
     );
-
-    if (type === 'hero') {
-      await this.userRepo.increment({ id: userId }, 'heroAvatarGenerationsUsed', 1);
-      if (needsRefreshToken) {
-        await this.consumeAvatarRefresh(userId);
-      }
-    } else {
-      await this.consumeAvatarRefresh(userId);
-      await this.userRepo.increment({ id: userId }, 'characterAvatarGenerationsUsed', 1);
-    }
 
     return { avatarUrl };
   }
@@ -134,28 +110,8 @@ export class AvatarsService {
     throw new Error('No image data returned from AI provider');
   }
 
-  private async consumeAvatarRefresh(userId: string): Promise<void> {
-    await this.dataSource.transaction(async (manager) => {
-      const user = await manager.findOne(User, {
-        where: { id: userId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!user) throw new BadRequestException('User not found');
-      if (user.avatarRefreshTokens < 1) {
-        throw new BadRequestException('You have no Avatar Refreshes remaining. Buy an Avatar Refresh pack to try another look.');
-      }
-
-      user.avatarRefreshTokens -= 1;
-      await manager.save(user);
-      await manager.save(
-        manager.create(CreditTransaction, {
-          userId,
-          delta: 0,
-          reason: CreditTransactionReason.AvatarRefreshUsed,
-          referenceId: null,
-          avatarRefreshTokensDelta: -1,
-        }),
-      );
-    });
+  private async freeHeroAvatarLimit(): Promise<number> {
+    const row = await this.dataSource.getRepository(PlatformSetting).findOne({ where: { key: 'FREE_HERO_AVATAR_GENERATIONS' } });
+    return Number(row?.value ?? SETTING_DEFAULTS.FREE_HERO_AVATAR_GENERATIONS.value);
   }
 }

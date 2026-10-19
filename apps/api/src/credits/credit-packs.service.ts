@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,6 +12,9 @@ import type Razorpay from 'razorpay';
 import { DataSource, Repository } from 'typeorm';
 
 import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
+import { CouponDiscountType, CouponType, InfluencerCouponCode } from '../influencers/influencer-coupon-code.entity';
+import { InfluencerCommission } from '../influencers/influencer-commission.entity';
+import { InfluencersService } from '../influencers/influencers.service';
 import { OrderStatusHistory } from '../merchandise/order-status-history.entity';
 import { CommerceOrderStatus, CommerceOrderType, Order } from '../merchandise/orders/order.entity';
 import { User } from '../users/user.entity';
@@ -19,8 +23,27 @@ import { CreditTransaction, CreditTransactionReason } from './credit-transaction
 
 type CreditPackPayload = Partial<CreditPack>;
 
+/** What a pack costs this user, with the coupon (if any) already applied. */
+export interface PackPricing {
+  subtotal: number;
+  discount: number;
+  total: number;
+  coupon: {
+    code: string;
+    couponCodeId: string;
+    influencerId: string | null;
+    couponType: CouponType;
+    discountType: CouponDiscountType;
+    discountValue: number;
+  } | null;
+}
+
+/** Razorpay's smallest chargeable amount. */
+const MIN_CHARGE_INR = 1;
+
 @Injectable()
 export class CreditPacksService {
+  private readonly logger = new Logger(CreditPacksService.name);
   private _razorpay: Razorpay | null = null;
 
   private get razorpay(): Razorpay {
@@ -51,6 +74,7 @@ export class CreditPacksService {
     @InjectRepository(PlatformSetting)
     private readonly platformSettingsRepository: Repository<PlatformSetting>,
     private readonly dataSource: DataSource,
+    private readonly influencersService: InfluencersService,
   ) {}
 
   computeEffectivePrice(pack: CreditPack): { effectivePrice: number; isOnSale: boolean; savingsAmount: number; savingsPct: number } {
@@ -147,20 +171,55 @@ export class CreditPacksService {
     return { id, deleted: true };
   }
 
-  async initiatePurchase(userId: string, packId: string): Promise<{ razorpayOrderId: string; amount: number; currency: string; keyId: string }> {
+  /** Prices every active pack with a coupon so the shop can show the discounted amounts before paying. */
+  async quoteCoupon(userId: string, code: string) {
+    const packs = await this.creditPacksRepository.find({ where: { isActive: true, isDeleted: false } });
+    const quotes: Record<string, { subtotal: number; discount: number; total: number; error?: string }> = {};
+    let firstError: string | undefined;
+    for (const pack of packs) {
+      try {
+        const { subtotal, discount, total } = await this.priceWithCoupon(userId, pack, code);
+        quotes[pack.id] = { subtotal, discount, total };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Coupon could not be applied';
+        firstError ??= message;
+        const { effectivePrice } = this.computeEffectivePrice(pack);
+        quotes[pack.id] = { subtotal: effectivePrice, discount: 0, total: effectivePrice, error: message };
+      }
+    }
+    const valid = Object.values(quotes).some((q) => q.discount > 0);
+    return { valid, code: code.trim().toUpperCase(), errorMessage: valid ? undefined : firstError ?? 'Coupon could not be applied', quotes };
+  }
+
+  async initiatePurchase(
+    userId: string,
+    packId: string,
+    couponCode?: string,
+  ): Promise<{ razorpayOrderId: string; amount: number; subtotal: number; discount: number; currency: string; keyId: string }> {
     const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isActive: true, isDeleted: false } });
     if (!pack) throw new NotFoundException('Credit pack not found');
 
-    const { effectivePrice } = this.computeEffectivePrice(pack);
+    const pricing = await this.priceWithCoupon(userId, pack, couponCode);
+    // Everything needed to credit the purchase travels with the Razorpay order, so verify
+    // trusts what was priced here rather than what the client sends back.
     const order = await this.razorpay.orders.create({
-      amount: Math.round(effectivePrice * 100),
+      amount: Math.round(pricing.total * 100),
       currency: pack.currency,
-      notes: { userId, packId, packName: pack.name },
+      notes: {
+        userId,
+        packId,
+        packName: pack.name,
+        subtotal: String(pricing.subtotal),
+        discount: String(pricing.discount),
+        couponCodeId: pricing.coupon?.couponCodeId ?? '',
+      },
     });
 
     return {
       razorpayOrderId: order.id,
-      amount: effectivePrice,
+      amount: pricing.total,
+      subtotal: pricing.subtotal,
+      discount: pricing.discount,
       currency: pack.currency,
       keyId: process.env.RAZORPAY_KEY_ID ?? '',
     };
@@ -189,12 +248,49 @@ export class CreditPacksService {
       throw new ConflictException('Payment already processed');
     }
 
+    // The signature only proves this payment belongs to this order — the order itself says
+    // who paid, for which pack, and how much (a cheap order must not unlock a bigger pack).
+    const rzpOrder = await this.razorpay.orders.fetch(razorpayOrderId);
+    const notes = (rzpOrder.notes ?? {}) as Record<string, string | number | undefined>;
+    if (notes.userId !== userId || notes.packId !== packId) {
+      throw new BadRequestException('This payment does not match the selected pack');
+    }
+
     const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isDeleted: false } });
     if (!pack) throw new NotFoundException('Credit pack not found');
-    const { effectivePrice } = this.computeEffectivePrice(pack);
 
-    const result = await this.dataSource.transaction(async (manager) => {
-      const user = await manager.findOne(User, { where: { id: userId } });
+    const total = round2(Number(rzpOrder.amount) / 100);
+    const subtotal = Number(notes.subtotal ?? total);
+    const discount = Number(notes.discount ?? 0);
+    const couponCodeId = typeof notes.couponCodeId === 'string' && notes.couponCodeId ? notes.couponCodeId : null;
+
+    const result = await this.creditUser(userId, pack, total, razorpayOrderId, razorpayPaymentId);
+    await this.recordCreditOrder(userId, pack, { subtotal, discount, total }, couponCodeId, razorpayOrderId, razorpayPaymentId, result.user);
+    return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
+  }
+
+  /** Test-only purchase that skips Razorpay; the controller blocks it in production for non-admins. */
+  async mockPurchase(
+    userId: string,
+    packId: string,
+    paymentMethod = 'mock',
+    couponCode?: string,
+  ): Promise<{ newBalance: number; characterSlotsTotal: number; avatarRefreshTokens: number }> {
+    const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isActive: true, isDeleted: false } });
+    if (!pack) throw new NotFoundException('Credit pack not found');
+
+    const pricing = await this.priceWithCoupon(userId, pack, couponCode);
+    const mockPaymentId = `${paymentMethod}_mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const mockOrderId = `mock_order_${Date.now()}`;
+
+    const result = await this.creditUser(userId, pack, pricing.total, mockOrderId, mockPaymentId);
+    await this.recordCreditOrder(userId, pack, pricing, pricing.coupon?.couponCodeId ?? null, mockOrderId, mockPaymentId, result.user);
+    return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
+  }
+
+  private async creditUser(userId: string, pack: CreditPack, pricePaid: number, razorpayOrderId: string, razorpayPaymentId: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const user = await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
       if (!user) throw new NotFoundException('User not found');
 
       const alreadyProcessed = await manager.findOne(CreditTransaction, {
@@ -218,7 +314,7 @@ export class CreditPacksService {
           avatarRefreshTokensDelta: pack.avatarRefreshTokens,
           packId: pack.id,
           packName: pack.name,
-          pricePaid: effectivePrice,
+          pricePaid,
           razorpayOrderId,
           razorpayPaymentId,
         }),
@@ -226,52 +322,57 @@ export class CreditPacksService {
 
       return { user, newBalance: user.credits, characterSlotsTotal: user.characterSlotsTotal, avatarRefreshTokens: user.avatarRefreshTokens };
     });
-
-    void this.createCreditOrder(userId, pack, effectivePrice, razorpayOrderId, razorpayPaymentId, result.user);
-    return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
   }
 
-  async mockPurchase(
-    userId: string,
-    packId: string,
-    paymentMethod = 'mock',
-  ): Promise<{ newBalance: number; characterSlotsTotal: number; avatarRefreshTokens: number }> {
-    const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isActive: true, isDeleted: false } });
-    if (!pack) throw new NotFoundException('Credit pack not found');
+  /**
+   * Prices a pack for this user. Coupons work on credit packs exactly like on store orders
+   * (influencer or site-wide), but the discount is capped by CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT
+   * so a generous coupon plus an influencer commission can't push a pack below cost.
+   */
+  private async priceWithCoupon(userId: string, pack: CreditPack, couponCode?: string): Promise<PackPricing> {
+    const subtotal = this.computeEffectivePrice(pack).effectivePrice;
+    const code = couponCode?.trim();
+    if (!code) return { subtotal, discount: 0, total: subtotal, coupon: null };
 
-    const { effectivePrice } = this.computeEffectivePrice(pack);
-    const mockPaymentId = `mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const mockOrderId = `mock_order_${Date.now()}`;
-
-    const result = await this.dataSource.transaction(async (manager) => {
-      const user = await manager.findOne(User, { where: { id: userId } });
-      if (!user) throw new NotFoundException('User not found');
-
-      this.applyPackToUser(user, pack);
-      await manager.save(user);
-
-      await manager.save(
-        manager.create(CreditTransaction, {
-          userId,
-          delta: this.getStoryCreditDelta(pack),
-          reason: CreditTransactionReason.Purchase,
-          referenceId: mockOrderId,
-          bonusCredits: pack.bonusCredits,
-          characterSlotsDelta: pack.characterSlots,
-          avatarRefreshTokensDelta: pack.avatarRefreshTokens,
-          packId: pack.id,
-          packName: pack.name,
-          pricePaid: effectivePrice,
-          razorpayOrderId: mockOrderId,
-          razorpayPaymentId: `${paymentMethod}_${mockPaymentId}`,
-        }),
-      );
-
-      return { user, newBalance: user.credits, characterSlotsTotal: user.characterSlotsTotal, avatarRefreshTokens: user.avatarRefreshTokens };
+    const coupon = await this.influencersService.validateCoupon(code, {
+      subtotalAmount: subtotal,
+      productIds: [pack.id],
+      userId,
     });
+    if (!coupon.valid || !coupon.couponCodeId || !coupon.discountType || !coupon.couponType) {
+      throw new BadRequestException(coupon.errorMessage ?? 'Coupon code is not valid');
+    }
 
-    void this.createCreditOrder(userId, pack, effectivePrice, mockOrderId, `${paymentMethod}_${mockPaymentId}`, result.user);
-    return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
+    let discount = coupon.discountType === CouponDiscountType.Percentage
+      ? round2((subtotal * (coupon.discountValue ?? 0)) / 100)
+      : Math.min(coupon.discountValue ?? 0, subtotal);
+    if (coupon.maxDiscountAmount !== null && coupon.maxDiscountAmount !== undefined) {
+      discount = Math.min(discount, coupon.maxDiscountAmount);
+    }
+    const maxPct = await this.getNumberSetting('CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT');
+    discount = Math.min(discount, round2((subtotal * maxPct) / 100), subtotal - MIN_CHARGE_INR);
+    // Whole rupees, so the shop shows clean prices (₹134, not ₹134.10).
+    discount = Math.max(0, Math.floor(discount));
+
+    return {
+      subtotal,
+      discount,
+      total: round2(subtotal - discount),
+      coupon: {
+        code: coupon.code ?? code,
+        couponCodeId: coupon.couponCodeId,
+        influencerId: coupon.influencerId ?? null,
+        couponType: coupon.couponType,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue ?? 0,
+      },
+    };
+  }
+
+  private async getNumberSetting(key: string): Promise<number> {
+    const row = await this.platformSettingsRepository.findOne({ where: { key } });
+    const value = Number(row?.value ?? SETTING_DEFAULTS[key]?.value);
+    return Number.isFinite(value) ? value : 0;
   }
 
   private async isSandboxMode(): Promise<boolean> {
@@ -286,43 +387,86 @@ export class CreditPacksService {
     return `HKU-CP-${stamp}-${random}`;
   }
 
-  private async createCreditOrder(
+  /** Writes the purchase into Orders (so it shows in admin/reports) and settles the coupon: usage + influencer commission. */
+  private async recordCreditOrder(
     userId: string,
     pack: CreditPack,
-    effectivePrice: number,
+    pricing: { subtotal: number; discount: number; total: number },
+    couponCodeId: string | null,
     razorpayOrderId: string,
     razorpayPaymentId: string,
     user: User,
   ): Promise<void> {
-    const isSandbox = await this.isSandboxMode();
-    const order = this.ordersRepository.create({
-      userId,
-      orderNumber: this.generateOrderNumber(),
-      orderType: CommerceOrderType.CreditPurchase,
-      status: CommerceOrderStatus.DigitalReady,
-      subtotalAmount: effectivePrice,
-      discountAmount: 0,
-      shippingAmount: 0,
-      taxAmount: 0,
-      totalAmount: effectivePrice,
-      currency: pack.currency ?? 'INR',
-      customerName: user.name ?? null,
-      customerEmail: user.email ?? null,
-      customerPhone: null,
-      paymentMethod: null,
-      adminNotes: `Credit pack: ${pack.name} | +${pack.credits + pack.bonusCredits} credits | Razorpay: ${razorpayPaymentId}`,
-      isSandbox,
-    });
-    const saved = await this.ordersRepository.save(order);
-    await this.statusHistoryRepository.save(
-      this.statusHistoryRepository.create({
-        orderId: saved.id,
-        oldStatus: null,
-        newStatus: CommerceOrderStatus.DigitalReady,
-        note: `Credit pack purchase: ${pack.name}`,
-        changedByUserId: userId,
-      }),
-    );
+    try {
+      const isSandbox = await this.isSandboxMode();
+      const coupon = couponCodeId
+        ? await this.dataSource.getRepository(InfluencerCouponCode).findOne({ where: { id: couponCodeId } })
+        : null;
+      const isInfluencerCoupon = !!coupon?.influencerId && coupon.couponType !== CouponType.Platform;
+
+      const order = await this.ordersRepository.save(this.ordersRepository.create({
+        userId,
+        orderNumber: this.generateOrderNumber(),
+        orderType: CommerceOrderType.CreditPurchase,
+        status: CommerceOrderStatus.DigitalReady,
+        subtotalAmount: pricing.subtotal,
+        discountAmount: pricing.discount,
+        couponCode: coupon?.code ?? null,
+        couponCodeId: coupon?.id ?? null,
+        influencerId: isInfluencerCoupon ? coupon.influencerId : null,
+        couponType: coupon?.couponType ?? null,
+        couponDiscountType: coupon?.discountType ?? null,
+        couponDiscountValue: coupon ? Number(coupon.discountValue) : null,
+        couponDiscountAmount: coupon ? pricing.discount : null,
+        shippingAmount: 0,
+        taxAmount: 0,
+        totalAmount: pricing.total,
+        currency: pack.currency ?? 'INR',
+        customerName: user.name ?? null,
+        customerEmail: user.email ?? null,
+        customerPhone: null,
+        paymentMethod: null,
+        adminNotes: `Credit pack: ${pack.name} | +${pack.credits + pack.bonusCredits} credits | Razorpay: ${razorpayPaymentId}`,
+        isSandbox,
+      }));
+      await this.statusHistoryRepository.save(
+        this.statusHistoryRepository.create({
+          orderId: order.id,
+          oldStatus: null,
+          newStatus: CommerceOrderStatus.DigitalReady,
+          note: `Credit pack purchase: ${pack.name}${coupon ? ` (coupon ${coupon.code})` : ''}`,
+          changedByUserId: userId,
+        }),
+      );
+
+      if (!coupon) return;
+      if (isInfluencerCoupon && coupon.influencerId) {
+        await this.influencersService.createCommissionForOrder({
+          influencerId: coupon.influencerId,
+          couponCodeId: coupon.id,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          userId,
+          subtotalAmount: pricing.subtotal,
+          orderTotal: pricing.total,
+          discountAmount: pricing.discount,
+          shippingAmount: 0,
+          taxAmount: 0,
+        });
+        const commission = await this.dataSource.getRepository(InfluencerCommission).findOne({ where: { orderId: order.id } });
+        if (commission) {
+          await this.ordersRepository.update(order.id, {
+            influencerCommissionRate: Number(commission.commissionRate),
+            influencerCommissionAmount: Number(commission.commissionAmount),
+          });
+        }
+      } else {
+        await this.influencersService.recordCouponUsageForOrder(coupon.id, userId, order.id);
+      }
+    } catch (err) {
+      // Credits are already in the user's wallet — a bookkeeping failure must not fail the purchase.
+      this.logger.error(`Credit order bookkeeping failed for payment ${razorpayPaymentId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private validatePackInput(dto: CreditPackPayload) {

@@ -1,9 +1,10 @@
 import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 import { IMAGE_GENERATION_PROVIDER } from '../ai/interfaces/image-generation.provider';
 import type { ImageGenerationProvider } from '../ai/interfaces/image-generation.provider';
+import { logAvatarUsage, releaseAvatarGeneration, reserveAvatarGeneration } from '../avatars/avatar-allowance';
 import { Story } from '../stories/story.entity';
 import { UploadService } from '../upload/upload.service';
 import { CreateHeroDto } from './dto/create-hero.dto';
@@ -24,6 +25,7 @@ export class HeroesService {
     private readonly uploadService: UploadService,
     @Inject(IMAGE_GENERATION_PROVIDER)
     private readonly imageProvider: ImageGenerationProvider,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(
@@ -38,7 +40,7 @@ export class HeroesService {
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
       // heroId not available yet (entity not saved), so upload uses a random UUID prefix.
-      const result = await this.generateAvatar(userId, createHeroDto.name, photo);
+      const result = await this.generateChargedAvatar(userId, createHeroDto.name, photo);
       avatarUrl = result.avatarUrl;
       avatarDescription = result.avatarDescription;
       characterIdentity = result.characterIdentity;
@@ -90,7 +92,7 @@ export class HeroesService {
 
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
-      const result = await this.generateAvatar(userId, hero.name ?? 'Hero', photo, hero.id);
+      const result = await this.generateChargedAvatar(userId, hero.name ?? 'Hero', photo, hero.id);
       hero.avatarUrl = result.avatarUrl;
       hero.avatarDescription = result.avatarDescription;
       hero.characterIdentity = result.characterIdentity;
@@ -192,6 +194,18 @@ export class HeroesService {
     }
 
     return age;
+  }
+
+  /**
+   * A parent's hero avatar uses the account's free allowance, then Avatar Refreshes — the same
+   * rules as the avatar studio. Creating or editing heroes used to generate avatars with no limit.
+   */
+  private async generateChargedAvatar(userId: string, name: string, photo: Express.Multer.File, heroId?: string) {
+    const reservation = await reserveAvatarGeneration(this.dataSource, userId, 'hero', { referenceId: heroId ?? null });
+    const result = await this.generateAvatar(userId, name, photo, heroId);
+    if (!result.avatarUrl) await releaseAvatarGeneration(this.dataSource, reservation);
+    else await logAvatarUsage(this.dataSource, userId);
+    return result;
   }
 
   private async generateAvatar(

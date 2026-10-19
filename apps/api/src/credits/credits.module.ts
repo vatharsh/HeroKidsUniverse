@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlatformSetting } from '../admin/platform-setting.entity';
 import { Order } from '../merchandise/orders/order.entity';
 import { OrderStatusHistory } from '../merchandise/order-status-history.entity';
+import { InfluencersModule } from '../influencers/influencers.module';
 import { User } from '../users/user.entity';
 import { CreditPack } from './credit-pack.entity';
 import { CreditPacksService } from './credit-packs.service';
@@ -12,7 +13,10 @@ import { CreditsController } from './credits.controller';
 import { CreditsService } from './credits.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CreditPack, CreditTransaction, User, Order, OrderStatusHistory, PlatformSetting])],
+  imports: [
+    InfluencersModule,
+    TypeOrmModule.forFeature([CreditPack, CreditTransaction, User, Order, OrderStatusHistory, PlatformSetting]),
+  ],
   controllers: [CreditsController],
   providers: [CreditsService, CreditPacksService],
   exports: [CreditPacksService],

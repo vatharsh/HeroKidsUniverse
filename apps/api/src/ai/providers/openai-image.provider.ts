@@ -601,27 +601,25 @@ Description to parse:
       'Output: single portrait, head and shoulders, centred, no text, no watermark, no border.',
     ].filter(Boolean).join('\n');
 
-    try {
-      if (input.photoBuffer) {
-        const image = await toFile(
-          input.photoBuffer,
-          'character-reference.png',
-          { type: input.photoMimeType ?? 'image/png' },
-        );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const edited = await (this.client.images.edit as any)({
-          model: this.model,
-          image,
-          prompt,
-          n: 1,
-          size: '1024x1024',
-          quality: 'high',
-          input_fidelity: 'high',
-        });
-        return this.fromImageResponse(edited);
-      }
-    } catch {
-      // Fall through to text-to-image generation below. The caller logs the failure context.
+    if (input.photoBuffer) {
+      // No text-only fallback when a photo was given: it drew a stranger's face and the parent still paid.
+      // Failing lets the caller refund so they can retry.
+      const image = await toFile(
+        input.photoBuffer,
+        'character-reference.png',
+        { type: input.photoMimeType ?? 'image/png' },
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const edited = await (this.client.images.edit as any)({
+        model: this.model,
+        image,
+        prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'high',
+        input_fidelity: 'high',
+      });
+      return this.fromImageResponse(edited);
     }
 
     const generated = await this.client.images.generate({
