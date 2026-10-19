@@ -8,11 +8,15 @@ export interface NarrationInput {
   accent?: string;
   tone?: string;
   audience?: string;
+  /** Provider model id, e.g. gemini-3.8-flash-tts (from settings). */
+  model?: string;
 }
 
 export interface NarrationOutput {
   audioUrl: string;
   audioBuffer?: Buffer;
+  /** Length of the audio when known (Gemini bills per second of audio). */
+  durationSeconds?: number;
 }
 
 export interface NarrationProvider {

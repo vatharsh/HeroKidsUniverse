@@ -178,6 +178,8 @@ export interface StoryVisualState {
   characterLooks?: Record<string, string>;
   /** Per-story 3D character sheet image URL by character name (references for every page). */
   castSheets?: Record<string, string>;
+  /** The exact name|outfit|look each sheet was drawn from — a later story reuses a sheet only on an exact match. */
+  castSheetKeys?: Record<string, string>;
 }
 
 export interface StoryScene {

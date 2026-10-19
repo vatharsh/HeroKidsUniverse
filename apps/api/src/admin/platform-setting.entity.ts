@@ -64,6 +64,7 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   FREE_SIGNUP_CREDITS:            { value: '0',   type: 'number',  description: 'Full story credits awarded automatically on signup' },
   FREE_PREVIEW_STORIES:           { value: '1',   type: 'number',  description: 'Free preview stories awarded on signup (used only when the user has no regular credits)' },
   FREE_PREVIEW_PAGES:             { value: '3',   type: 'number',  description: 'Number of pages in a free preview story' },
+  STORY_HINGLISH_LEVEL:           { value: 'light', type: 'string', description: 'Everyday Hindi in dialogue: none | light (at most 2 expressions per page such as "Arre!", "Chalo!")' },
   STORY_GENERATION_MODEL:         { value: 'gemini-3.8-flash', type: 'string', description: 'Gemini model that writes stories (fallbacks are same-tier only)' },
   SPEECH_BUBBLE_DETECTION_ENABLED: { value: 'true', type: 'boolean', description: 'Find each character\'s head and mouth in the finished image and place speech bubbles next to the real speaker' },
   BUBBLE_DETECTION_MODEL:         { value: 'gemini-3.8-flash', type: 'string', description: 'Gemini vision model used to locate characters for speech bubble placement' },
@@ -85,7 +86,8 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   // TTS voice and narration
   TTS_PROVIDER:                     { value: 'gemini', type: 'string',  description: 'TTS backend: openai (gpt-4o-mini-tts) | gemini (gemini-2.5-flash-preview-tts). Gemini supports true Indian English accent.' },
   TTS_VOICE:                        { value: 'nova',   type: 'string',  description: 'OpenAI TTS voice (nova, alloy, echo, fable, onyx, shimmer). Used when TTS_PROVIDER=openai.' },
-  GEMINI_TTS_VOICE:                 { value: 'Kore',   type: 'string',  description: 'Gemini TTS voice name (Kore, Puck, Charon, Fenrir, Aoede, Zephyr). Used when TTS_PROVIDER=gemini. Kore = warm female storyteller.' },
+  GEMINI_TTS_VOICE:                 { value: 'en-in-concierge-5', type: 'string', description: 'Gemini voice library id for narration (Indian-English voices: en-in-*, e.g. en-in-concierge-5 warm 56-year-old woman)' },
+  GEMINI_TTS_MODEL:                 { value: 'gemini-3.8-flash-tts', type: 'string', description: 'Gemini TTS model (gemini-3.8-flash-tts | gemini-3.8-flash-lite-tts)' },
   TTS_SPEED_RATIO:                  { value: '0.9',    type: 'number',  description: 'TTS speech rate (0.25–4.0). 0.9 = slightly slower for children.' },
   TTS_ACCENT_STYLE:                 { value: 'indian_english', type: 'string', description: 'Narration accent hint passed to TTS instructions (indian_english, neutral_english).' },
   TTS_TONE:                         { value: 'warm_bedtime_story', type: 'string', description: 'Narration tone hint passed to TTS instructions.' },

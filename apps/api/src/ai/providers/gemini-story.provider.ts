@@ -5,6 +5,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Repository } from 'typeorm';
 
 import { PlatformSetting, SETTING_DEFAULTS } from '../../admin/platform-setting.entity';
+import { indianVoiceGuide } from '../indian-voice-guide';
 
 import {
   StoryGenerationInput,
@@ -156,6 +157,7 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
       this.logger.log(`[PROMPT] story_generation v${dbVersion.version} (id=${dbVersion.id}) — DB version active`);
       const prompt = [
         this.promptRegistry.renderPrompt(dbVersion.promptText, vars),
+        indianVoiceGuide(await this.getHinglishLevel()),
         this.buildRuntimeQualityContract(),
       ].join('\n\n');
       return { prompt, activePromptVersion: dbVersion };
@@ -163,6 +165,11 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
 
     this.logger.warn(`[PROMPT] story_generation — using hardcoded fallback (DB: ${dbVersion ? `legacy v${dbVersion.version}` : 'not found'})`);
     return { prompt: this.buildHardcodedPrompt(vars), activePromptVersion: null };
+  }
+
+  private async getHinglishLevel(): Promise<'none' | 'light'> {
+    const row = await this.settingsRepo?.findOne({ where: { key: 'STORY_HINGLISH_LEVEL' } }).catch(() => null);
+    return (row?.value ?? SETTING_DEFAULTS.STORY_HINGLISH_LEVEL.value) === 'none' ? 'none' : 'light';
   }
 
   private buildRuntimeQualityContract(): string {

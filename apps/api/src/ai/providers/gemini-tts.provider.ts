@@ -26,6 +26,23 @@ function pcmToWav(pcmBuffer: Buffer, sampleRate = 24000, channels = 1, bitsPerSa
   return Buffer.concat([header, pcmBuffer]);
 }
 
+/** Seconds of audio in a PCM WAV (reads the fmt byte rate and data chunk size). */
+function wavDurationSeconds(wav: Buffer): number {
+  try {
+    const byteRate = wav.readUInt32LE(28);
+    let offset = 12;
+    while (offset + 8 <= wav.length) {
+      const id = wav.subarray(offset, offset + 4).toString('ascii');
+      const size = wav.readUInt32LE(offset + 4);
+      if (id === 'data') return byteRate > 0 ? Math.min(size, wav.length - offset - 8) / byteRate : 0;
+      offset += 8 + size;
+    }
+  } catch {
+    // fall through
+  }
+  return 0;
+}
+
 @Injectable()
 export class GeminiTTSProvider implements NarrationProvider {
   private readonly logger = new Logger(GeminiTTSProvider.name);
@@ -43,11 +60,12 @@ export class GeminiTTSProvider implements NarrationProvider {
   }
 
   async generateNarration(input: NarrationInput): Promise<NarrationOutput> {
-    const voiceName = input.voice ?? this.config.get<string>('GEMINI_TTS_VOICE') ?? 'Kore';
+    const voiceName = input.voice ?? this.config.get<string>('GEMINI_TTS_VOICE') ?? 'en-in-concierge-5';
+    const modelName = input.model ?? 'gemini-3.8-flash-tts';
     const genAI = this.getGenAI();
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-preview-tts',
+      model: modelName,
       generationConfig: {
         responseModalities: ['AUDIO'],
         speechConfig: {
@@ -56,18 +74,18 @@ export class GeminiTTSProvider implements NarrationProvider {
       },
     });
 
+    // Gemini 3.x TTS reads its input verbatim — accent and warmth come from the chosen voice (an Indian-English
+    // library voice), so only the story text is sent. Older 2.5 preview models still take a spoken instruction.
+    const isLegacyModel = modelName.startsWith('gemini-2.5');
     const accent = input.accent ?? 'Indian English';
     const tone = input.tone ?? 'warm bedtime storyteller';
-    const instruction =
-      `Read the following in ${accent} with a ${tone} tone — ` +
-      `like a loving Indian parent or grandparent reading to a young child. ` +
-      `Use slightly syllable-timed rhythm, gentle rising-and-falling intonation, ` +
-      `crisp consonants, pure vowels. Pace: medium-slow and clear for a child aged 5–12. ` +
-      `Pause briefly after commas and full stops. Gently stress character names and exciting action words.\n\n` +
-      input.text;
+    const text = isLegacyModel
+      ? `Read the following in ${accent} with a ${tone} tone, like a loving Indian parent or grandparent reading to a young child. ` +
+        `Pace: medium-slow and clear. Pause briefly after commas and full stops.\n\n${input.text}`
+      : input.text;
 
     const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: instruction }] }],
+      contents: [{ role: 'user', parts: [{ text }] }],
     });
 
     const parts: GeminiSDK[] = result?.response?.candidates?.[0]?.content?.parts ?? [];
@@ -78,10 +96,12 @@ export class GeminiTTSProvider implements NarrationProvider {
       throw new Error(`Gemini TTS response missing audio data. Text: ${textPart.slice(0, 200)}`);
     }
 
-    const pcm = Buffer.from(audioPart.inlineData.data, 'base64');
-    const wav = pcmToWav(pcm);
-    this.logger.log(`Gemini TTS generated ${wav.length} bytes WAV (voice=${voiceName})`);
+    // 3.x models return a ready WAV; 2.5 returned raw 24 kHz PCM that needs a header.
+    const raw = Buffer.from(audioPart.inlineData.data, 'base64');
+    const wav = raw.subarray(0, 4).toString('ascii') === 'RIFF' ? raw : pcmToWav(raw);
+    const durationSeconds = wavDurationSeconds(wav);
+    this.logger.log(`Gemini TTS generated ${wav.length} bytes WAV, ${durationSeconds.toFixed(1)}s (voice=${voiceName}, model=${modelName})`);
 
-    return { audioUrl: '', audioBuffer: wav };
+    return { audioUrl: '', audioBuffer: wav, durationSeconds };
   }
 }

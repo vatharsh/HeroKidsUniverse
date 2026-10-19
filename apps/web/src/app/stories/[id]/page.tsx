@@ -799,9 +799,24 @@ export default function StoryReaderPage() {
             </div>
           )}
 
-          <p className="text-white/30 text-xs text-center">
-            Illustrations generate in parallel — usually ready in under a minute ✨
-          </p>
+          {/* Honest wait time + permission to leave — generation keeps running on our servers */}
+          <div className="w-full rounded-2xl border border-gold/25 bg-white/5 px-5 py-4 text-center">
+            <p className="text-white text-sm font-semibold">
+              ⏱️ This takes about {story?.isPreview ? "2" : "5"} minutes
+            </p>
+            <p className="text-white/60 text-xs mt-1.5 leading-relaxed">
+              You don&apos;t need to wait here — explore your universe, characters or past stories.
+              We&apos;ll keep building {heroName}&apos;s story, and it will be waiting on your dashboard.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 mt-3">
+              <a href="/dashboard" className="rounded-full bg-brand hover:bg-brand-dark text-white text-xs font-semibold px-4 py-2 transition">
+                Explore dashboard
+              </a>
+              <a href="/characters" className="rounded-full border border-white/20 hover:bg-white/10 text-white/80 text-xs font-semibold px-4 py-2 transition">
+                My characters
+              </a>
+            </div>
+          </div>
 
           <div className="text-center">
             <a

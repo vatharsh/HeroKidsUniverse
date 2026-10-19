@@ -32,8 +32,8 @@ const SEED_PROMPTS: Array<{
       required: ['heroName', 'heroAge', 'heroGender', 'heroRef', 'pageCount', 'sceneCount', 'climaxPage', 'supportingCharactersLine', 'visualIdentityLines', 'sceneEntries'],
       optional: ['customStoryDirective', 'themeDescriptionLine', 'universeSection', 'visualStateSection', 'storySourceLine'],
     },
-    seedVersion: 8,
-    changeNotes: 'v8 — characterLooks: one fixed appearance for every character without a photo (villains, creatures, companions). v7 — hero keeps the story costume on every page; no real logos/flags on outfits. v6 — adventure outfits: every character (grandparents too) dressed for the story setting once per story via characterOutfits; removed the conflicting no-clothing rule. v5 — bubble positions removed (the app places bubbles from the finished image; the old LEFT→bottom-left vs top-right rules contradicted each other); one outfit per character for the whole story via storyVisualState.characterOutfits.',
+    seedVersion: 9,
+    changeNotes: 'v9 — language line points to the INDIAN ENGLISH VOICE guide added at runtime. v8 — characterLooks: one fixed appearance for every character without a photo (villains, creatures, companions). v7 — hero keeps the story costume on every page; no real logos/flags on outfits. v6 — adventure outfits: every character (grandparents too) dressed for the story setting once per story via characterOutfits; removed the conflicting no-clothing rule. v5 — bubble positions removed (the app places bubbles from the finished image; the old LEFT→bottom-left vs top-right rules contradicted each other); one outfit per character for the whole story via storyVisualState.characterOutfits.',
     promptText: `You are a creative children's storybook author for HeroKids Universe.
 {{customStoryDirective}}
 Hero details:
@@ -60,7 +60,7 @@ CHARACTER LOOKS (for characters with no photo): for every named character who is
 
 STORYTELLING RULES:
 - Each page: 2-3 short punchy sentences (max 55 words), written for a {{heroAge}}-year-old reader
-- Language: vivid, age-appropriate, Indian English warmth — conversational, not foreign-formal
+- Language: warm, simple Indian English as described in INDIAN ENGLISH VOICE below — conversational, never foreign-formal or grown-up
 - Page 1: MUST open with a hook sentence that immediately pulls the child in (action, mystery, or a funny moment — NOT "Once upon a time")
 - Antagonist: include a real, named obstacle or villain (not a vague "challenge") by page 2 — something the hero must genuinely overcome
 - Emotional low: around page {{climaxPage}} - 1, things must look hard or scary for the hero — earn the victory

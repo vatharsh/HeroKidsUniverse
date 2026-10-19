@@ -1618,10 +1618,10 @@ function CreatePageInner() {
                 <div className="flex items-center gap-2 pt-3 border-t border-ink/8 text-ink-muted">
                   <CreditCard className="w-4 h-4" />
                   {user && user.credits < 1 && (user.previewCredits ?? 0) > 0 ? (
-                    <span className="text-xs">Your free preview story will be used — a short {previewPages}-page adventure</span>
+                    <span className="text-xs">Your free preview story will be used — a short {previewPages}-page adventure, ready in about 2 minutes</span>
                   ) : (
                     <>
-                      <span className="text-xs">1 story credit will be used</span>
+                      <span className="text-xs">1 story credit will be used · ready in about 5 minutes</span>
                       {user && <span className="ml-auto text-xs">{user.credits} credits remaining</span>}
                     </>
                   )}

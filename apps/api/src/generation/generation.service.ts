@@ -40,6 +40,7 @@ import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.ent
 import { User } from '../users/user.entity';
 import { UploadService } from '../upload/upload.service';
 import { CastMember, GeminiCharacterLocator } from '../ai/providers/gemini-character-locator.service';
+import { wavToMp3 } from './audio-compress';
 import { layoutBubbles } from './bubble-layout';
 import { GenerationJob, JobStatus } from './generation-job.entity';
 
@@ -498,7 +499,9 @@ export class GenerationService implements OnModuleInit {
         pagesWithImages = sceneResult.pages;
         totalImageCostUsd = sceneResult.totalCostUsd;
         generatedScenes = sceneResult.scenes;
-        if (sceneResult.castSheets && storyVisualState) storyVisualState = { ...storyVisualState, castSheets: sceneResult.castSheets };
+        if (sceneResult.castSheets && storyVisualState) {
+          storyVisualState = { ...storyVisualState, castSheets: sceneResult.castSheets, castSheetKeys: sceneResult.castSheetKeys };
+        }
         this.logger.log(
           `Story ${storyId}: scene-based generation — ${sceneResult.scenes.length} scenes, ${pagesWithImages.length} pages, ${totalImageCostUsd.toFixed(4)} USD`,
         );
@@ -1035,7 +1038,7 @@ export class GenerationService implements OnModuleInit {
     characterBibles?: string[],
     supportingCharAges?: (number | null)[],
     onPageDone?: (pageNum: number, total: number) => Promise<void>,
-  ): Promise<{ pages: StoryPage[]; scenes: StoryScene[]; totalCostUsd: number; castSheets?: Record<string, string> }> {
+  ): Promise<{ pages: StoryPage[]; scenes: StoryScene[]; totalCostUsd: number; castSheets?: Record<string, string>; castSheetKeys?: Record<string, string> }> {
     const scenes = generated.scenes ?? [];
     const { imageBackend, imageProvider, imageModel, costPerImage } = await this.resolveImageModelCost();
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
@@ -1179,6 +1182,7 @@ export class GenerationService implements OnModuleInit {
 
     // Character sheets: one 3D reference per character in their outfit for this story.
     let castSheets: Record<string, string> = {};
+    let castSheetKeys: Record<string, string> = {};
     if (!isBackgroundOnly && imageBackend === 'gemini' && await this.getBooleanSetting('CHARACTER_SHEETS_ENABLED', true)) {
       const built = await this.buildCastSheets({
         story, hero, heroName, heroAge,
@@ -1190,9 +1194,10 @@ export class GenerationService implements OnModuleInit {
         imageProvider, imageModel, costPerImage, isSandbox,
       });
       castSheets = built.sheets;
+      castSheetKeys = built.keys;
       totalCostUsd += built.costUsd;
       if (Object.keys(castSheets).length) {
-        await this.storiesRepo.update(story.id, { storyVisualState: { ...(storyVisualState ?? ({} as StoryVisualState)), castSheets } });
+        await this.storiesRepo.update(story.id, { storyVisualState: { ...(storyVisualState ?? ({} as StoryVisualState)), castSheets, castSheetKeys } });
       }
     }
 
@@ -1329,7 +1334,7 @@ export class GenerationService implements OnModuleInit {
     const remainingIllustrated = illustratedScenes.slice(1);
     const remainingResults = await this.mapWithConcurrency(
       remainingIllustrated,
-      2,
+      3,
       (scene) => generateSceneImage(scene, styleReferenceUrl),
     );
     sceneResults.push(...remainingResults);
@@ -1415,26 +1420,27 @@ export class GenerationService implements OnModuleInit {
       supporting: supportingCharInfoForAgePrefix,
     });
 
-    const pages: StoryPage[] = [];
+    // Decide the (capped) redraws in story order first, then process pages in parallel — each page's redraw and
+    // bubble detection is independent of the others.
     let expressionRedrawsLeft = await this.getNumberSetting('MAX_EXPRESSION_VARIANTS', Number(SETTING_DEFAULTS.MAX_EXPRESSION_VARIANTS.value));
-    for (const scene of scenes) {
-      const sceneImageUrl = sceneIllustrationMap.get(scene.sceneId);
-      const sceneImageBase64 = sceneImageBase64Map.get(scene.sceneId);
-      const firstPageNumber = scene.pages[0]?.pageNumber;
+    const pageJobs = scenes.flatMap((scene) => scene.pages.map((page) => {
+      // Gemini marks 'reuse' when character poses/expressions are essentially unchanged
+      // from the scene base image — only speech bubbles differ, so no new image is needed.
+      const wantsPageSpecificExpression =
+        page.imageVariant !== 'reuse' &&
+        page.pageNumber !== scene.pages[0]?.pageNumber &&
+        ((page.speechBubbles?.length ?? 0) > 0 ||
+          page.characterDirections?.some((c) => c.isSpeaking || c.mouthState === 'speaking'));
+      // Each redraw is a full image — cap them per story (sheets keep the reused scene image consistent).
+      const needsPageSpecificExpression = !!wantsPageSpecificExpression && expressionRedrawsLeft > 0;
+      if (needsPageSpecificExpression) expressionRedrawsLeft--;
+      return { scene, page, needsPageSpecificExpression };
+    }));
 
-      for (const page of scene.pages) {
+    const pages: StoryPage[] = await this.mapWithConcurrency(pageJobs, 4, async ({ scene, page, needsPageSpecificExpression }) => {
+        const sceneImageUrl = sceneIllustrationMap.get(scene.sceneId);
         let pageImageUrl = sceneImageUrl;
-        let pageImageBase64: string | undefined = sceneImageBase64;
-        // Gemini marks 'reuse' when character poses/expressions are essentially unchanged
-        // from the scene base image — only speech bubbles differ, so no new image is needed.
-        const wantsPageSpecificExpression =
-          page.imageVariant !== 'reuse' &&
-          page.pageNumber !== firstPageNumber &&
-          ((page.speechBubbles?.length ?? 0) > 0 ||
-            page.characterDirections?.some((c) => c.isSpeaking || c.mouthState === 'speaking'));
-        // Each redraw is a full image — cap them per story (sheets keep the reused scene image consistent).
-        const needsPageSpecificExpression = wantsPageSpecificExpression && expressionRedrawsLeft > 0;
-        if (needsPageSpecificExpression) expressionRedrawsLeft--;
+        let pageImageBase64: string | undefined = sceneImageBase64Map.get(scene.sceneId);
 
         if (!isBackgroundOnly && sceneImageUrl && needsPageSpecificExpression) {
           try {
@@ -1529,7 +1535,7 @@ export class GenerationService implements OnModuleInit {
           });
         }
 
-        pages.push({
+        return {
           pageNumber: page.pageNumber,
           text: page.text,
           narrationText: page.narrationText,
@@ -1548,13 +1554,16 @@ export class GenerationService implements OnModuleInit {
           storyStateSnapshot: pageStateSnapshotMap.get(page.pageNumber),
           characterDirections: page.characterDirections,
           storyStateUpdate: page.storyStateUpdate,
-        });
-      }
-    }
+        } as StoryPage;
+    });
 
     pages.sort((a, b) => a.pageNumber - b.pageNumber);
 
-    return { pages, scenes: storedScenes, totalCostUsd, castSheets: Object.keys(castSheets).length ? castSheets : undefined };
+    return {
+      pages, scenes: storedScenes, totalCostUsd,
+      castSheets: Object.keys(castSheets).length ? castSheets : undefined,
+      castSheetKeys: Object.keys(castSheetKeys).length ? castSheetKeys : undefined,
+    };
   }
 
   private async generateImageWithRetry(input: ImageGenerationInput, attempts = 2) {
@@ -1653,9 +1662,9 @@ export class GenerationService implements OnModuleInit {
     imageModel: string;
     costPerImage: number;
     isSandbox: boolean;
-  }): Promise<{ sheets: Record<string, string>; costUsd: number }> {
+  }): Promise<{ sheets: Record<string, string>; keys: Record<string, string>; costUsd: number }> {
     const generateSheet = this.imageProvider.generateCharacterSheet?.bind(this.imageProvider);
-    if (!generateSheet) return { sheets: {}, costUsd: 0 };
+    if (!generateSheet) return { sheets: {}, keys: {}, costUsd: 0 };
 
     const relationships = new Map<string, string>();
     const ids = (params.story.characterIds ?? []) as string[];
@@ -1724,9 +1733,8 @@ export class GenerationService implements OnModuleInit {
     for (const prev of earlier) {
       const vs = prev.storyVisualState;
       for (const [name, url] of Object.entries(vs?.castSheets ?? {})) {
-        const outfit = name.toLowerCase() === params.heroName.toLowerCase() ? vs?.costume : vs?.characterOutfits?.[name];
-        const key = sheetKey(name, outfit, vs?.characterLooks?.[name]);
-        if (!reusable.has(key)) reusable.set(key, url);
+        const key = vs?.castSheetKeys?.[name];
+        if (key && !reusable.has(key)) reusable.set(key, url);
       }
     }
 
@@ -1757,18 +1765,20 @@ export class GenerationService implements OnModuleInit {
     });
 
     const sheets: Record<string, string> = {};
+    const keys: Record<string, string> = {};
     let costUsd = 0;
-    for (const r of results) {
-      if (!r) continue;
+    results.forEach((r, i) => {
+      if (!r) return;
       sheets[r.name] = r.url;
+      keys[r.name] = sheetKey(members[i].name, members[i].outfit, members[i].appearance);
       if (!r.reused) costUsd += params.costPerImage;
-    }
+    });
     const reusedNames = results.filter((r) => r?.reused).map((r) => r!.name);
     this.logger.log(
       `Character sheets for story ${params.story.id}: ${Object.keys(sheets).join(', ') || 'none'}` +
       (reusedNames.length ? ` (reused: ${reusedNames.join(', ')})` : ''),
     );
-    return { sheets, costUsd };
+    return { sheets, keys, costUsd };
   }
 
   /** The sheets for the characters in a picture — hero first, at most 4 (the model's character limit). */
@@ -1991,16 +2001,24 @@ export class GenerationService implements OnModuleInit {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /** Gemini TTS list price per second of audio (USD). */
+  private static readonly GEMINI_TTS_PRICE_PER_SECOND: Record<string, number> = {
+    'gemini-3.8-flash-tts': 0.000225,
+    'gemini-3.8-flash-lite-tts': 0.00015,
+  };
+
   private async generatePageAudio(story: Story, pages: StoryPage[], isSandbox: boolean): Promise<{ pages: StoryPage[]; totalCostUsd: number }> {
-    const result: StoryPage[] = [];
-    let totalCostUsd = 0;
-    const ttsProvider = await this.getStringSetting('TTS_PROVIDER', 'openai');
+    const ttsProvider = await this.getStringSetting('TTS_PROVIDER', SETTING_DEFAULTS.TTS_PROVIDER.value);
     const isGeminiTTS = ttsProvider === 'gemini';
+    const ttsModel = isGeminiTTS
+      ? await this.getStringSetting('GEMINI_TTS_MODEL', SETTING_DEFAULTS.GEMINI_TTS_MODEL.value)
+      : (this.config.get<string>('OPENAI_TTS_MODEL') ?? 'gpt-4o-mini-tts');
+    const pricePerSecond = isGeminiTTS ? GenerationService.GEMINI_TTS_PRICE_PER_SECOND[ttsModel] : undefined;
     const ttsCostPerChar = isGeminiTTS
       ? await this.getNumberSetting('GEMINI_TTS_COST_PER_CHAR', 0)
       : await this.getNumberSetting('OPENAI_TTS_COST_PER_CHAR', Number(SETTING_DEFAULTS['OPENAI_TTS_COST_PER_CHAR'].value));
     const ttsVoice = isGeminiTTS
-      ? await this.getStringSetting('GEMINI_TTS_VOICE', 'Kore')
+      ? await this.getStringSetting('GEMINI_TTS_VOICE', SETTING_DEFAULTS.GEMINI_TTS_VOICE.value)
       : await this.getStringSetting('TTS_VOICE', 'nova');
     const ttsSpeed = await this.getNumberSetting('TTS_SPEED_RATIO', 0.9);
     const ttsAccentStyle = await this.getStringSetting('TTS_ACCENT_STYLE', 'indian_english');
@@ -2012,13 +2030,16 @@ export class GenerationService implements OnModuleInit {
       : 'neutral English';
     const narrationTone = ttsTone.replace(/_/g, ' ');
 
-    for (const page of pages) {
+    // Pages are independent — narrate a few at once instead of one after another.
+    const narrated = await this.mapWithConcurrency(pages, 3, async (page) => {
       let audioUrl: string | undefined;
+      let costUsd = 0;
       const finalNarrationText = this.buildFinalNarrationText(page);
       try {
         const narration = await this.narrationProvider.generateNarration({
           text: finalNarrationText,
           voice: ttsVoice,
+          model: isGeminiTTS ? ttsModel : undefined,
           speed: ttsSpeed,
           language: narrationLanguage,
           accent: narrationAccent,
@@ -2026,27 +2047,25 @@ export class GenerationService implements OnModuleInit {
           audience: 'children',
         });
         if (narration.audioBuffer) {
-          audioUrl = await this.uploadService.uploadPageAudio(
-            story.userId,
-            story.id,
-            page.pageNumber,
-            narration.audioBuffer,
-          );
+          // WAV narration is ~1 MB per page — send parents a small MP3 instead.
+          const isWav = narration.audioBuffer.subarray(0, 4).toString('ascii') === 'RIFF';
+          const audio = isWav ? await wavToMp3(narration.audioBuffer) : narration.audioBuffer;
+          audioUrl = await this.uploadService.uploadPageAudio(story.userId, story.id, page.pageNumber, audio);
         }
 
-        const estimatedSeconds = Math.max(5, Math.ceil(finalNarrationText.split(/\s+/).filter(Boolean).length * 0.55));
-        const pageCostUsd = finalNarrationText.length * ttsCostPerChar;
-        totalCostUsd += pageCostUsd;
+        const seconds = narration.durationSeconds
+          ?? Math.max(5, Math.ceil(finalNarrationText.split(/\s+/).filter(Boolean).length * 0.55));
+        costUsd = pricePerSecond !== undefined ? seconds * pricePerSecond : finalNarrationText.length * ttsCostPerChar;
         await this.aiUsageLogsRepo.save(
           this.aiUsageLogsRepo.create({
             userId: story.userId,
             storyId: story.id,
             universeId: story.universeId ?? null,
             provider: isGeminiTTS ? 'gemini' : 'openai',
-            model: isGeminiTTS ? 'gemini-2.5-flash-preview-tts' : (this.config.get<string>('OPENAI_TTS_MODEL') ?? 'gpt-4o-mini-tts'),
+            model: ttsModel,
             operation: AiOperation.Narration,
-            audioSeconds: estimatedSeconds,
-            estimatedCostUsd: pageCostUsd,
+            audioSeconds: Math.round(seconds),
+            estimatedCostUsd: costUsd,
             isSandbox,
           }),
         );
@@ -2057,8 +2076,10 @@ export class GenerationService implements OnModuleInit {
           }`,
         );
       }
-      result.push({ ...page, audioUrl, finalNarrationText });
-    }
+      return { page: { ...page, audioUrl, finalNarrationText }, costUsd };
+    });
+    const result = narrated.map((n) => n.page);
+    const totalCostUsd = narrated.reduce((sum, n) => sum + n.costUsd, 0);
     return { pages: result, totalCostUsd };
   }
 
