@@ -498,6 +498,7 @@ interface Story {
   storyVisualState: StoryVisualState | null;
   videoUrl: string | null;
   videoStatus: "not_started" | "generating" | "completed" | "failed" | "null" | null;
+  videoVariants?: { landscape?: { status: string; url: string | null } } | null;
   isPreview?: boolean;
   hero: { name: string; age: number; gender: string; avatarUrl: string | null };
 }
@@ -564,6 +565,8 @@ export default function StoryReaderPage() {
   const [recapChecked, setRecapChecked] = useState(false);
   const [videoStatus, setVideoStatus]           = useState<string | null>(null);
   const [videoUrl, setVideoUrl]                 = useState<string | null>(null);
+  const [landscapeVideo, setLandscapeVideo]     = useState<{ status: string | null; url: string | null }>({ status: null, url: null });
+  const [videoMenuOpen, setVideoMenuOpen]       = useState(false);
   const videoPollerRef                          = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const pollRef        = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const recapFetchedRef = useRef(false);
@@ -610,6 +613,12 @@ export default function StoryReaderPage() {
     setStory(withResolvedMedia(data));
     setVideoStatus(data.videoStatus ?? null);
     setVideoUrl(data.videoUrl ? resolveMediaUrl(data.videoUrl) : null);
+    setLandscapeVideo({
+      status: data.videoVariants?.landscape?.status ?? null,
+      url: data.videoVariants?.landscape?.url ? resolveMediaUrl(data.videoVariants.landscape.url) : null,
+    });
+    // Resume polling if a video was already being made when the page opened.
+    if (data.videoStatus === "generating" || data.videoVariants?.landscape?.status === "generating") pollVideoStatus(token);
 
     if (TERMINAL.has(data.status)) {
       clearInterval(pollRef.current);
@@ -976,15 +985,8 @@ export default function StoryReaderPage() {
     }
   }
 
-  async function handleGenerateVideo() {
-    const token = getAccessToken();
-    if (!token) return;
-    setVideoStatus("generating");
-    await fetch(`${BASE}/stories/${id}/generate-video`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    // Poll until done
+  /** Polls both video formats until neither is being generated. */
+  function pollVideoStatus(token: string) {
     clearInterval(videoPollerRef.current);
     videoPollerRef.current = setInterval(async () => {
       const r = await fetch(`${BASE}/stories/${id}/video-status`, {
@@ -992,14 +994,25 @@ export default function StoryReaderPage() {
       });
       if (!r.ok) return;
       const { data } = await r.json();
-      const status = data.videoStatus as Story["videoStatus"];
-      const url    = data.videoUrl as string | null;
-      setVideoStatus(status);
-      setVideoUrl(url);
-      if (status === "completed" || status === "failed") {
+      setVideoStatus(data.videoStatus);
+      setVideoUrl(data.videoUrl ? resolveMediaUrl(data.videoUrl) : null);
+      setLandscapeVideo({ status: data.landscape?.status ?? null, url: data.landscape?.url ? resolveMediaUrl(data.landscape.url) : null });
+      if (data.videoStatus !== "generating" && data.landscape?.status !== "generating") {
         clearInterval(videoPollerRef.current);
       }
     }, 5000);
+  }
+
+  async function handleGenerateVideo(format: "vertical" | "landscape" = "vertical") {
+    const token = getAccessToken();
+    if (!token) return;
+    if (format === "vertical") setVideoStatus("generating");
+    else setLandscapeVideo((v) => ({ ...v, status: "generating" }));
+    await fetch(`${BASE}/stories/${id}/generate-video?format=${format}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    pollVideoStatus(token);
   }
 
   function handlePrintPdf() {
@@ -1125,33 +1138,50 @@ export default function StoryReaderPage() {
             </a>
           )}
           {flags.ENABLE_VIDEO_EXPORT !== false && (
-            videoUrl ? (
-              <a
-                href={videoUrl}
-                download
-                className="flex items-center gap-1.5 text-xs font-semibold bg-gold/90 hover:bg-gold text-space px-3 py-1.5 rounded-full transition-all"
-                title="Download MP4"
-              >
-                <Clapperboard className="w-3.5 h-3.5" />
-                MP4
-              </a>
-            ) : videoStatus === "generating" ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold bg-white/10 text-white/60 px-3 py-1.5 rounded-full">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Video…
-              </span>
-            ) : (
+            <div className="relative">
               <button
                 type="button"
-                onClick={() => void handleGenerateVideo()}
-                disabled={videoStatus === "generating"}
-                className="flex items-center gap-1.5 text-xs font-semibold bg-white/15 hover:bg-white/25 text-white px-3 py-1.5 rounded-full transition-all"
-                title="Generate story video"
+                onClick={() => setVideoMenuOpen((o) => !o)}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all ${
+                  videoUrl || landscapeVideo.url ? "bg-gold/90 hover:bg-gold text-space" : "bg-white/15 hover:bg-white/25 text-white"
+                }`}
+                title="Story video"
               >
-                <Clapperboard className="w-3.5 h-3.5" />
-                {videoStatus === "failed" ? "Retry Video" : "Video"}
+                {videoStatus === "generating" || landscapeVideo.status === "generating"
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Clapperboard className="w-3.5 h-3.5" />}
+                Video
               </button>
-            )
+              {videoMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl bg-space border border-white/15 shadow-2xl p-3 z-50">
+                  <p className="text-white/50 text-[11px] mb-2 px-1">A narrated video of this story with all the speech bubbles — great for sharing on WhatsApp.</p>
+                  {([
+                    { format: "vertical" as const, label: "📱 Phone video", hint: "Best for WhatsApp & phones", status: videoStatus, url: videoUrl, recommended: true },
+                    { format: "landscape" as const, label: "🖥️ Landscape", hint: "For TV or laptop", status: landscapeVideo.status, url: landscapeVideo.url, recommended: false },
+                  ]).map((v) => (
+                    <div key={v.format} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-white/5">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-semibold">
+                          {v.label}
+                          {v.recommended && <span className="ml-1.5 text-[10px] font-bold text-gold">RECOMMENDED</span>}
+                        </p>
+                        <p className="text-white/45 text-[11px]">{v.status === "generating" ? "Creating… about 1–2 minutes" : v.hint}</p>
+                      </div>
+                      {v.status === "generating" ? (
+                        <Loader2 className="w-4 h-4 text-white/60 animate-spin" />
+                      ) : v.url && v.status !== "failed" ? (
+                        <a href={v.url} download className="text-xs font-bold bg-gold text-space px-3 py-1.5 rounded-full hover:brightness-110">Download</a>
+                      ) : (
+                        <button type="button" onClick={() => void handleGenerateVideo(v.format)}
+                          className="text-xs font-bold bg-brand hover:bg-brand-dark text-white px-3 py-1.5 rounded-full">
+                          {v.status === "failed" ? "Retry" : "Create"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
           {confirmDelete ? (
             <div className="flex items-center gap-2 bg-red-900/60 rounded-full px-3 py-1">

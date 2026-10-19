@@ -19,6 +19,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# FFmpeg for story videos and narration MP3s. The npm ffmpeg-static binary is fetched by an install script,
+# which `npm ci --ignore-scripts` skips — so the image previously had no FFmpeg at all.
+RUN apk add --no-cache ffmpeg
+
 # Only copy what's needed to run
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./dist

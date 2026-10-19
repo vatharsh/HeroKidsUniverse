@@ -258,6 +258,10 @@ export class Story {
   @Column({ type: 'enum', enum: VideoStatus, nullable: true })
   videoStatus!: VideoStatus | null;
 
+  /** Extra video formats. videoUrl/videoStatus above are the default vertical (phone) video. */
+  @Column({ type: 'jsonb', nullable: true })
+  videoVariants!: { landscape?: { status: 'generating' | 'completed' | 'failed'; url: string | null } } | null;
+
   @Column({ type: 'boolean', default: false })
   isSandbox!: boolean;
 

@@ -1,32 +1,39 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import * as fs from 'fs';
-import * as http from 'http';
-import * as https from 'https';
 import * as os from 'os';
 import * as path from 'path';
 import { execFile, spawn } from 'child_process';
-import { promisify } from 'util';
 
 import { Story, VideoStatus } from '../stories/story.entity';
 import { UploadService } from '../upload/upload.service';
+import { ffmpegPath, ffprobePath } from './ffmpeg-path';
+import { FrameBubble, renderCoverFrame, renderEndFrame, renderPageFrame, VideoFormat } from './video-frames';
 
-const execFileAsync = promisify(execFile);
+const FPS = 25;
+const CROSSFADE = 0.6;          // seconds of overlap between frames
+const COVER_SECONDS = 3.5;
+const END_SECONDS = 3.5;
+const PAGE_PADDING = 0.9;       // breathing room after each page's narration
+const STUCK_AFTER_MS = 30 * 60 * 1000;
+/** Output size — frames are drawn at full HD for crisp text, then encoded at 720p so videos stay WhatsApp-friendly. */
+const OUTPUT_SIZE: Record<VideoFormat, { width: number; height: number }> = {
+  vertical: { width: 720, height: 1280 },
+  landscape: { width: 1280, height: 720 },
+};
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const FFMPEG_PATH: string = require('ffmpeg-static') as string;
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const FFPROBE_PATH: string = (require('@ffprobe-installer/ffprobe') as { path: string }).path;
-
-const DEFAULT_PAGE_DURATION = 6;  // seconds when no audio
-const FADE_DURATION          = 0.5; // seconds for image fade in/out
-const END_SCREEN_DURATION    = 4;  // seconds
-
+/**
+ * Story → MP4. Each page is drawn like the reader (illustration + speech bubbles + text), held for its
+ * narration with a slow zoom, and pages crossfade. Vertical (phone/WhatsApp) is the default; landscape
+ * is optional and stored in story.videoVariants.landscape.
+ */
 @Injectable()
-export class VideoGenerationService {
+export class VideoGenerationService implements OnModuleInit {
   private readonly logger = new Logger(VideoGenerationService.name);
+  /** One render at a time — FFmpeg is CPU-heavy and shares the box with the API. */
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(
     @InjectRepository(Story) private readonly storiesRepo: Repository<Story>,
@@ -34,334 +41,198 @@ export class VideoGenerationService {
     private readonly config: ConfigService,
   ) {}
 
-  // ── Public entry point ────────────────────────────────────────────────────
-
-  async generateVideo(storyId: string, userId: string): Promise<void> {
-    const tmpDir = path.join(os.tmpdir(), `hvu-video-${storyId}-${Date.now()}`);
-
+  /** A restart mid-render used to leave stories "generating" forever — mark those failed so they can be retried. */
+  async onModuleInit(): Promise<void> {
     try {
-      await this.storiesRepo.update({ id: storyId, userId }, { videoStatus: VideoStatus.Generating });
+      const cutoff = new Date(Date.now() - STUCK_AFTER_MS);
+      const stuck = await this.storiesRepo.find({ where: { videoStatus: VideoStatus.Generating, updatedAt: LessThan(cutoff) } });
+      for (const s of stuck) await this.storiesRepo.update(s.id, { videoStatus: VideoStatus.Failed });
+      const withVariant = await this.storiesRepo.createQueryBuilder('s')
+        .where(`s."videoVariants"->'landscape'->>'status' = 'generating'`)
+        .andWhere('s."updatedAt" < :cutoff', { cutoff })
+        .getMany();
+      for (const s of withVariant) await this.setStatus(s, 'landscape', 'failed');
+      if (stuck.length || withVariant.length) this.logger.warn(`Marked ${stuck.length + withVariant.length} stuck video export(s) as failed`);
+    } catch (err) {
+      this.logger.warn(`Stuck video rescue skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
-      const story = await this.storiesRepo.findOne({ where: { id: storyId, userId } });
-      if (!story) throw new Error('Story not found');
+  /** Queues a render; returns immediately. */
+  async generateVideo(storyId: string, userId: string, format: VideoFormat = 'vertical'): Promise<void> {
+    const story = await this.storiesRepo.findOne({ where: { id: storyId, userId } });
+    if (!story) throw new Error('Story not found');
+    await this.setStatus(story, format, 'generating');
+    this.queue = this.queue.then(() => this.render(storyId, userId, format)).catch(() => undefined);
+  }
 
-      const allPages = [...story.pages].sort((a, b) => a.pageNumber - b.pageNumber);
-      // One missing illustration used to fail the whole export — skip it and keep the rest of the story.
-      const pages = allPages.filter((pg) => !!pg.imageUrl);
-      const skipped = allPages.length - pages.length;
-      if (skipped > 0) this.logger.warn(`Video for story ${storyId}: skipping ${skipped} page(s) without an image`);
-      if (pages.length === 0) throw new Error('Story has no illustrated pages');
+  private async setStatus(story: Story, format: VideoFormat, status: 'generating' | 'completed' | 'failed', url?: string): Promise<void> {
+    if (format === 'vertical') {
+      await this.storiesRepo.update(story.id, {
+        videoStatus: status === 'generating' ? VideoStatus.Generating : status === 'completed' ? VideoStatus.Completed : VideoStatus.Failed,
+        ...(url ? { videoUrl: url } : {}),
+      });
+      return;
+    }
+    const fresh = await this.storiesRepo.findOne({ where: { id: story.id } });
+    const variants = { ...(fresh?.videoVariants ?? {}) };
+    variants.landscape = { status, url: url ?? variants.landscape?.url ?? null };
+    await this.storiesRepo.update(story.id, { videoVariants: variants });
+  }
 
-      fs.mkdirSync(tmpDir, { recursive: true });
-      this.logger.log(`Video generation started for story ${storyId} in ${tmpDir}`);
+  private async render(storyId: string, userId: string, format: VideoFormat): Promise<void> {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `hku-video-${format}-`));
+    const started = Date.now();
+    const story = await this.storiesRepo.findOne({ where: { id: storyId, userId } });
+    if (!story) return;
+    try {
+      const pages = [...(story.pages ?? [])]
+        .sort((a, b) => a.pageNumber - b.pageNumber)
+        .filter((p) => !!p.imageUrl); // a missing illustration used to fail the whole export
+      if (!pages.length) throw new Error('Story has no illustrated pages');
 
-      // ── Download images ─────────────────────────────────────────────────
-      const imageSlots: Array<{ url: string; local: string }> = [];
-      if (story.coverImageUrl) {
-        const local = path.join(tmpDir, 'cover.jpg');
-        await this.downloadFile(story.coverImageUrl, local);
-        imageSlots.push({ url: story.coverImageUrl, local });
-      }
-      for (const pg of pages) {
-        const local = path.join(tmpDir, `page_${pg.pageNumber}.jpg`);
-        await this.downloadFile(pg.imageUrl!, local);
-        imageSlots.push({ url: pg.imageUrl!, local });
-      }
+      const title = story.title ?? 'My HeroKids Story';
+      const heroName = (await this.storiesRepo.manager.query(`SELECT name FROM heroes WHERE id = $1`, [story.heroId]))[0]?.name ?? 'our hero';
+      const coverImage = await this.fetchBuffer(story.coverImageUrl ?? pages[0].imageUrl!).catch(() => null);
 
-      // ── Determine audio durations ────────────────────────────────────────
-      const hasPageAudio = pages.some((p) => !!p.audioUrl);
-      const durations: number[] = [];
+      // ── Frames + durations ──────────────────────────────────────────────
+      type Segment = { frame: string; seconds: number; audio?: string };
+      const segments: Segment[] = [];
+      const coverPath = path.join(tmpDir, 'cover.png');
+      fs.writeFileSync(coverPath, await renderCoverFrame({ format, image: coverImage, title, heroName }));
+      segments.push({ frame: coverPath, seconds: COVER_SECONDS });
 
-      if (story.coverImageUrl) {
-        // Cover gets default duration (no audio)
-        durations.push(DEFAULT_PAGE_DURATION);
-      }
-
-      if (hasPageAudio) {
-        for (const pg of pages) {
-          if (pg.audioUrl) {
-            const local = path.join(tmpDir, `audio_${pg.pageNumber}.mp3`);
-            await this.downloadFile(pg.audioUrl, local);
-            const dur = await this.getAudioDuration(local);
-            durations.push(dur);
-          } else {
-            durations.push(DEFAULT_PAGE_DURATION);
+      for (const page of pages) {
+        const image = await this.fetchBuffer(page.imageUrl!);
+        const framePath = path.join(tmpDir, `page-${page.pageNumber}.png`);
+        fs.writeFileSync(framePath, await renderPageFrame({
+          format,
+          image,
+          bubbles: (page.speechBubbles ?? []) as FrameBubble[],
+          text: page.text,
+          title,
+          pageNumber: page.pageNumber,
+          totalPages: pages.length,
+        }));
+        let audioPath: string | undefined;
+        let seconds = Math.max(5, page.text.split(/\s+/).length * 0.42);
+        if (page.audioUrl) {
+          try {
+            audioPath = path.join(tmpDir, `audio-${page.pageNumber}${path.extname(new URL(page.audioUrl, 'http://x').pathname) || '.mp3'}`);
+            fs.writeFileSync(audioPath, await this.fetchBuffer(page.audioUrl));
+            seconds = (await this.audioSeconds(audioPath)) ?? seconds;
+          } catch (err) {
+            this.logger.warn(`Video ${storyId}: narration for page ${page.pageNumber} unavailable (${err instanceof Error ? err.message : err})`);
+            audioPath = undefined;
           }
         }
-      } else {
-        // No audio — every page gets default duration
-        pages.forEach(() => durations.push(DEFAULT_PAGE_DURATION));
+        segments.push({ frame: framePath, seconds: seconds + PAGE_PADDING, audio: audioPath });
       }
 
-      // ── Generate image video segments ────────────────────────────────────
-      const segmentPaths: string[] = [];
-      for (let i = 0; i < imageSlots.length; i++) {
-        const dur = durations[i] ?? DEFAULT_PAGE_DURATION;
-        const seg = path.join(tmpDir, `seg_${i}.mp4`);
-        await this.imageToSegment(imageSlots[i].local, dur, seg);
-        segmentPaths.push(seg);
-      }
+      const endPath = path.join(tmpDir, 'end.png');
+      fs.writeFileSync(endPath, await renderEndFrame({ format, image: coverImage }));
+      segments.push({ frame: endPath, seconds: END_SECONDS });
 
-      // ── End screen ────────────────────────────────────────────────────────
-      const endScreenPath = path.join(tmpDir, 'end.mp4');
-      await this.createEndScreen(endScreenPath);
-      segmentPaths.push(endScreenPath);
+      // ── One FFmpeg pass: slow zoom per frame, crossfades, narration at each page's start ──
+      const outPath = path.join(tmpDir, `story-${format}.mp4`);
+      await this.runFfmpeg(this.buildArgs(segments, format, outPath));
 
-      // ── Concatenate video ─────────────────────────────────────────────────
-      const silentVideoPath = path.join(tmpDir, 'video_silent.mp4');
-      await this.concatenateSegments(segmentPaths, silentVideoPath, tmpDir);
-
-      // ── Build final audio track ───────────────────────────────────────────
-      const finalAudioPath = path.join(tmpDir, 'final_audio.aac');
-      await this.buildAudioTrack(durations, pages, story.coverImageUrl, tmpDir, finalAudioPath);
-
-      // ── Combine video + audio ─────────────────────────────────────────────
-      const outputPath = path.join(tmpDir, 'output.mp4');
-      await this.combineVideoAudio(silentVideoPath, finalAudioPath, outputPath);
-
-      // ── Upload to storage ─────────────────────────────────────────────────
-      const videoUrl = await this.uploadService.uploadVideo(userId, storyId, outputPath);
-      await this.storiesRepo.update({ id: storyId }, { videoUrl, videoStatus: VideoStatus.Completed });
-      this.logger.log(`Video generation completed for story ${storyId}: ${videoUrl}`);
+      const url = await this.uploadService.uploadVideo(userId, storyId, outPath);
+      const previous = format === 'vertical' ? story.videoUrl : story.videoVariants?.landscape?.url;
+      await this.setStatus(story, format, 'completed', url);
+      if (previous && previous !== url) await this.uploadService.deleteObject(previous);
+      this.logger.log(`Video (${format}) for story ${storyId} done in ${((Date.now() - started) / 1000).toFixed(0)}s: ${url}`);
     } catch (err) {
-      this.logger.error(`Video generation failed for story ${storyId}`, err);
-      await this.storiesRepo.update({ id: storyId }, { videoStatus: VideoStatus.Failed }).catch(() => {});
+      this.logger.error(`Video (${format}) failed for story ${storyId}: ${err instanceof Error ? err.message : String(err)}`);
+      await this.setStatus(story, format, 'failed').catch(() => undefined);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   }
 
-  // ── FFmpeg helpers ────────────────────────────────────────────────────────
+  private buildArgs(segments: Array<{ frame: string; seconds: number; audio?: string }>, format: VideoFormat, outPath: string): string[] {
+    const { width, height } = OUTPUT_SIZE[format];
+    const args: string[] = ['-y', '-hide_banner', '-loglevel', 'error'];
+    segments.forEach((s) => args.push('-loop', '1', '-t', s.seconds.toFixed(2), '-i', s.frame));
+    const audioInputs: Array<{ input: number; delayMs: number }> = [];
+
+    // Each segment starts CROSSFADE seconds before the previous one ends.
+    const starts: number[] = [];
+    let t = 0;
+    segments.forEach((s, i) => {
+      starts.push(t);
+      t += s.seconds - (i < segments.length - 1 ? CROSSFADE : 0);
+    });
+    const total = t;
+    segments.forEach((s, i) => {
+      if (!s.audio) return;
+      audioInputs.push({ input: segments.length + audioInputs.length, delayMs: Math.round((starts[i] + 0.35) * 1000) });
+      args.push('-i', s.audio);
+    });
+
+    const filters: string[] = [];
+    segments.forEach((s, i) => {
+      const frames = Math.ceil(s.seconds * FPS);
+      // Upscale first so the slow zoom is smooth, then zoom from 1.00 to ~1.04 over the segment.
+      filters.push(
+        `[${i}:v]scale=${width * 2}:${height * 2},zoompan=z='min(zoom+${(0.04 / frames).toFixed(6)},1.04)':d=${frames}` +
+        `:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${FPS},format=yuv420p,setsar=1[v${i}]`,
+      );
+    });
+    let last = 'v0';
+    for (let i = 1; i < segments.length; i++) {
+      const out = i === segments.length - 1 ? 'vout' : `x${i}`;
+      filters.push(`[${last}][v${i}]xfade=transition=fade:duration=${CROSSFADE}:offset=${(starts[i]).toFixed(2)}[${out}]`);
+      last = out;
+    }
+    if (segments.length === 1) filters.push('[v0]null[vout]');
+
+    const narrVol = parseFloat(this.config.get<string>('NARRATION_VOLUME') ?? '1.0');
+    if (audioInputs.length) {
+      audioInputs.forEach((a, k) => filters.push(`[${a.input}:a]aresample=44100,volume=${narrVol},adelay=${a.delayMs}|${a.delayMs}[a${k}]`));
+      filters.push(`${audioInputs.map((_, k) => `[a${k}]`).join('')}amix=inputs=${audioInputs.length}:normalize=0,apad[aout]`);
+    }
+
+    args.push('-filter_complex', filters.join(';'), '-map', '[vout]');
+    if (audioInputs.length) args.push('-map', '[aout]', '-c:a', 'aac', '-b:a', '128k');
+    args.push(
+      '-t', total.toFixed(2),
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '27', '-pix_fmt', 'yuv420p',
+      '-movflags', '+faststart',
+      outPath,
+    );
+    return args;
+  }
 
   private runFfmpeg(args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(FFMPEG_PATH, ['-y', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+      const proc = spawn(ffmpegPath(), args, { stdio: ['ignore', 'ignore', 'pipe'] });
       let stderr = '';
       proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`FFmpeg exited ${code}:\n${stderr.slice(-3000)}`));
-      });
+      proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`FFmpeg exited ${code}: ${stderr.slice(-2000)}`))));
       proc.on('error', reject);
     });
   }
 
-  private getAudioDuration(filePath: string): Promise<number> {
+  private audioSeconds(filePath: string): Promise<number | null> {
     return new Promise((resolve) => {
-      execFile(
-        FFPROBE_PATH,
-        ['-v', 'quiet', '-print_format', 'json', '-show_streams', filePath],
-        (err, stdout) => {
-          if (err) { resolve(DEFAULT_PAGE_DURATION); return; }
-          try {
-            const data = JSON.parse(stdout) as { streams?: Array<{ codec_type: string; duration?: string }> };
-            const audio = data.streams?.find((s) => s.codec_type === 'audio');
-            const dur = parseFloat(audio?.duration ?? '');
-            resolve(isNaN(dur) || dur <= 0 ? DEFAULT_PAGE_DURATION : dur);
-          } catch {
-            resolve(DEFAULT_PAGE_DURATION);
-          }
-        },
-      );
-    });
-  }
-
-  private async imageToSegment(imgPath: string, duration: number, outputPath: string): Promise<void> {
-    const safeDur = Math.max(duration, 1.5);
-    const fadeOut = Math.max(safeDur - FADE_DURATION, 0.1);
-
-    await this.runFfmpeg([
-      '-loop', '1',
-      '-i', imgPath,
-      '-t', String(safeDur),
-      '-vf', [
-        'scale=1920:1080:force_original_aspect_ratio=decrease',
-        'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black',
-        `fade=t=in:st=0:d=${FADE_DURATION}`,
-        `fade=t=out:st=${fadeOut}:d=${FADE_DURATION}`,
-      ].join(','),
-      '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-      '-pix_fmt', 'yuv420p', '-r', '24',
-      outputPath,
-    ]);
-  }
-
-  private async createEndScreen(outputPath: string): Promise<void> {
-    const fadeOut = END_SCREEN_DURATION - 0.8;
-    try {
-      // Try with drawtext (requires font support)
-      await this.runFfmpeg([
-        '-f', 'lavfi',
-        '-i', `color=c=0x0a0516:s=1920x1080:d=${END_SCREEN_DURATION}`,
-        '-vf', [
-          `drawtext=text='The End':fontsize=100:fontcolor=white:x=(w-text_w)/2:y=h/2-70:enable='gte(t,1)'`,
-          `drawtext=text='Created with HeroKids Universe':fontsize=46:fontcolor=0xFFD700:x=(w-text_w)/2:y=h/2+50:enable='gte(t,1.4)'`,
-          `fade=t=in:st=0:d=1.0`,
-          `fade=t=out:st=${fadeOut}:d=0.8`,
-        ].join(','),
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-        '-pix_fmt', 'yuv420p', '-r', '24',
-        outputPath,
-      ]);
-    } catch {
-      // Fallback: plain dark fade
-      await this.runFfmpeg([
-        '-f', 'lavfi',
-        '-i', `color=c=0x0a0516:s=1920x1080:d=${END_SCREEN_DURATION}`,
-        '-vf', `fade=t=in:st=0:d=1.0,fade=t=out:st=${fadeOut}:d=0.8`,
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-        '-pix_fmt', 'yuv420p', '-r', '24',
-        outputPath,
-      ]);
-    }
-  }
-
-  private async concatenateSegments(
-    segmentPaths: string[],
-    outputPath: string,
-    tmpDir: string,
-  ): Promise<void> {
-    const concatFile = path.join(tmpDir, 'concat.txt');
-    const lines = segmentPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
-    fs.writeFileSync(concatFile, lines);
-
-    await this.runFfmpeg([
-      '-f', 'concat',
-      '-safe', '0',
-      '-i', concatFile,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-r', '24',
-      outputPath,
-    ]);
-  }
-
-  private async buildAudioTrack(
-    durations: number[],
-    pages: Array<{ pageNumber: number; audioUrl?: string }>,
-    coverImageUrl: string | null,
-    tmpDir: string,
-    outputPath: string,
-  ): Promise<void> {
-    // Build list of audio files in the same order as video segments
-    // Slots: [cover(silence)?, ...pages, end(silence)]
-    const audioFiles: string[] = [];
-    let slot = 0;
-
-    if (coverImageUrl) {
-      const coverSilence = path.join(tmpDir, 'silence_cover.mp3');
-      await this.generateSilence(durations[slot] ?? DEFAULT_PAGE_DURATION, coverSilence);
-      audioFiles.push(coverSilence);
-      slot++;
-    }
-
-    for (const pg of pages) {
-      const localAudio = path.join(tmpDir, `audio_${pg.pageNumber}.mp3`);
-      if (pg.audioUrl && fs.existsSync(localAudio)) {
-        audioFiles.push(localAudio);
-      } else {
-        const silence = path.join(tmpDir, `silence_pg_${pg.pageNumber}.mp3`);
-        await this.generateSilence(durations[slot] ?? DEFAULT_PAGE_DURATION, silence);
-        audioFiles.push(silence);
-      }
-      slot++;
-    }
-
-    // End screen silence
-    const endSilence = path.join(tmpDir, 'silence_end.mp3');
-    await this.generateSilence(END_SCREEN_DURATION, endSilence);
-    audioFiles.push(endSilence);
-
-    // Concatenate all audio
-    const audioConcatFile = path.join(tmpDir, 'audio_concat.txt');
-    fs.writeFileSync(audioConcatFile, audioFiles.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'));
-
-    const narrationPath = path.join(tmpDir, 'narration.aac');
-    await this.runFfmpeg([
-      '-f', 'concat',
-      '-safe', '0',
-      '-i', audioConcatFile,
-      '-c:a', 'aac',
-      '-ar', '44100',
-      '-ac', '2',
-      narrationPath,
-    ]);
-
-    // Mix with background music if configured
-    const bgmEnabled = this.config.get<string>('ENABLE_BACKGROUND_MUSIC') === 'true';
-    const bgmPath    = this.config.get<string>('BACKGROUND_MUSIC_PATH') ?? '';
-    const bgmVol     = parseFloat(this.config.get<string>('BACKGROUND_MUSIC_VOLUME') ?? '0.12');
-    const narrVol    = parseFloat(this.config.get<string>('NARRATION_VOLUME') ?? '1.0');
-
-    if (bgmEnabled && bgmPath && fs.existsSync(bgmPath)) {
-      await this.runFfmpeg([
-        '-i', narrationPath,
-        '-stream_loop', '-1',
-        '-i', bgmPath,
-        '-filter_complex',
-        `[0:a]volume=${narrVol}[narr];[1:a]volume=${bgmVol}[bgm];[narr][bgm]amix=inputs=2:duration=first[out]`,
-        '-map', '[out]',
-        '-c:a', 'aac',
-        '-ar', '44100',
-        '-ac', '2',
-        outputPath,
-      ]);
-    } else {
-      // No background music — just re-encode narration
-      await this.runFfmpeg([
-        '-i', narrationPath,
-        '-c:a', 'aac',
-        '-ar', '44100',
-        '-ac', '2',
-        outputPath,
-      ]);
-    }
-  }
-
-  private async generateSilence(duration: number, outputPath: string): Promise<void> {
-    await this.runFfmpeg([
-      '-f', 'lavfi',
-      '-i', `anullsrc=r=44100:cl=stereo`,
-      '-t', String(Math.max(duration, 0.1)),
-      '-c:a', 'libmp3lame',
-      '-q:a', '4',
-      outputPath,
-    ]);
-  }
-
-  private async combineVideoAudio(
-    videoPath: string,
-    audioPath: string,
-    outputPath: string,
-  ): Promise<void> {
-    await this.runFfmpeg([
-      '-i', videoPath,
-      '-i', audioPath,
-      '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-shortest',
-      outputPath,
-    ]);
-  }
-
-  // ── File download ─────────────────────────────────────────────────────────
-
-  private downloadFile(url: string, destPath: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const protocol = url.startsWith('https') ? https : http;
-      const file = fs.createWriteStream(destPath);
-
-      const req = protocol.get(url, (res) => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`Download failed ${url}: HTTP ${res.statusCode}`));
-          return;
+      execFile(ffprobePath(), ['-v', 'quiet', '-print_format', 'json', '-show_format', filePath], (err, stdout) => {
+        if (err) return resolve(null);
+        try {
+          const seconds = parseFloat((JSON.parse(stdout) as { format?: { duration?: string } }).format?.duration ?? '');
+          resolve(Number.isFinite(seconds) && seconds > 0 ? seconds : null);
+        } catch {
+          resolve(null);
         }
-        res.pipe(file);
-        file.on('finish', () => file.close(() => resolve()));
       });
-
-      req.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
-      file.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
     });
+  }
+
+  /** Locally stored media is a relative /api/... path served by this API. */
+  private async fetchBuffer(url: string): Promise<Buffer> {
+    const absolute = url.startsWith('/') ? `http://localhost:${process.env.PORT ?? 3000}${url}` : url;
+    const res = await fetch(absolute, { signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) throw new Error(`Download failed ${absolute}: HTTP ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
   }
 }

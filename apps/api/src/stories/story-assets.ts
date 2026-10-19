@@ -6,6 +6,7 @@ export function storyAssetUrls(story: Story): string[] {
     story.coverImageUrl,
     story.pdfUrl,
     story.videoUrl,
+    story.videoVariants?.landscape?.url,
     ...(story.pages ?? []).flatMap((p) => [p.imageUrl, p.backgroundUrl, p.audioUrl]),
   ].filter((url): url is string => !!url);
 }

@@ -44,21 +44,31 @@ export class StoriesController {
     return this.storiesService.findOnePublic(id);
   }
 
+  /** format=vertical (default, phones/WhatsApp) | landscape (TV/laptop). */
   @Post(':id/generate-video')
-  async generateVideo(@CurrentUser() cu: CurrentUserPayload, @Param('id') id: string) {
+  async generateVideo(@CurrentUser() cu: CurrentUserPayload, @Param('id') id: string, @Query('format') format?: string) {
     const story = await this.storiesService.findOne(cu.id, id);
-    if (story.videoStatus === 'generating') {
-      return { message: 'Video generation already in progress' };
+    const fmt = format === 'landscape' ? 'landscape' : 'vertical';
+    const inProgress = fmt === 'vertical' ? story.videoStatus === 'generating' : story.videoVariants?.landscape?.status === 'generating';
+    if (inProgress) {
+      return { message: 'Video generation already in progress', format: fmt };
     }
-    // Fire-and-forget — returns immediately
-    void this.videoService.generateVideo(id, cu.id);
-    return { message: 'Video generation started', storyId: id };
+    // Queued in the background — returns immediately
+    await this.videoService.generateVideo(id, cu.id, fmt);
+    return { message: 'Video generation started', storyId: id, format: fmt };
   }
 
   @Get(':id/video-status')
   async getVideoStatus(@CurrentUser() cu: CurrentUserPayload, @Param('id') id: string) {
     const story = await this.storiesService.findOne(cu.id, id);
-    return { videoStatus: story.videoStatus ?? 'not_started', videoUrl: story.videoUrl ?? null };
+    return {
+      videoStatus: story.videoStatus ?? 'not_started',
+      videoUrl: story.videoUrl ?? null,
+      landscape: {
+        status: story.videoVariants?.landscape?.status ?? 'not_started',
+        url: story.videoVariants?.landscape?.url ?? null,
+      },
+    };
   }
 
   @HttpCode(HttpStatus.NO_CONTENT)
