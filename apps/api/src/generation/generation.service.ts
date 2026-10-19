@@ -2779,13 +2779,20 @@ export class GenerationService implements OnModuleInit {
     await this.closeCompletedQuests(story, generated);
 
     // The writer sometimes returns { title, detail } objects instead of strings — they were saved as raw JSON.
+    // It also re-opens quests that are already open, so skip any title that's already on the list.
+    const questKey = (t: string) => t.trim().toLowerCase().replace(/[.!]+$/, '');
+    const openTitles = new Set(
+      (await this.questsRepo.find({ where: { universeId: story.universeId, status: QuestStatus.Open }, select: { id: true, title: true } }))
+        .map((q) => questKey(q.title)),
+    );
     const quests = (generated.newQuests ?? [])
       .map((q) => this.textField(q, 'title'))
-      .filter((q) => !!q.title)
+      .filter((q) => !!q.title && !openTitles.has(questKey(q.title)) && openTitles.add(questKey(q.title)))
       .map(({ title, detail }) =>
         this.questsRepo.create({ universeId: story.universeId as string, title: title!, description: detail, openedInStoryId: story.id, completedInStoryId: null }),
       );
     if (quests.length > 0) await this.questsRepo.save(quests);
+    await this.closeStaleQuests(story.universeId);
   }
 
   /** Saves this episode's villain, or updates them if they've appeared before (so they can return). */
@@ -2828,6 +2835,12 @@ export class GenerationService implements OnModuleInit {
     const done = open.filter((q) => titles.has(q.title.trim().toLowerCase().replace(/[.!]+$/, '')));
     if (!done.length) return;
     await this.questsRepo.save(done.map((q) => ({ ...q, status: QuestStatus.Completed, completedInStoryId: story.id })));
+  }
+
+  /** Only the newest few quests stay open — stories only ever see those, and older ones just piled up. */
+  private async closeStaleQuests(universeId: string, keepOpen = 3): Promise<void> {
+    const stale = (await this.questsRepo.find({ where: { universeId, status: QuestStatus.Open }, order: { createdAt: 'DESC' } })).slice(keepOpen);
+    if (stale.length) await this.questsRepo.save(stale.map((q) => ({ ...q, status: QuestStatus.Completed })));
   }
 
   /** Accepts a plain string or a { title|name, detail|description } object from the writer. */

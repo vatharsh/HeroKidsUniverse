@@ -42,3 +42,26 @@ WHERE q."status" = 'open'
   AND lower(trim(trailing '.' from m."title")) = lower(trim(trailing '.' from q."title"));
 
 COMMIT;
+
+-- Duplicate open quests (the writer re-opened quests that were already open): keep the newest copy.
+UPDATE quests SET "status" = 'completed'
+WHERE "id" IN (
+  SELECT "id" FROM (
+    SELECT "id", row_number() OVER (
+      PARTITION BY "universeId", lower(trim(trailing '.' from trim("title"))) ORDER BY "createdAt" DESC
+    ) AS rn
+    FROM quests WHERE "status" = 'open'
+  ) dupes
+  WHERE rn > 1
+);
+
+-- Close every open quest except the 3 newest per universe (stories only use the newest 3;
+-- the old ones were mostly duplicates). Closed ones have no completing story.
+UPDATE quests SET "status" = 'completed'
+WHERE "id" IN (
+  SELECT "id" FROM (
+    SELECT "id", row_number() OVER (PARTITION BY "universeId" ORDER BY "createdAt" DESC) AS rn
+    FROM quests WHERE "status" = 'open'
+  ) ranked
+  WHERE rn > 3
+);
