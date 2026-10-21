@@ -1009,7 +1009,7 @@ export default function MerchandiseCreatePage() {
                                 >
                                   <div className="flex items-center gap-2">
                                     <div className="w-12 h-14 rounded-lg overflow-hidden bg-ink/5 flex items-center justify-center shrink-0">
-                                      <img src={resolveMediaUrl(story.coverImageUrl)} alt={story.title ?? "Story"} className="w-full h-full object-cover" />
+                                      <img loading="lazy" decoding="async" src={resolveMediaUrl(story.coverImageUrl)} alt={story.title ?? "Story"} className="w-full h-full object-cover" />
                                     </div>
                                     <div className="min-w-0">
                                       <p className="text-xs font-semibold text-ink line-clamp-2">{story.title}</p>
@@ -1058,7 +1058,7 @@ export default function MerchandiseCreatePage() {
                                     >
                                       <div className="flex items-center gap-2">
                                         <div className="w-9 h-9 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center shrink-0">
-                                          {char.avatarUrl ? <img src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover" /> : <UserRound className="w-4 h-4 text-brand" />}
+                                          {char.avatarUrl ? <img loading="lazy" decoding="async" src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover" /> : <UserRound className="w-4 h-4 text-brand" />}
                                         </div>
                                         <div className="min-w-0">
                                           <p className="text-xs font-semibold text-ink line-clamp-1">{char.name}</p>
@@ -1087,7 +1087,7 @@ export default function MerchandiseCreatePage() {
                                   >
                                     <div className="flex items-center gap-2">
                                       <div className="w-10 h-10 rounded-xl overflow-hidden bg-ink/5 flex items-center justify-center shrink-0">
-                                        {story.coverImageUrl ? <img src={resolveMediaUrl(story.coverImageUrl)} alt={story.title ?? "Story"} className="w-full h-full object-cover" /> : <FileText className="w-4 h-4 text-ink-muted" />}
+                                        {story.coverImageUrl ? <img loading="lazy" decoding="async" src={resolveMediaUrl(story.coverImageUrl)} alt={story.title ?? "Story"} className="w-full h-full object-cover" /> : <FileText className="w-4 h-4 text-ink-muted" />}
                                       </div>
                                       <div className="min-w-0">
                                         <p className="text-xs font-semibold text-ink line-clamp-1">{story.title ?? "Untitled"}</p>

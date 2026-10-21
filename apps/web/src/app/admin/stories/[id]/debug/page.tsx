@@ -140,7 +140,7 @@ export default function StoryDebugPage() {
                 {/* Image preview */}
                 <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                   {pg.imageUrl ? (
-                    <img src={resolveMediaUrl(pg.imageUrl)} alt={`Page ${pg.pageNumber}`} className="w-full h-48 object-cover" />
+                    <img loading="lazy" decoding="async" src={resolveMediaUrl(pg.imageUrl)} alt={`Page ${pg.pageNumber}`} className="w-full h-48 object-cover" />
                   ) : (
                     <div className="w-full h-48 bg-gray-100 flex items-center justify-center text-gray-400 text-xs">No image</div>
                   )}

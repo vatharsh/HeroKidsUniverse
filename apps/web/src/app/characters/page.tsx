@@ -91,7 +91,7 @@ const DEFAULT_ECONOMY: CharacterEconomy = {
 function AvatarImg({ src, alt, className, fallback }: { src: string | null; alt: string; className?: string; fallback: React.ReactNode }) {
   const [errored, setErrored] = useState(false);
   if (!src || errored) return <>{fallback}</>;
-  return <img src={src} alt={alt} className={className} onError={() => setErrored(true)} />;
+  return <img loading="lazy" decoding="async" src={src} alt={alt} className={className} onError={() => setErrored(true)} />;
 }
 
 // ── Character Form Modal ──────────────────────────────────────────────────────

@@ -400,8 +400,8 @@ function UniversePageInner() {
                     <a key={ep.id} href={`/stories/${ep.id}`}
                       className="group bg-white rounded-2xl shadow-card overflow-hidden hover:shadow-lg transition-all hover:-translate-y-0.5">
                       {ep.coverImageUrl ? (
-                        <img src={resolveMediaUrl(ep.coverImageUrl)} alt={ep.title ?? "Episode cover"}
-                          className="w-full h-40 object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+                        <img loading="lazy" decoding="async" src={resolveMediaUrl(ep.coverImageUrl)} alt={ep.title ?? "Episode cover"}
+                          className="w-full h-40 object-cover bg-ink/5 group-hover:scale-[1.02] transition-transform duration-300" />
                       ) : (
                         <div className="w-full h-40 bg-gradient-to-br from-space via-brand/40 to-space flex items-center justify-center">
                           <span className="text-5xl opacity-60">🌌</span>

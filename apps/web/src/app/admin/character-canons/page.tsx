@@ -256,7 +256,7 @@ export default function CharacterCanonsPage() {
                   {/* Avatar */}
                   <td className="px-4 py-3">
                     {row.approvedAvatarUrl ? (
-                      <img
+                      <img loading="lazy" decoding="async"
                         src={row.approvedAvatarUrl}
                         alt={row.entityName}
                         className="w-8 h-8 rounded-full object-cover border border-gray-200"
@@ -418,7 +418,7 @@ function DeleteCanonModal({ canon, onClose, onDeleted }: { canon: CanonRow; onCl
         <div className="flex items-center gap-3 mb-4">
           {canon.approvedAvatarUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={canon.approvedAvatarUrl} alt={canon.entityName} className="w-12 h-12 rounded-full object-cover border border-gray-200" />
+            <img loading="lazy" decoding="async" src={canon.approvedAvatarUrl} alt={canon.entityName} className="w-12 h-12 rounded-full object-cover border border-gray-200" />
           )}
           <div>
             <p className="text-sm font-bold text-gray-900">{canon.entityName}</p>

@@ -96,7 +96,7 @@ function EpisodeCard({ story, onDelete, episodeNumber }: { story: Story; onDelet
 
       {/* ── Cover art / placeholder ── */}
       {story.coverImageUrl ? (
-        <img
+        <img loading="lazy" decoding="async"
           src={resolveMediaUrl(story.coverImageUrl)}
           alt={story.title ?? "Episode"}
           className="absolute inset-0 w-full h-full object-cover"

@@ -153,7 +153,7 @@ export default function OrderDetailPage() {
                       <div className="flex items-start gap-3">
                         {item.previewUrl && (
                           <div className="w-16 h-20 rounded-xl overflow-hidden bg-ink/5 shrink-0">
-                            <img src={item.previewUrl} alt={item.productNameSnapshot} className="w-full h-full object-cover" />
+                            <img loading="lazy" decoding="async" src={item.previewUrl} alt={item.productNameSnapshot} className="w-full h-full object-cover" />
                           </div>
                         )}
                         {!item.previewUrl && (

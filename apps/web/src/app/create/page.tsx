@@ -1172,7 +1172,7 @@ function CreatePageInner() {
               <div className="flex items-center gap-3 bg-brand/5 border border-brand/20 rounded-2xl p-4">
                 <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
                   {hero?.avatarUrl
-                    ? <img src={hero.avatarUrl} alt={hero.name} className="w-full h-full object-cover" />
+                    ? <img loading="lazy" decoding="async" src={hero.avatarUrl} alt={hero.name} className="w-full h-full object-cover" />
                     : "🦸"}
                 </div>
                 <div>
@@ -1192,7 +1192,7 @@ function CreatePageInner() {
                           hero?.id === h.id ? "border-brand bg-brand/10 text-brand font-semibold" : "border-ink/15 bg-white text-ink-mid hover:border-brand/40",
                         )}>
                         <span className="w-7 h-7 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center text-xs">
-                          {h.avatarUrl ? <img src={h.avatarUrl} alt="" className="w-full h-full object-cover" /> : "🦸"}
+                          {h.avatarUrl ? <img loading="lazy" decoding="async" src={h.avatarUrl} alt="" className="w-full h-full object-cover" /> : "🦸"}
                         </span>
                         {h.name}
                       </button>
@@ -1218,7 +1218,7 @@ function CreatePageInner() {
                 >
                   <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
                     {existingCompanion.avatarUrl
-                      ? <img src={existingCompanion.avatarUrl} alt={existingCompanion.name} className="w-full h-full object-cover" />
+                      ? <img loading="lazy" decoding="async" src={existingCompanion.avatarUrl} alt={existingCompanion.name} className="w-full h-full object-cover" />
                       : <span>🐾</span>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1253,7 +1253,7 @@ function CreatePageInner() {
                         )}>
                         <div className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-ink/5 flex items-center justify-center">
                           {char.avatarUrl
-                            ? <img src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover" />
+                            ? <img loading="lazy" decoding="async" src={char.avatarUrl} alt={char.name} className="w-full h-full object-cover" />
                             : <span className="text-lg font-bold text-ink/30">{char.name[0]}</span>}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1447,7 +1447,7 @@ function CreatePageInner() {
                       >
                         <div className="w-10 h-10 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center shrink-0 overflow-hidden">
                           {pet.avatarUrl
-                            ? <img src={pet.avatarUrl} alt={pet.name} className="w-full h-full object-cover" />
+                            ? <img loading="lazy" decoding="async" src={pet.avatarUrl} alt={pet.name} className="w-full h-full object-cover" />
                             : <span className="text-xl">🐾</span>}
                         </div>
                         <div>
