@@ -16,6 +16,7 @@ import { Story } from '../stories/story.entity';
 import { AdminService } from './admin.service';
 import { TtsVoicesService } from './tts-voices.service';
 import { GenerationService } from '../generation/generation.service';
+import { razorpayKeyMode } from '../common/sandbox';
 
 @Controller('admin')
 @Roles('admin')
@@ -384,6 +385,12 @@ export class AdminController {
   @Get('settings')
   getSettings() {
     return this.adminService.getSettings();
+  }
+
+  /** Which Razorpay keys the server uses — shown beside the Sandbox launch switch in Settings. */
+  @Get('payment-keys')
+  paymentKeys() {
+    return { razorpayKeyMode: razorpayKeyMode() };
   }
 
   @Get('tts-voices')

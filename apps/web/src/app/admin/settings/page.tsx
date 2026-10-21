@@ -26,7 +26,7 @@ interface SettingGroup {
 const GROUPS: SettingGroup[] = [
   {
     title: "Mode",
-    description: "Controls whether the platform is in sandbox (test) mode or live mode. Affects order stamping and image generation limits.",
+    description: "Pre-launch vs live. Decides whether new orders, stories and AI usage are counted as test data or real business.",
     items: [
       { key: "SANDBOX_MODE", label: "Sandbox Mode", description: "Launch switch. ON = everything created from now on is test data (pre-launch). Turn OFF at launch — then only users marked as Test account create test data. Never relabels existing records.", type: "boolean" },
     ],
@@ -116,6 +116,8 @@ function SettingRow({
   onSave,
   saving,
   saved,
+  dirty,
+  note,
 }: {
   item: SettingDefinition;
   value: string;
@@ -123,15 +125,20 @@ function SettingRow({
   onSave: () => void;
   saving: boolean;
   saved: boolean;
+  dirty: boolean;
+  note?: React.ReactNode;
 }) {
   const inputClass = "w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-violet-400";
   return (
-    <div className="flex flex-col gap-3 py-5 border-b border-gray-100 last:border-0">
+    <div className={`flex flex-col gap-3 py-5 border-b border-gray-100 last:border-0 ${dirty ? "bg-amber-50/60 -mx-6 px-6" : ""}`}>
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-gray-900">{item.label}</p>
           <p className="text-xs text-gray-500 mt-1 leading-5">{item.description}</p>
           <p className="text-[10px] uppercase tracking-widest text-gray-400 mt-2 font-semibold">{item.key}</p>
+          {/* Each row saves on its own — flipping a switch without Save used to look done but change nothing. */}
+          {dirty && <p className="text-xs font-bold text-amber-700 mt-2">Unsaved — click Save to apply</p>}
+          {note}
         </div>
         <div className="w-[360px] max-w-full flex items-center gap-2">
           {item.type === "boolean" ? (
@@ -170,7 +177,7 @@ function SettingRow({
             type="button"
             onClick={onSave}
             disabled={saving}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 ${dirty ? "bg-amber-600 ring-2 ring-amber-300" : "bg-violet-600"}`}
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
             Save
@@ -188,6 +195,8 @@ function GroupCard({
   onSave,
   savingKey,
   savedKey,
+  savedValues,
+  notes,
 }: {
   group: SettingGroup;
   values: Record<string, string>;
@@ -195,6 +204,8 @@ function GroupCard({
   onSave: (key: string, type: SettingType) => void;
   savingKey: string | null;
   savedKey: string | null;
+  savedValues: Record<string, string>;
+  notes: Record<string, React.ReactNode>;
 }) {
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -212,6 +223,8 @@ function GroupCard({
             onSave={() => onSave(item.key, item.type)}
             saving={savingKey === item.key}
             saved={savedKey === item.key}
+            dirty={(values[item.key] ?? "") !== (savedValues[item.key] ?? "")}
+            note={notes[item.key]}
           />
         ))}
       </div>
@@ -221,6 +234,8 @@ function GroupCard({
 
 export default function AdminSettingsPage() {
   const [values, setValues] = useState<Record<string, string>>(defaultValues);
+  const [savedValues, setSavedValues] = useState<Record<string, string>>(defaultValues);
+  const [keyMode, setKeyMode] = useState<"live" | "test" | "missing" | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -239,17 +254,45 @@ export default function AdminSettingsPage() {
           next[setting.key] = setting.value;
         }
         setValues(next);
+        setSavedValues(next);
         setError("");
       })
       .catch(() => setError("Failed to load settings"))
       .finally(() => setLoading(false));
+    fetch(`${BASE}/admin/payment-keys`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((body) => setKeyMode((body.data ?? body).razorpayKeyMode ?? null))
+      .catch(() => null);
   }, []);
 
   const groups = useMemo(() => GROUPS, []);
 
+  // Warning next to the launch switch, based on what's on screen (saved or not).
+  const sandboxOn = values.SANDBOX_MODE === "true";
+  const sandboxNote =
+    !sandboxOn && keyMode && keyMode !== "live" ? (
+      <p className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-2">
+        ⚠ Sandbox off, but Razorpay is using {keyMode === "missing" ? "no" : "TEST"} keys — customers cannot really pay. Switch to live keys first.
+      </p>
+    ) : sandboxOn && keyMode === "live" ? (
+      <p className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-2">
+        ⚠ Razorpay LIVE keys while Sandbox is on — real payments would be counted as test. Turn Sandbox off.
+      </p>
+    ) : keyMode ? (
+      <p className="text-[11px] text-gray-500 mt-2">Razorpay keys on the server: <strong>{keyMode === "live" ? "LIVE" : keyMode === "test" ? "TEST" : "none"}</strong></p>
+    ) : null;
+
   async function saveSetting(key: string, type: SettingType) {
     const token = getAccessToken();
     if (!token) return;
+
+    // The launch switch and the payment keys must agree — confirm before going live on test keys.
+    if (key === "SANDBOX_MODE" && values[key] === "false" && keyMode && keyMode !== "live") {
+      const ok = window.confirm(
+        `Razorpay is using ${keyMode === "missing" ? "no" : "TEST"} keys. If you turn Sandbox off now, the site counts as live but customers cannot really pay. Turn it off anyway?`,
+      );
+      if (!ok) return;
+    }
 
     setSavingKey(key);
     setSavedKey(null);
@@ -269,6 +312,7 @@ export default function AdminSettingsPage() {
       const body = await res.json();
       const saved = (body.data ?? body) as PlatformSetting;
       setValues((curr) => ({ ...curr, [key]: saved.value }));
+      setSavedValues((curr) => ({ ...curr, [key]: saved.value }));
       setSavedKey(key);
       setTimeout(() => setSavedKey((curr) => (curr === key ? null : curr)), 1500);
     } catch {
@@ -315,6 +359,8 @@ export default function AdminSettingsPage() {
             onSave={saveSetting}
             savingKey={savingKey}
             savedKey={savedKey}
+            savedValues={savedValues}
+            notes={{ SANDBOX_MODE: sandboxNote }}
           />
         ))}
       </div>
