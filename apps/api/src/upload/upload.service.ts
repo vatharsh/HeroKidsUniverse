@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
+import { makePreview, previewPathFor } from './image-preview';
 
 const AVATAR_UPLOAD_DIR = join(process.cwd(), 'uploads', 'avatars');
 const STORY_UPLOAD_DIR = join(process.cwd(), 'uploads', 'stories');
@@ -102,13 +103,56 @@ export class UploadService implements OnApplicationBootstrap {
     if (this.useR2) {
       const key = `stories/${storyId}/pages/${pageNumber}-${randomId}.png`;
       await this.putR2Object(key, buffer, 'image/png');
+      await this.savePreview(key, buffer);
       return this.getPublicUrl(key);
     }
 
     const filename = `${storyId}-page-${pageNumber}-${randomId}.png`;
     await mkdir(STORY_UPLOAD_DIR, { recursive: true });
     await writeFile(join(STORY_UPLOAD_DIR, filename), buffer);
+    await this.savePreview(`stories/${filename}`, buffer);
     return this.localUploadUrl(`stories/${filename}`);
+  }
+
+  // ── Previews (small WebP copies for lists) ────────────────────────────────
+
+  /** Stores the small copy next to the original. Never fails the upload — lists fall back to the original. */
+  private async savePreview(keyOrLocalPath: string, original: Buffer): Promise<void> {
+    const target = previewPathFor(keyOrLocalPath);
+    if (!target) return;
+    try {
+      const preview = await makePreview(original);
+      if (this.useR2) await this.putR2Object(target, preview, 'image/webp');
+      else await writeFile(join(process.cwd(), 'uploads', target), preview);
+    } catch (err) {
+      this.logger.warn(`Preview not saved for ${keyOrLocalPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Makes the preview for an existing picture if it's missing (one-off backfill).
+   * Returns 'created', 'exists', or 'skipped' (not a stored PNG/JPEG we own).
+   */
+  async ensurePreview(url: string): Promise<'created' | 'exists' | 'skipped'> {
+    const r2Key = this.extractKeyFromUrl(url);
+    if (r2Key && this.useR2 && this.s3Client) {
+      const target = previewPathFor(r2Key);
+      if (!target) return 'skipped';
+      if (await this.objectExists(this.getPublicUrl(target))) return 'exists';
+      const obj = await this.s3Client.send(new GetObjectCommand({ Bucket: this.bucket, Key: r2Key }));
+      const original = Buffer.from(await obj.Body!.transformToByteArray());
+      await this.putR2Object(target, await makePreview(original), 'image/webp');
+      return 'created';
+    }
+    const local = url.match(/\/upload\/files\/((?:stories|characters)\/[^/?#]+)$/);
+    if (!local) return 'skipped';
+    const target = previewPathFor(local[1]);
+    if (!target) return 'skipped';
+    const targetPath = join(process.cwd(), 'uploads', target);
+    try { await readFile(targetPath); return 'exists'; } catch { /* not there yet */ }
+    const original = await readFile(join(process.cwd(), 'uploads', local[1]));
+    await writeFile(targetPath, await makePreview(original));
+    return 'created';
   }
 
   async uploadPageAudio(

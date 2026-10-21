@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken, storiesApi } from "@/lib/api";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { resolveMediaUrl } from "@/lib/media-url";
+import PreviewImg from "@/components/shared/PreviewImg";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -400,7 +401,7 @@ function UniversePageInner() {
                     <a key={ep.id} href={`/stories/${ep.id}`}
                       className="group bg-white rounded-2xl shadow-card overflow-hidden hover:shadow-lg transition-all hover:-translate-y-0.5">
                       {ep.coverImageUrl ? (
-                        <img loading="lazy" decoding="async" src={resolveMediaUrl(ep.coverImageUrl)} alt={ep.title ?? "Episode cover"}
+                        <PreviewImg src={ep.coverImageUrl} alt={ep.title ?? "Episode cover"}
                           className="w-full h-40 object-cover bg-ink/5 group-hover:scale-[1.02] transition-transform duration-300" />
                       ) : (
                         <div className="w-full h-40 bg-gradient-to-br from-space via-brand/40 to-space flex items-center justify-center">
@@ -715,11 +716,11 @@ function Thumb({ item, fallback, size = "w-16 h-16", badge, className = "" }: {
   item: Thumbed; fallback: string; size?: string; badge?: string; className?: string;
 }) {
   const [broken, setBroken] = useState(false);
-  const url = item.thumbnailUrl && !broken ? resolveMediaUrl(item.thumbnailUrl) : null;
+  const url = item.thumbnailUrl && !broken ? item.thumbnailUrl : null;
   const box = (
     <div className={`relative ${size} flex-shrink-0 rounded-2xl overflow-hidden bg-ink/5 border border-ink/10 flex items-center justify-center text-2xl ${className}`}>
       {url
-        ? <img src={url} alt="" loading="lazy" onError={() => setBroken(true)} className="w-full h-full object-cover" />
+        ? <PreviewImg src={url} onError={() => setBroken(true)} className="w-full h-full object-cover" />
         : fallback}
       {url && badge && (
         <span className="absolute bottom-0.5 right-0.5 text-xs leading-none bg-white/90 rounded-full w-5 h-5 flex items-center justify-center shadow-sm">{badge}</span>

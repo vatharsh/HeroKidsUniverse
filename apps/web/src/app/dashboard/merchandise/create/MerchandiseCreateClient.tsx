@@ -50,6 +50,7 @@ import { getAccessToken } from "@/lib/api";
 import { addressesApi, type UserAddress } from "@/lib/account";
 import { cn } from "@/lib/utils";
 import { resolveMediaUrl } from "@/lib/media-url";
+import PreviewImg from "@/components/shared/PreviewImg";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -1009,7 +1010,7 @@ export default function MerchandiseCreatePage() {
                                 >
                                   <div className="flex items-center gap-2">
                                     <div className="w-12 h-14 rounded-lg overflow-hidden bg-ink/5 flex items-center justify-center shrink-0">
-                                      <img loading="lazy" decoding="async" src={resolveMediaUrl(story.coverImageUrl)} alt={story.title ?? "Story"} className="w-full h-full object-cover" />
+                                      <PreviewImg src={story.coverImageUrl} alt={story.title ?? "Story"} className="w-full h-full object-cover" />
                                     </div>
                                     <div className="min-w-0">
                                       <p className="text-xs font-semibold text-ink line-clamp-2">{story.title}</p>
@@ -1087,7 +1088,7 @@ export default function MerchandiseCreatePage() {
                                   >
                                     <div className="flex items-center gap-2">
                                       <div className="w-10 h-10 rounded-xl overflow-hidden bg-ink/5 flex items-center justify-center shrink-0">
-                                        {story.coverImageUrl ? <img loading="lazy" decoding="async" src={resolveMediaUrl(story.coverImageUrl)} alt={story.title ?? "Story"} className="w-full h-full object-cover" /> : <FileText className="w-4 h-4 text-ink-muted" />}
+                                        {story.coverImageUrl ? <PreviewImg src={story.coverImageUrl} alt={story.title ?? "Story"} className="w-full h-full object-cover" /> : <FileText className="w-4 h-4 text-ink-muted" />}
                                       </div>
                                       <div className="min-w-0">
                                         <p className="text-xs font-semibold text-ink line-clamp-1">{story.title ?? "Untitled"}</p>

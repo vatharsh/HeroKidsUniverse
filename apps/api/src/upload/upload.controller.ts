@@ -14,6 +14,7 @@ import { join } from 'path';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { UploadService } from './upload.service';
+import { imageContentType } from './image-preview';
 
 const AVATAR_UPLOAD_DIR    = join(process.cwd(), 'uploads', 'avatars');
 const STORY_UPLOAD_DIR     = join(process.cwd(), 'uploads', 'stories');
@@ -36,7 +37,7 @@ export class UploadController {
   serveFile(@Param('filename') filename: string, @Res() res: Response) {
     const filePath = join(AVATAR_UPLOAD_DIR, filename);
     if (!existsSync(filePath)) throw new NotFoundException('File not found');
-    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Type', imageContentType(filename));
     createReadStream(filePath).pipe(res);
   }
 
@@ -45,7 +46,7 @@ export class UploadController {
   serveStoryFile(@Param('filename') filename: string, @Res() res: Response) {
     const filePath = join(STORY_UPLOAD_DIR, filename);
     if (!existsSync(filePath)) throw new NotFoundException('File not found');
-    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Type', imageContentType(filename));
     createReadStream(filePath).pipe(res);
   }
 
@@ -54,7 +55,7 @@ export class UploadController {
   serveCharacterFile(@Param('filename') filename: string, @Res() res: Response) {
     const filePath = join(CHARACTER_UPLOAD_DIR, filename);
     if (!existsSync(filePath)) throw new NotFoundException('File not found');
-    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Type', imageContentType(filename));
     createReadStream(filePath).pipe(res);
   }
 

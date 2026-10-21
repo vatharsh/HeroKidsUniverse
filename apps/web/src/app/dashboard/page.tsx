@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { resolveMediaUrl } from "@/lib/media-url";
+import PreviewImg from "@/components/shared/PreviewImg";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 const TERMINAL = new Set(["completed", "failed"]);
@@ -102,8 +103,8 @@ function EpisodeCard({ story, onDelete, episodeNumber }: { story: Story; onDelet
 
       {/* ── Cover art / placeholder ── */}
       {story.coverImageUrl ? (
-        <img loading="lazy" decoding="async"
-          src={resolveMediaUrl(story.coverImageUrl)}
+        <PreviewImg
+          src={story.coverImageUrl}
           alt={story.title ?? "Episode"}
           className="absolute inset-0 w-full h-full object-cover"
         />
