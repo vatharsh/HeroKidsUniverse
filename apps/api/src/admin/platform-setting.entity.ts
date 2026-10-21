@@ -56,7 +56,7 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   FREE_HERO_AVATAR_GENERATIONS:   { value: '3', type: 'number', description: 'Free hero avatar generations per account (shared by all heroes); after that each one uses an Avatar Refresh' },
   OPENAI_AVATAR_COST_PER_IMAGE:   { value: '0.19', type: 'number', description: 'Cost tracking for one OpenAI avatar (gpt-image-1, high quality, photo edit) in USD' },
   GEMINI_AVATAR_COST_PER_IMAGE:   { value: '0.067', type: 'number', description: 'Cost tracking for one Gemini avatar in USD' },
-  CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT: { value: '20', type: 'number', description: 'Most a coupon can take off a credit pack, in % of the pack price (keeps packs above AI cost even after influencer commission)' },
+  CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT: { value: '15', type: 'number', description: 'Most a coupon can take off a credit pack, in % of the pack price (keeps packs above AI cost even after influencer commission)' },
   SANDBOX_MODE:                   { value: 'true',  type: 'boolean', description: 'All new orders are stamped as sandbox (test) orders. Toggle to switch to live mode.' },
   ENABLE_MERCHANDISE:             { value: 'false', type: 'boolean', description: 'Show merchandise-related product surfaces' },
   ENABLE_NARRATION:               { value: 'true', type: 'boolean', description: 'Enable narration generation' },

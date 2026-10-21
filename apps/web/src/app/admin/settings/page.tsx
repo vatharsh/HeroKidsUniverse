@@ -83,7 +83,7 @@ const GROUPS: SettingGroup[] = [
       { key: "FREE_PREVIEW_STORIES", label: "Free Preview Stories", description: "Free preview stories awarded at signup. Used only when the user has no regular credits.", type: "number" },
       { key: "FREE_PREVIEW_PAGES", label: "Preview Story Pages", description: "Number of pages in a free preview story.", type: "number" },
       { key: "FREE_HERO_AVATAR_GENERATIONS", label: "Free Hero Avatars", description: "Free hero avatar generations per account, shared by all heroes. After that each new hero avatar uses an Avatar Refresh. Failed generations are never counted.", type: "number" },
-      { key: "CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT", label: "Max Coupon Discount on Packs (%)", description: "The most any coupon can take off a credit pack, as % of the pack price. Keeps packs above AI cost after influencer commission. Default: 20.", type: "number" },
+      { key: "CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT", label: "Max Coupon Discount on Packs (%)", description: "The most any coupon can take off a credit pack, as % of the pack price. Keeps packs above AI cost after influencer commission. Default: 15.", type: "number" },
       { key: "BASIC_PLAN_PAGES", label: "Basic Plan Pages", description: "Default page count for the Basic plan.", type: "number" },
       { key: "STANDARD_PLAN_PAGES", label: "Standard Plan Pages", description: "Default page count for the Standard plan.", type: "number" },
       { key: "PREMIUM_PLAN_PAGES", label: "Premium Plan Pages", description: "Default page count for the Premium plan.", type: "number" },
