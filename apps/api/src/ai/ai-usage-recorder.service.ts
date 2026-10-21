@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 
 import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
 import { AiOperation, AiUsageLog } from './entities/ai-usage-log.entity';
+import { geminiTextPrice } from './gemini-pricing';
 
 interface UsageContext {
   userId?: string | null;
@@ -46,7 +47,9 @@ export class AiUsageRecorder {
       const ctx = aiUsageContext.getStore() ?? {};
       const inputTokens = Math.max(0, Math.round(entry.inputTokens ?? 0));
       const outputTokens = Math.max(0, Math.round(entry.outputTokens ?? 0));
-      const price = entry.provider === 'openai' ? OPENAI_MINI_PRICE : await this.geminiTextPrice();
+      const price = entry.provider === 'openai'
+        ? OPENAI_MINI_PRICE
+        : geminiTextPrice(entry.model) ?? await this.settingsGeminiPrice();
       await this.dataSource.getRepository(AiUsageLog).save({
         userId: entry.userId ?? ctx.userId ?? null,
         storyId: ctx.storyId ?? null,
@@ -64,8 +67,8 @@ export class AiUsageRecorder {
     }
   }
 
-  /** Same per-token prices the story writer is costed with (Settings → AI Model Pricing). */
-  private async geminiTextPrice(): Promise<{ input: number; output: number }> {
+  /** Fallback for Gemini models without a known list price (Settings → AI Model Pricing). */
+  private async settingsGeminiPrice(): Promise<{ input: number; output: number }> {
     const settings = this.dataSource.getRepository(PlatformSetting);
     const read = async (key: string) => {
       const row = await settings.findOne({ where: { key } });

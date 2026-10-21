@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Repository } from 'typeorm';
 
+import { AiUsageRecorder } from '../ai/ai-usage-recorder.service';
+import { AiOperation } from '../ai/entities/ai-usage-log.entity';
 import { IMAGE_GENERATION_PROVIDER } from '../ai/interfaces/image-generation.provider';
 import type { ImageGenerationProvider } from '../ai/interfaces/image-generation.provider';
 import { PromptRegistryService } from '../ai/prompt-registry.service';
@@ -31,7 +33,7 @@ type BackfillResult = {
 export class CharacterCanonService {
   private readonly logger = new Logger(CharacterCanonService.name);
 
-  private readonly openai: OpenAI;
+  private readonly genAI: GoogleGenerativeAI;
 
   constructor(
     @InjectRepository(CharacterCanon) private readonly canonRepo: Repository<CharacterCanon>,
@@ -42,9 +44,24 @@ export class CharacterCanonService {
     @Optional() private readonly promptRegistry: PromptRegistryService | null,
     @InjectRepository(PlatformSetting) private readonly settingsRepo: Repository<PlatformSetting>,
     private readonly config: ConfigService,
+    @Optional() private readonly usage?: AiUsageRecorder,
   ) {
-    const apiKey = this.config.get<string>('OPEN_AI_API_KEY') ?? this.config.get<string>('OPENAI_API_KEY') ?? '';
-    this.openai = new OpenAI({ apiKey });
+    // Canon extraction used OpenAI (gpt-4o-mini); it runs on Gemini so children's data stays with one provider.
+    this.genAI = new GoogleGenerativeAI(this.config.get<string>('GEMINI_API_KEY') ?? '');
+  }
+
+  /** Turns the canon prompt into JSON text with Gemini. Kept separate so tests can stub it. */
+  private async extractCanonJson(prompt: string): Promise<{ content: string | null; model: string }> {
+    const model = this.config.get<string>('VISION_ANALYSIS_MODEL') || 'gemini-3.8-flash';
+    const result = await this.genAI
+      .getGenerativeModel({ model, generationConfig: { responseMimeType: 'application/json', temperature: 0 } })
+      .generateContent(prompt);
+    void this.usage?.record({
+      provider: 'gemini', model, operation: AiOperation.AppearanceAnalysis,
+      inputTokens: result.response.usageMetadata?.promptTokenCount,
+      outputTokens: result.response.usageMetadata?.candidatesTokenCount,
+    });
+    return { content: result.response.text().trim() || null, model };
   }
 
   private async getMinQualityScore(): Promise<number> {
@@ -83,18 +100,8 @@ export class CharacterCanonService {
         return await this.canonRepo.save(canon);
       }
 
-      const model = 'gpt-4o-mini';
       const canonPrompt = await this.getCharacterCanonPrompt(rawDescription);
-      const response = await this.openai.chat.completions.create({
-        model,
-        response_format: { type: 'json_object' },
-        messages: [{
-          role: 'user',
-          content: canonPrompt,
-        }],
-      });
-
-      const content = response.choices[0]?.message?.content?.trim();
+      const { content, model } = await this.extractCanonJson(canonPrompt);
       if (!content) {
         throw new Error('Canon extraction returned empty response');
       }

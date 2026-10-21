@@ -17,7 +17,7 @@ import type {
   SpeechBubbleLayoutResult,
 } from '../interfaces/image-generation.provider';
 import type { CharacterIdentity } from '../../heroes/hero.entity';
-import { ContentSafetyError, ContentSafetyService, isContentSafetyError } from '../content-safety.service';
+import { ContentSafetyError, ContentSafetyService } from '../content-safety.service';
 import { CHILD_SAFE_IMAGE_RULE } from '../gemini-safety';
 import { NanoBananaImageProvider } from './nano-banana-image.provider';
 import { OpenAIImageProvider } from './openai-image.provider';
@@ -162,16 +162,9 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
       const attempt = note ? { ...input, adjustmentHint: [input.adjustmentHint, note].filter(Boolean).join('. ') } : input;
       if (provider === this.openai) return this.openai.generateAvatar(attempt);
 
-      // Gemini selected — fall back to OpenAI on an empty response or outage, but never on a safety
-      // refusal: that would just ask a second model to draw what the first refused.
-      try {
-        return await this.nanoBanana.generateAvatar(attempt);
-      } catch (err) {
-        if (isContentSafetyError(err)) throw err;
-        const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`Gemini avatar failed (${msg.slice(0, 120)}), falling back to OpenAI`);
-        return this.openai.generateAvatar(attempt);
-      }
+      // Gemini selected — no OpenAI fallback any more: the child's photo goes to one provider only.
+      // A failure is refunded by the caller, so the parent can simply try again.
+      return this.nanoBanana.generateAvatar(attempt);
     });
   }
 

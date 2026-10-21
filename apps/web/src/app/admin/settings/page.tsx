@@ -67,8 +67,8 @@ const GROUPS: SettingGroup[] = [
     title: "AI Model Pricing",
     description: "Per-unit costs for each AI provider. Update these whenever provider pricing changes — they are used to calculate real costs in ai_usage_logs.",
     items: [
-      { key: "GEMINI_INPUT_COST_PER_1M_TOKENS",  label: "Gemini Input (per 1M tokens)",  description: "Cost per 1M input tokens in USD. Default: Gemini 2.5 Flash Lite ($0.10).",      type: "number" },
-      { key: "GEMINI_OUTPUT_COST_PER_1M_TOKENS", label: "Gemini Output (per 1M tokens)", description: "Cost per 1M output tokens in USD. Default: Gemini 2.5 Flash Lite ($0.40).",     type: "number" },
+      { key: "GEMINI_INPUT_COST_PER_1M_TOKENS",  label: "Gemini Input (per 1M tokens)",  description: "Fallback for Gemini models without a built-in price. Gemini 3.8 Flash is priced automatically ($0.75 now, $1.50 from 1 Jan 2027).",      type: "number" },
+      { key: "GEMINI_OUTPUT_COST_PER_1M_TOKENS", label: "Gemini Output (per 1M tokens)", description: "Fallback for Gemini models without a built-in price. Gemini 3.8 Flash is priced automatically ($3.75 now, $7.50 from 1 Jan 2027).",     type: "number" },
       { key: "OPENAI_IMAGE_COST_PER_IMAGE",       label: "OpenAI Image (per image)",      description: "Cost per generated image in USD. Default: gpt-image-1 medium quality ($0.04).", type: "number" },
       { key: "OPENAI_AVATAR_COST_PER_IMAGE",      label: "OpenAI Avatar (per avatar)",    description: "Cost per avatar in USD (gpt-image-1, high quality, photo edit). Default: $0.19.", type: "number" },
       { key: "GEMINI_AVATAR_COST_PER_IMAGE",      label: "Gemini Avatar (per avatar)",    description: "Cost per avatar in USD when the avatar provider is Gemini. Default: $0.067.", type: "number" },

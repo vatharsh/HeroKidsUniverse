@@ -33,6 +33,7 @@ import { Hero } from '../heroes/hero.entity';
 import { HeroPower } from '../powers/hero-power.entity';
 import { UniverseVillain, VillainStatus } from '../universes/universe-villain.entity';
 import { pickStoryShape } from './story-shapes';
+import { geminiTextPrice } from '../ai/gemini-pricing';
 import { aiUsageContext } from '../ai/ai-usage-recorder.service';
 import { ContentSafetyError, ContentSafetyService, isContentSafetyError } from '../ai/content-safety.service';
 import type { StoryGenerationInput } from '../ai/interfaces/story-generation.provider';
@@ -2169,8 +2170,10 @@ export class GenerationService implements OnModuleInit {
 
     const inputTokens = generated.inputTokens ?? 0;
     const outputTokens = generated.outputTokens ?? 0;
-    const inputCostPer1M = await this.getNumberSetting('GEMINI_INPUT_COST_PER_1M_TOKENS', Number(SETTING_DEFAULTS['GEMINI_INPUT_COST_PER_1M_TOKENS'].value));
-    const outputCostPer1M = await this.getNumberSetting('GEMINI_OUTPUT_COST_PER_1M_TOKENS', Number(SETTING_DEFAULTS['GEMINI_OUTPUT_COST_PER_1M_TOKENS'].value));
+    // The model's real list price when known (e.g. gemini-3.8-flash); Settings only for other models.
+    const known = geminiTextPrice(model);
+    const inputCostPer1M = known?.input ?? await this.getNumberSetting('GEMINI_INPUT_COST_PER_1M_TOKENS', Number(SETTING_DEFAULTS['GEMINI_INPUT_COST_PER_1M_TOKENS'].value));
+    const outputCostPer1M = known?.output ?? await this.getNumberSetting('GEMINI_OUTPUT_COST_PER_1M_TOKENS', Number(SETTING_DEFAULTS['GEMINI_OUTPUT_COST_PER_1M_TOKENS'].value));
     const estimatedCostUsd = (inputTokens * inputCostPer1M + outputTokens * outputCostPer1M) / 1_000_000;
 
     await this.aiUsageLogsRepo.save(

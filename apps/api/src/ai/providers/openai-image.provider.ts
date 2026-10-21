@@ -23,6 +23,12 @@ import { AVATAR_STYLE, BACKGROUND_SCENE_STYLE, STORYBOOK_STYLE } from '../style.
 import { AiUsageRecorder } from '../ai-usage-recorder.service';
 import { AiOperation } from '../entities/ai-usage-log.entity';
 
+const CHARACTER_VISION_FALLBACK =
+  'Describe this person\'s appearance in one concise paragraph (60–90 words) for consistent storybook illustration. ' +
+    'Cover: approximate age range, gender presentation if clear, face shape, skin tone, hair colour and style, eye shape, expression, build visible in the portrait, clothing, and distinctive features. ' +
+    'Mention glasses, bindi, moustache, beard, jewellery, dimples, freckles, moles, braces, or saree ONLY if visibly present. If a feature is absent, say so for important traits like glasses or facial hair. ' +
+    'Be specific and factual. Example: "A middle-aged Indian man with medium-brown skin, short black hair with a side part, dark eyes, a trimmed black moustache, a serious expression, and a white collared shirt. No glasses."';
+
 @Injectable()
 export class OpenAIImageProvider implements ImageGenerationProvider {
   private readonly logger = new Logger(OpenAIImageProvider.name);
@@ -83,7 +89,8 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
     );
   }
 
-  private async getIdentityQaPrompt(heroName: string): Promise<string> {
+  /** Admin-editable identity-check prompt (registry 'identity_qa'); also used by the Gemini checker. */
+  async getIdentityQaPrompt(heroName: string): Promise<string> {
     return this.renderRegistryPrompt('identity_qa', { heroName }, this.getIdentityQaFallback(heroName));
   }
 
@@ -398,6 +405,11 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
     return this.fromImageResponse(response);
   }
 
+  /** Admin-editable appearance prompt (registry 'character_vision'); also used by the Gemini reader. */
+  async getCharacterVisionPrompt(): Promise<string> {
+    return this.renderRegistryPrompt('character_vision', { imageUrl: 'attached image' }, CHARACTER_VISION_FALLBACK);
+  }
+
   async describeCharacterAppearance(photoBuffer: Buffer, mimeType = 'image/png'): Promise<string | null> {
     try {
       const base64 = photoBuffer.toString('base64');
@@ -405,10 +417,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
       const visionPrompt = await this.renderRegistryPrompt(
         'character_vision',
         { imageUrl: 'attached image' },
-        'Describe this person\'s appearance in one concise paragraph (60–90 words) for consistent storybook illustration. ' +
-          'Cover: approximate age range, gender presentation if clear, face shape, skin tone, hair colour and style, eye shape, expression, build visible in the portrait, clothing, and distinctive features. ' +
-          'Mention glasses, bindi, moustache, beard, jewellery, dimples, freckles, moles, braces, or saree ONLY if visibly present. If a feature is absent, say so for important traits like glasses or facial hair. ' +
-          'Be specific and factual. Example: "A middle-aged Indian man with medium-brown skin, short black hair with a side part, dark eyes, a trimmed black moustache, a serious expression, and a white collared shirt. No glasses."',
+        CHARACTER_VISION_FALLBACK,
       );
       const response = await this.client.chat.completions.create({
         model: 'gpt-4o-mini',

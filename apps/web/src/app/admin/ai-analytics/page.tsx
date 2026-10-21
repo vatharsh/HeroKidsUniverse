@@ -1448,13 +1448,15 @@ type PresetKey = "development" | "balanced" | "strict" | "cost_optimized" | "cus
 
 interface PresetValues { [key: string]: string; }
 
+// Identity minimums match the Gemini likeness checker, which gives a good match 7/10 and says
+// "accept at 7 or above"; higher minimums flagged (and could redraw) nearly every page.
 const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
   development: {
     QA_ENABLED: "true", QA_ENABLE_AUTO_REGENERATION: "true",
     QA_ENABLE_IDENTITY_QA: "true", QA_ENABLE_STORY_QA: "true",
     QA_ENABLE_EXPRESSION_QA: "true", QA_ENABLE_DIALOGUE_QA: "true",
     QA_ENABLE_COMPOSITION_QA: "true", QA_ENABLE_NARRATION_QA: "true",
-    QA_MIN_IDENTITY_SCORE: "8.0", QA_MIN_STORY_SCORE: "8.0",
+    QA_MIN_IDENTITY_SCORE: "6.5", QA_MIN_STORY_SCORE: "8.0",
     QA_MIN_EXPRESSION_SCORE: "7.5", QA_MIN_OVERALL_CONFIDENCE: "80",
     QA_MAX_RETRIES: "2",
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",
@@ -1467,7 +1469,7 @@ const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
     QA_ENABLE_IDENTITY_QA: "true", QA_ENABLE_STORY_QA: "true",
     QA_ENABLE_EXPRESSION_QA: "true", QA_ENABLE_DIALOGUE_QA: "true",
     QA_ENABLE_COMPOSITION_QA: "false", QA_ENABLE_NARRATION_QA: "true",
-    QA_MIN_IDENTITY_SCORE: "8.5", QA_MIN_STORY_SCORE: "9.0",
+    QA_MIN_IDENTITY_SCORE: "7.0", QA_MIN_STORY_SCORE: "9.0",
     QA_MIN_EXPRESSION_SCORE: "8.0", QA_MIN_OVERALL_CONFIDENCE: "88",
     QA_MAX_RETRIES: "1",
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",
@@ -1480,7 +1482,7 @@ const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
     QA_ENABLE_IDENTITY_QA: "true", QA_ENABLE_STORY_QA: "true",
     QA_ENABLE_EXPRESSION_QA: "true", QA_ENABLE_DIALOGUE_QA: "true",
     QA_ENABLE_COMPOSITION_QA: "true", QA_ENABLE_NARRATION_QA: "true",
-    QA_MIN_IDENTITY_SCORE: "9.0", QA_MIN_STORY_SCORE: "9.5",
+    QA_MIN_IDENTITY_SCORE: "7.5", QA_MIN_STORY_SCORE: "9.5",
     QA_MIN_EXPRESSION_SCORE: "9.0", QA_MIN_OVERALL_CONFIDENCE: "95",
     QA_MAX_RETRIES: "2",
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",
@@ -1493,7 +1495,7 @@ const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
     QA_ENABLE_IDENTITY_QA: "true", QA_ENABLE_STORY_QA: "true",
     QA_ENABLE_EXPRESSION_QA: "false", QA_ENABLE_DIALOGUE_QA: "false",
     QA_ENABLE_COMPOSITION_QA: "false", QA_ENABLE_NARRATION_QA: "true",
-    QA_MIN_IDENTITY_SCORE: "8.0", QA_MIN_STORY_SCORE: "8.5",
+    QA_MIN_IDENTITY_SCORE: "6.5", QA_MIN_STORY_SCORE: "8.5",
     QA_MIN_EXPRESSION_SCORE: "7.0", QA_MIN_OVERALL_CONFIDENCE: "80",
     QA_MAX_RETRIES: "0",
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",

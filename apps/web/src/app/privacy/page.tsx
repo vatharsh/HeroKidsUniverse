@@ -52,9 +52,8 @@ export default function PrivacyPage() {
         {
           title: "AI providers we use",
           body: [
-            "Stories, pictures, avatars, narration and our safety checks are created by Google's Gemini artificial-intelligence services. We also use OpenAI to describe a character's appearance from the uploaded photo (hair, skin tone, glasses and similar) and to check that finished pictures still look like your child.",
-            "The text you type, your characters' details, photos and the pictures we create are sent to these providers only to create your content and to check its quality and child safety. If we add or change an AI provider, we will update this list.",
-            "Both providers process this data under their paid business API terms, which do not allow them to use it to train their models. Their servers may be located outside India.",
+            "Stories, pictures, avatars and narration, reading a character's appearance from the uploaded photo, and our quality and child-safety checks are all done by Google's Gemini artificial-intelligence services. We do not send your photos or your children's details to any other AI provider. If we add or change an AI provider, we will update this list.",
+            "Google processes this data under its Gemini API terms for paid business use, which do not allow it to use the data to train or improve its models. Its servers may be located outside India.",
           ],
         },
         {

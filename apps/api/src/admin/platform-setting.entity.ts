@@ -86,8 +86,8 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   STANDARD_PLAN_PAGES:            { value: '8',   type: 'number',  description: 'Default number of pages for the Standard plan' },
   USD_INR_RATE:                   { value: '86',  type: 'number',  description: 'USD to INR conversion rate used for dashboards and pricing' },
   // AI model pricing — update these whenever provider pricing changes
-  GEMINI_INPUT_COST_PER_1M_TOKENS:  { value: '0.10',     type: 'number', description: 'Gemini input token cost per 1M tokens (USD). Default: Gemini 2.5 Flash Lite.' },
-  GEMINI_OUTPUT_COST_PER_1M_TOKENS: { value: '0.40',     type: 'number', description: 'Gemini output token cost per 1M tokens (USD). Default: Gemini 2.5 Flash Lite.' },
+  GEMINI_INPUT_COST_PER_1M_TOKENS:  { value: '0.10',     type: 'number', description: 'Fallback Gemini input price per 1M tokens (USD) for models without a built-in price (gemini-3.8-flash has one).' },
+  GEMINI_OUTPUT_COST_PER_1M_TOKENS: { value: '0.40',     type: 'number', description: 'Fallback Gemini output price per 1M tokens (USD) for models without a built-in price (gemini-3.8-flash has one).' },
   OPENAI_IMAGE_COST_PER_IMAGE:      { value: '0.011',    type: 'number', description: 'OpenAI image generation cost per image (USD). Default assumes gpt-image-1 low quality for story pages.' },
   OPENAI_TTS_COST_PER_CHAR:         { value: '0.000015', type: 'number', description: 'OpenAI TTS cost per character (USD). Default: gpt-4o-mini-tts at $15/1M chars.' },
   GEMINI_TTS_COST_PER_CHAR:         { value: '0.000001875', type: 'number', description: 'Gemini TTS cost per character (USD). Default: gemini-2.5-flash-preview-tts at ~$1.875/1M chars.' },

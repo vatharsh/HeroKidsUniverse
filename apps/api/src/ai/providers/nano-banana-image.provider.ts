@@ -19,6 +19,8 @@ import { OpenAIImageProvider } from './openai-image.provider';
 import { AVATAR_STYLE, STORYBOOK_STYLE } from '../style.constants';
 import { ContentSafetyError } from '../content-safety.service';
 import { CHILD_SAFE_IMAGE_RULE, GEMINI_CHILD_SAFETY_SETTINGS, isGeminiSafetyStop } from '../gemini-safety';
+import { AiUsageRecorder } from '../ai-usage-recorder.service';
+import { AiOperation } from '../entities/ai-usage-log.entity';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GeminiSDK = any;
@@ -47,7 +49,32 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
   constructor(
     private readonly config: ConfigService,
     private readonly openai: OpenAIImageProvider,
+    private readonly usage: AiUsageRecorder,
   ) {}
+
+  // ── Vision checks on Gemini ─────────────────────────────────────────────────
+  // Reading a character's look from a photo, likeness and apparent-age checks used to go to OpenAI
+  // (gpt-4o-mini). With the Gemini backend they run on Gemini, so children's photos go to one provider.
+
+  private visionModel(): string {
+    return this.config.get<string>('VISION_ANALYSIS_MODEL') || 'gemini-3.8-flash';
+  }
+
+  private async runVision(operation: AiOperation, parts: GeminiSDK[], json: boolean): Promise<string | null> {
+    const modelName = this.visionModel();
+    const model = this.getGenAI().getGenerativeModel({
+      model: modelName,
+      generationConfig: { temperature: 0, ...(json ? { responseMimeType: 'application/json' } : {}) },
+    });
+    const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
+    void this.usage.record({
+      provider: 'gemini', model: modelName, operation,
+      inputTokens: result?.response?.usageMetadata?.promptTokenCount,
+      outputTokens: result?.response?.usageMetadata?.candidatesTokenCount,
+    });
+    const text: string = result?.response?.text?.() ?? '';
+    return text.trim() || null;
+  }
 
   private getGenAI(): GeminiSDK {
     if (!this.genAI) {
@@ -500,36 +527,122 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
     throw lastError ?? new Error('Nano Banana avatar generation failed after retries');
   }
 
-  describeCharacterAppearance(photoBuffer: Buffer, mimeType?: string): Promise<string | null> {
-    return this.openai.describeCharacterAppearance(photoBuffer, mimeType);
+  async describeCharacterAppearance(photoBuffer: Buffer, mimeType = 'image/jpeg'): Promise<string | null> {
+    try {
+      const description = await this.runVision(AiOperation.AppearanceAnalysis, [
+        { inlineData: { mimeType, data: photoBuffer.toString('base64') } },
+        { text: await this.openai.getCharacterVisionPrompt() },
+      ], false);
+      if (description) this.logger.log(`Character appearance extracted (Gemini): ${description.slice(0, 80)}…`);
+      return description;
+    } catch (err) {
+      this.logger.warn(`describeCharacterAppearance (Gemini) failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
-  describeCharacterAppearanceFromUrl(url: string): Promise<string | null> {
-    return this.openai.describeCharacterAppearanceFromUrl(url);
+  async describeCharacterAppearanceFromUrl(url: string): Promise<string | null> {
+    const image = await this.urlToBase64(url);
+    if (!image) return null;
+    return this.describeCharacterAppearance(Buffer.from(image.data, 'base64'), image.mimeType);
   }
 
-  extractStructuredIdentity(description: string): Promise<CharacterIdentity | null> {
-    return this.openai.extractStructuredIdentity(description);
+  async extractStructuredIdentity(description: string): Promise<CharacterIdentity | null> {
+    try {
+      const text = await this.runVision(AiOperation.AppearanceAnalysis, [{ text: `Extract structured visual identity from this appearance description. Return ONLY valid JSON matching this exact schema:
+{
+  "faceShape": "oval/round/square/heart/etc or null",
+  "skinTone": "specific description",
+  "eyeShape": "almond/round/etc",
+  "eyeColor": "colour",
+  "hairstyle": "specific description",
+  "hairColor": "specific colour",
+  "hairLength": "short/medium/long/bald",
+  "distinctiveFeatures": ["glasses", "dimples", etc — list only features visibly present],
+  "neverChangeRules": ["Never change hairstyle", "Never change skin tone", "Never add glasses", "Never add beard or moustache", "Never change age", "Never change face shape"]
+}
+
+Description to parse:
+"${description}"` }], true);
+      return text ? (JSON.parse(text) as CharacterIdentity) : null;
+    } catch (err) {
+      this.logger.warn(`extractStructuredIdentity (Gemini) failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
-  checkFaceConsistency(heroAvatarUrl: string, generatedImageBase64: string, heroName: string): Promise<FaceConsistencyResult | null> {
-    return this.openai.checkFaceConsistency(heroAvatarUrl, generatedImageBase64, heroName);
+  async checkFaceConsistency(heroAvatarUrl: string, generatedImageBase64: string, heroName: string): Promise<FaceConsistencyResult | null> {
+    try {
+      const avatar = await this.urlToBase64(heroAvatarUrl);
+      if (!avatar) return null;
+      const text = await this.runVision(AiOperation.QualityCheck, [
+        { text: 'Image 1 — the approved avatar:' },
+        { inlineData: { mimeType: avatar.mimeType, data: avatar.data } },
+        { text: 'Image 2 — the generated storybook scene:' },
+        { inlineData: { mimeType: 'image/png', data: generatedImageBase64 } },
+        { text: await this.openai.getIdentityQaPrompt(heroName) },
+      ], true);
+      if (!text) return null;
+      const parsed = JSON.parse(text) as Partial<FaceConsistencyResult>;
+      const result: FaceConsistencyResult = {
+        identityScore: Number(parsed.identityScore ?? 0),
+        issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+        recommendation: parsed.recommendation === 'regenerate' ? 'regenerate' : 'accept',
+      };
+      this.logger.log(`Face QA (Gemini) [${heroName}]: score=${result.identityScore}/10 ${result.issues.length ? `issues: ${result.issues.join(', ')}` : ''}`);
+      return result;
+    } catch (err) {
+      this.logger.warn(`checkFaceConsistency (Gemini) failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
-  checkFaceConsistencyFromUrl(heroAvatarUrl: string, generatedImageUrl: string, heroName: string): Promise<FaceConsistencyResult | null> {
-    return this.openai.checkFaceConsistencyFromUrl(heroAvatarUrl, generatedImageUrl, heroName);
+  async checkFaceConsistencyFromUrl(heroAvatarUrl: string, generatedImageUrl: string, heroName: string): Promise<FaceConsistencyResult | null> {
+    const image = await this.urlToBase64(generatedImageUrl);
+    if (!image) return null;
+    return this.checkFaceConsistency(heroAvatarUrl, image.data, heroName);
   }
 
-  locateSpeechBubbleAnchors(input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null> {
-    return this.openai.locateSpeechBubbleAnchors(input);
+  /** Bubbles are placed by GeminiCharacterLocator (head/mouth detection); this legacy path no longer calls OpenAI. */
+  locateSpeechBubbleAnchors(_input: SpeechBubbleLayoutInput): Promise<SpeechBubbleLayoutResult | null> {
+    return Promise.resolve(null);
   }
 
-  checkApparentAge(input: ApparentAgeCheckInput): Promise<ApparentAgeCheckResult | null> {
-    return this.openai.checkApparentAge(input);
+  async checkApparentAge(input: ApparentAgeCheckInput): Promise<ApparentAgeCheckResult | null> {
+    if (!input.characters.length) return { estimates: [] };
+    try {
+      const characterList = input.characters.map((c, i) =>
+        `${i + 1}. ${c.name} (canon age ${c.canonAge})${c.description ? ` — ${c.description}` : ''}`).join('\n');
+      const text = await this.runVision(AiOperation.QualityCheck, [
+        { inlineData: { mimeType: 'image/png', data: input.imageBase64 } },
+        { text: [
+          'You are a children\'s book illustrator reviewing a generated story illustration.',
+          'For each named character below, look at the image and estimate their apparent age in years based on face proportions, body size, and overall appearance.',
+          'Return ONLY valid JSON. Respond with a single integer age per character — do not explain.',
+          '',
+          `Characters to check:\n${characterList}`,
+          '',
+          'Return: {"estimates": [{"name": "...", "canonAge": N, "estimatedAge": N}, ...]}',
+        ].join('\n') },
+      ], true);
+      if (!text) return null;
+      const parsed = JSON.parse(text) as ApparentAgeCheckResult;
+      return { estimates: Array.isArray(parsed.estimates) ? parsed.estimates : [] };
+    } catch (err) {
+      this.logger.warn(`checkApparentAge (Gemini) failed: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
+  /** A costumed reference portrait — drawn by Gemini as a character sheet from the avatar. */
   generateCostumedCanonical(input: CostumedCanonicalInput): Promise<ImageGenerationOutput> {
-    return this.openai.generateCostumedCanonical(input);
+    return this.generateCharacterSheet({
+      name: input.characterName,
+      descriptor: `${input.age}-year-old child`,
+      outfit: input.costumeDescription,
+      referenceUrl: input.avatarUrl,
+    });
   }
 
   /**

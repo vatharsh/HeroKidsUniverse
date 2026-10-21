@@ -81,14 +81,18 @@ async function buildModule(options: {
       { provide: getRepositoryToken(Character), useValue: makeRepo() },
       { provide: getRepositoryToken(UniverseCompanion), useValue: makeRepo() },
       { provide: getRepositoryToken(PlatformSetting), useValue: settingsRepo },
-      // Only used to build the OpenAI client; tests never hit the network.
+      // Only used to build the AI client; tests never hit the network.
       { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('test-key') } },
     ],
   }).compile();
 
   const service = module.get<CharacterCanonService>(CharacterCanonService);
-  // The service builds its own OpenAI client — swap in the mocked one so tests never hit the network.
-  (service as unknown as { openai: unknown }).openai = imageProvider.client;
+  // Stub the Gemini call with the canned JSON so tests never hit the network.
+  jest.spyOn(service as unknown as { extractCanonJson: () => Promise<unknown> }, 'extractCanonJson')
+    .mockImplementation(async () => {
+      const res = await imageProvider.client.chat.completions.create();
+      return { content: res.choices[0].message.content, model: 'gemini-3.8-flash' };
+    });
 
   return {
     service,
