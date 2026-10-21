@@ -68,6 +68,12 @@ const THEME_META: Record<string, { emoji: string; label: string; gradient: strin
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+/** Episode numbers follow creation order (oldest = 1), whatever order the cards are shown in. */
+function numberByCreation(stories: Story[]): Map<string, number> {
+  const oldestFirst = [...stories].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  return new Map(oldestFirst.map((story, i) => [story.id, i + 1]));
+}
+
 function EpisodeCard({ story, onDelete, episodeNumber }: { story: Story; onDelete: (id: string) => void; episodeNumber?: number }) {
   const meta = (story.theme ? THEME_META[story.theme] : null) ?? {
     emoji: "✏️", label: "Freeform",
@@ -411,6 +417,7 @@ function UniverseSection({
   const openQuests = (universe.quests ?? []).filter((q) => q.status === "open");
   const completedStories = stories.filter((s) => s.status === "completed");
   const visible = stories.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const episodeNumbers = numberByCreation(stories);
   const totalPages = Math.ceil(stories.length / PAGE_SIZE);
 
   return (
@@ -473,8 +480,8 @@ function UniverseSection({
       ) : (
         <>
           <div className="ml-11 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
-            {visible.map((story, i) => (
-              <EpisodeCard key={story.id} story={story} onDelete={onDelete} episodeNumber={page * PAGE_SIZE + i + 1} />
+            {visible.map((story) => (
+              <EpisodeCard key={story.id} story={story} onDelete={onDelete} episodeNumber={episodeNumbers.get(story.id)} />
             ))}
           </div>
           {totalPages > 1 && (
@@ -504,6 +511,7 @@ function StandaloneSection({ stories, onDelete }: { stories: Story[]; onDelete: 
   const [page, setPage] = useState(0);
   if (stories.length === 0) return null;
   const visible = stories.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const episodeNumbers = numberByCreation(stories);
   const totalPages = Math.ceil(stories.length / PAGE_SIZE);
   return (
     <div className="mb-12">
@@ -521,8 +529,8 @@ function StandaloneSection({ stories, onDelete }: { stories: Story[]; onDelete: 
         </a>
       </div>
       <div className="ml-11 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
-        {visible.map((story, i) => (
-          <EpisodeCard key={story.id} story={story} onDelete={onDelete} episodeNumber={page * PAGE_SIZE + i + 1} />
+        {visible.map((story) => (
+          <EpisodeCard key={story.id} story={story} onDelete={onDelete} episodeNumber={episodeNumbers.get(story.id)} />
         ))}
       </div>
       {totalPages > 1 && (
