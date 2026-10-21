@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
 import { AiOperation, AiUsageLog } from './entities/ai-usage-log.entity';
 import { geminiTextPrice } from './gemini-pricing';
+import { isSandboxFor } from '../common/sandbox';
 
 interface UsageContext {
   userId?: string | null;
@@ -60,7 +61,7 @@ export class AiUsageRecorder {
         inputTokens,
         outputTokens,
         estimatedCostUsd: (inputTokens * price.input + outputTokens * price.output) / 1_000_000,
-        isSandbox: ctx.isSandbox ?? false,
+        isSandbox: ctx.isSandbox ?? await isSandboxFor(this.dataSource, entry.userId ?? ctx.userId),
       });
     } catch (err) {
       this.logger.warn(`AI usage not logged (${entry.operation}): ${err instanceof Error ? err.message : String(err)}`);

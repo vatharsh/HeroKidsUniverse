@@ -3,8 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  OnModuleInit,
-} from '@nestjs/common';
+  } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
@@ -35,6 +34,7 @@ import {
 } from './order.entity';
 import { OrderStatusHistory } from './order-status-history.entity';
 import { StoreAvailabilityService } from './store-availability.service';
+import { isSandboxFor } from '../common/sandbox';
 
 type OwnedAssetContext = {
   universe: Universe | null;
@@ -51,7 +51,7 @@ type EmbeddedPreviewImage = {
 };
 
 @Injectable()
-export class MerchandiseService implements OnModuleInit {
+export class MerchandiseService {
   constructor(
     @InjectRepository(MerchandiseDesign)
     private readonly designsRepository: Repository<MerchandiseDesign>,
@@ -74,17 +74,6 @@ export class MerchandiseService implements OnModuleInit {
     private readonly usersRepository: Repository<User>,
     private readonly configService: ConfigService,
   ) {}
-
-  async onModuleInit() {
-    // Backfill: mark all pre-existing orders as sandbox since we're in sandbox mode during initial setup
-    await this.ordersRepository
-      .createQueryBuilder()
-      .update()
-      .set({ isSandbox: true })
-      .where('"isSandbox" = false')
-      .execute()
-      .catch(() => null); // ignore if column doesn't exist yet on first boot
-  }
 
   async findProducts() {
     await this.ensureMerchandiseEnabled();
@@ -275,7 +264,7 @@ export class MerchandiseService implements OnModuleInit {
     const amountInr = product.unitPriceInr * dto.quantity;
     const paymentMethod = dto.paymentMethod ?? PaymentMethod.Cash;
     const status = isPhysical ? OrderStatus.PrintFileGenerated : OrderStatus.DigitalReady;
-    const isSandbox = await this.getBooleanSetting('SANDBOX_MODE', true);
+    const isSandbox = await isSandboxFor(manager.connection, userId);
     const order = manager.create(MerchandiseOrder, {
       userId,
       designId: design.id,

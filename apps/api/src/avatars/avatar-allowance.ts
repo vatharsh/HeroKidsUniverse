@@ -5,6 +5,7 @@ import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.ent
 import { AiOperation, AiUsageLog } from '../ai/entities/ai-usage-log.entity';
 import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
 import { User } from '../users/user.entity';
+import { isSandboxFor } from '../common/sandbox';
 
 const logger = new Logger('AvatarAllowance');
 
@@ -116,6 +117,7 @@ export async function logAvatarUsage(dataSource: DataSource, userId: string): Pr
       operation: AiOperation.AvatarGeneration,
       imagesGenerated: 1,
       estimatedCostUsd: Number.isFinite(cost) ? cost : 0,
+      isSandbox: await isSandboxFor(dataSource, userId),
     });
   } catch (err) {
     logger.warn(`Avatar usage log failed: ${err instanceof Error ? err.message : String(err)}`);

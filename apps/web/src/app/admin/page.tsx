@@ -33,6 +33,7 @@ interface DashboardData {
   displayCurrency?: string;
   aiCostCritical?: boolean;
   sandboxMode?: boolean;
+  razorpayKeyMode?: "live" | "test" | "missing";
   revenueView?: "sandbox" | "live" | "all";
 }
 
@@ -244,9 +245,24 @@ export default function AdminDashboardPage() {
 
       {/* Sandbox / Live toggle */}
       <div className="mb-4 flex items-center gap-3 flex-wrap">
-        {data.sandboxMode && (
+        {data.sandboxMode ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 text-amber-700 text-[11px] font-black px-3 py-1 uppercase tracking-wide">
-            ⚠ Sandbox mode ON — new orders are test orders
+            ⚠ Pre-launch (Sandbox ON) — everything new is test data
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-black px-3 py-1 uppercase tracking-wide">
+            ● Live — only test accounts create test data
+          </span>
+        )}
+        {/* The launch switch and the payment keys must agree. */}
+        {!data.sandboxMode && data.razorpayKeyMode !== "live" && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 border border-rose-300 text-rose-700 text-[11px] font-black px-3 py-1">
+            ⚠ Live, but Razorpay is using {data.razorpayKeyMode === "missing" ? "no" : "TEST"} keys — customers cannot really pay
+          </span>
+        )}
+        {data.sandboxMode && data.razorpayKeyMode === "live" && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 border border-rose-300 text-rose-700 text-[11px] font-black px-3 py-1">
+            ⚠ Razorpay LIVE keys while Sandbox is ON — real payments would be counted as test
           </span>
         )}
         <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white/80 p-1 text-xs shadow-sm ml-auto">

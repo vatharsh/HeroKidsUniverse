@@ -28,7 +28,7 @@ const GROUPS: SettingGroup[] = [
     title: "Mode",
     description: "Controls whether the platform is in sandbox (test) mode or live mode. Affects order stamping and image generation limits.",
     items: [
-      { key: "SANDBOX_MODE", label: "Sandbox Mode", description: "ON = sandbox/test mode: orders are marked as test, Dev image cap applies. OFF = live mode: real orders, Prod image cap applies.", type: "boolean" },
+      { key: "SANDBOX_MODE", label: "Sandbox Mode", description: "Launch switch. ON = everything created from now on is test data (pre-launch). Turn OFF at launch — then only users marked as Test account create test data. Never relabels existing records.", type: "boolean" },
     ],
   },
   {
@@ -87,8 +87,6 @@ const GROUPS: SettingGroup[] = [
       { key: "BASIC_PLAN_PAGES", label: "Basic Plan Pages", description: "Default page count for the Basic plan.", type: "number" },
       { key: "STANDARD_PLAN_PAGES", label: "Standard Plan Pages", description: "Default page count for the Standard plan.", type: "number" },
       { key: "PREMIUM_PLAN_PAGES", label: "Premium Plan Pages", description: "Default page count for the Premium plan.", type: "number" },
-      { key: "MAX_IMAGES_PER_STORY_DEV", label: "Max Images / Story (Dev)", description: "Image cap used in development.", type: "number" },
-      { key: "MAX_IMAGES_PER_STORY_PROD", label: "Max Images / Story (Prod)", description: "Image cap used in production.", type: "number" },
     ],
   },
   {

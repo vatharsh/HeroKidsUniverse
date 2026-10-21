@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -20,6 +21,7 @@ import { CommerceOrderStatus, CommerceOrderType, Order } from '../merchandise/or
 import { User } from '../users/user.entity';
 import { CreditPack, CreditPackType } from './credit-pack.entity';
 import { CreditTransaction, CreditTransactionReason } from './credit-transaction.entity';
+import { isSandboxFor } from '../common/sandbox';
 
 type CreditPackPayload = Partial<CreditPack>;
 
@@ -271,7 +273,17 @@ export class CreditPacksService {
     return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
   }
 
-  /** Test-only purchase that skips Razorpay; the controller blocks it in production for non-admins. */
+  /**
+   * Free test purchases (mock purchase, demo credit): always allowed in development; in production
+   * only for admins and users marked as test accounts.
+   */
+  async assertTestPurchaseAllowed(user: { id: string; role?: string }): Promise<void> {
+    if (process.env.NODE_ENV !== 'production' || user.role === 'admin') return;
+    const row = await this.usersRepository.findOne({ where: { id: user.id }, select: { id: true, isTestAccount: true } });
+    if (!row?.isTestAccount) throw new ForbiddenException('Not available');
+  }
+
+  /** Test-only purchase that skips Razorpay (see assertTestPurchaseAllowed). */
   async mockPurchase(
     userId: string,
     packId: string,
@@ -380,12 +392,6 @@ export class CreditPacksService {
     return Number.isFinite(value) ? value : 0;
   }
 
-  private async isSandboxMode(): Promise<boolean> {
-    const row = await this.platformSettingsRepository.findOne({ where: { key: 'SANDBOX_MODE' } });
-    if (row) return row.value === 'true' || row.value === '1';
-    return SETTING_DEFAULTS['SANDBOX_MODE']?.value === 'true';
-  }
-
   private generateOrderNumber(): string {
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const random = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -403,7 +409,7 @@ export class CreditPacksService {
     user: User,
   ): Promise<void> {
     try {
-      const isSandbox = await this.isSandboxMode();
+      const isSandbox = await isSandboxFor(this.dataSource, userId);
       const coupon = couponCodeId
         ? await this.dataSource.getRepository(InfluencerCouponCode).findOne({ where: { id: couponCodeId } })
         : null;

@@ -90,6 +90,10 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isSandbox!: boolean;
 
+  /** Admin-marked test account: everything it creates is test data, even after launch. */
+  @Column({ type: 'boolean', default: false })
+  isTestAccount!: boolean;
+
   /** Set once the parent enters the code we emailed; parents can't use the app until then. */
   @Column({ type: 'timestamp', nullable: true })
   emailVerifiedAt!: Date | null;

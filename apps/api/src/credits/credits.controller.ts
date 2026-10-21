@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 
 import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -34,8 +34,8 @@ export class CreditsController {
   }
 
   @Post('demo')
-  claimDemoCredit(@CurrentUser() currentUser: CurrentUserPayload) {
-    assertTestPurchaseAllowed(currentUser);
+  async claimDemoCredit(@CurrentUser() currentUser: CurrentUserPayload) {
+    await this.creditPacksService.assertTestPurchaseAllowed(currentUser);
     return this.creditsService.claimDemoCredit(currentUser.id);
   }
 
@@ -54,13 +54,13 @@ export class CreditsController {
   }
 
   @Post('packs/:id/purchase/mock')
-  mockPurchase(
+  async mockPurchase(
     @CurrentUser() currentUser: CurrentUserPayload,
     @Param('id') id: string,
     @Body('paymentMethod') paymentMethod?: string,
     @Body('couponCode') couponCode?: string,
   ) {
-    assertTestPurchaseAllowed(currentUser);
+    await this.creditPacksService.assertTestPurchaseAllowed(currentUser);
     return this.creditPacksService.mockPurchase(currentUser.id, id, paymentMethod, couponCode);
   }
 
@@ -77,12 +77,5 @@ export class CreditsController {
       body.razorpayPaymentId,
       body.razorpaySignature,
     );
-  }
-}
-
-/** Free-credit test endpoints (mock purchase, demo credit) — never open to customers in production. */
-function assertTestPurchaseAllowed(user: CurrentUserPayload) {
-  if (process.env.NODE_ENV === 'production' && user.role !== 'admin') {
-    throw new ForbiddenException('Not available');
   }
 }

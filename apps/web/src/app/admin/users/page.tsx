@@ -15,6 +15,7 @@ interface AdminUser {
   plan: string;
   credits: number;
   isPremium: boolean;
+  isTestAccount?: boolean;
   createdAt: string;
   storyCount?: number;
   universeCount?: number;
@@ -34,6 +35,7 @@ function EditDrawer({ user, onClose, onSaved }: { user: AdminUser; onClose: () =
   const [plan, setPlan] = useState(user.plan);
   const [credits, setCredits] = useState(String(user.credits));
   const [isPremium, setIsPremium] = useState(user.isPremium);
+  const [isTestAccount, setIsTestAccount] = useState(!!user.isTestAccount);
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -43,7 +45,7 @@ function EditDrawer({ user, onClose, onSaved }: { user: AdminUser; onClose: () =
     await fetch(`${BASE}/admin/users/${user.id}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ role, plan, credits: Number(credits), isPremium }),
+      body: JSON.stringify({ role, plan, credits: Number(credits), isPremium, isTestAccount }),
     });
     setSaving(false);
     onSaved();
@@ -68,6 +70,8 @@ function EditDrawer({ user, onClose, onSaved }: { user: AdminUser; onClose: () =
             <label className="text-gray-500 text-xs block mb-1.5">Role</label>
             <select value={role} onChange={e => setRole(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 text-sm focus:outline-none focus:border-violet-400">
               <option value="parent">parent</option>
+              {/* Influencer was missing, so saving an influencer silently turned them into a parent. */}
+              <option value="influencer">influencer</option>
               <option value="admin">admin</option>
             </select>
           </div>
@@ -86,6 +90,17 @@ function EditDrawer({ user, onClose, onSaved }: { user: AdminUser; onClose: () =
           <div className="flex items-center gap-3">
             <input type="checkbox" id="premium" checked={isPremium} onChange={e => setIsPremium(e.target.checked)} className="w-4 h-4 accent-violet-600" />
             <label htmlFor="premium" className="text-gray-600 text-sm">Premium</label>
+          </div>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <div className="flex items-center gap-3">
+              <input type="checkbox" id="test-account" checked={isTestAccount} onChange={e => setIsTestAccount(e.target.checked)} className="w-4 h-4 accent-amber-600" />
+              <label htmlFor="test-account" className="text-gray-800 text-sm font-semibold">Test account</label>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1.5 leading-relaxed">
+              Everything this user creates counts as test data and is left out of revenue and cost reports, even after launch.
+              They can use free mock purchases to test packs and coupons. Turning this on also moves their existing stories,
+              orders and AI costs to test data.
+            </p>
           </div>
         </div>
 
@@ -184,6 +199,7 @@ export default function UsersPage() {
                       </div>
                       <span className="text-gray-900 text-xs font-bold">{u.name}</span>
                       {u.isPremium && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-black">PRO</span>}
+                      {u.isTestAccount && <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-black">TEST</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs font-semibold">{u.email}</td>

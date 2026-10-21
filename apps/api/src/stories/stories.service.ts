@@ -19,6 +19,7 @@ import { CreateStoryDto } from './dto/create-story.dto';
 import { storyAssetUrls } from './story-assets';
 import { Story, StoryMode, StoryStatus } from './story.entity';
 import { ContentSafetyService } from '../ai/content-safety.service';
+import { isSandboxFor } from '../common/sandbox';
 
 @Injectable()
 export class StoriesService {
@@ -45,11 +46,6 @@ export class StoriesService {
     private readonly uploadService: UploadService,
     private readonly safety: ContentSafetyService,
   ) {}
-
-  private async isSandboxMode(): Promise<boolean> {
-    const row = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
-    return row ? row.value === 'true' : true;
-  }
 
   async create(userId: string, createStoryDto: CreateStoryDto): Promise<Story> {
     await this.safety.assertSafeInput({ storyContext: createStoryDto.storyContext, companionName: createStoryDto.companionName }, userId);
@@ -117,7 +113,7 @@ export class StoriesService {
       }
     }
 
-    const isSandbox = await this.isSandboxMode();
+    const isSandbox = await isSandboxFor(this.dataSource, userId);
 
     const story = await this.dataSource.transaction(async (manager) => {
       const user = await manager.findOneOrFail(User, {

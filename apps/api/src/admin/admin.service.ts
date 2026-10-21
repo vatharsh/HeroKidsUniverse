@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -33,6 +33,7 @@ import { Universe } from '../universes/universe.entity';
 import { UploadService } from '../upload/upload.service';
 import { User, UserPlan, UserRole } from '../users/user.entity';
 import { PlatformSetting, PUBLIC_SETTING_KEYS, SETTING_DEFAULTS, normalizeSettingValue } from './platform-setting.entity';
+import { razorpayKeyMode } from '../common/sandbox';
 
 const ACTIVE_JOB_STATUSES = [
   JobStatus.Queued,
@@ -55,7 +56,7 @@ function makePage<T>(items: T[], total: number, page: number, limit: number): Pa
 }
 
 @Injectable()
-export class AdminService implements OnModuleInit {
+export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
   constructor(
@@ -77,26 +78,6 @@ export class AdminService implements OnModuleInit {
     private readonly influencersService: InfluencersService,
     private readonly uploadService: UploadService,
   ) {}
-
-  async onModuleInit() {
-    try {
-      const setting = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
-      const isSandbox = setting ? setting.value === 'true' : true;
-      if (isSandbox) {
-        const [usersResult, universesResult, storiesResult] = await Promise.all([
-          this.usersRepo.createQueryBuilder().update().set({ isSandbox: true }).where('isSandbox = false').execute(),
-          this.universesRepo.createQueryBuilder().update().set({ isSandbox: true }).where('isSandbox = false').execute(),
-          this.storiesRepo.createQueryBuilder().update().set({ isSandbox: true }).where('isSandbox = false').execute(),
-        ]);
-        const total = (usersResult.affected ?? 0) + (universesResult.affected ?? 0) + (storiesResult.affected ?? 0);
-        if (total > 0) {
-          this.logger.log(`Backfilled ${usersResult.affected} users, ${universesResult.affected} universes, ${storiesResult.affected} stories to isSandbox=true`);
-        }
-      }
-    } catch (err) {
-      this.logger.warn('Admin isSandbox backfill skipped', err);
-    }
-  }
 
   // ── Platform Settings ──────────────────────────────────────────────────────
 
@@ -300,6 +281,8 @@ export class AdminService implements OnModuleInit {
       usdToInr,
       displayCurrency,
       sandboxMode,
+      // Shown beside the launch switch so the switch and the payment keys can't drift apart.
+      razorpayKeyMode: razorpayKeyMode(),
       revenueView: sandboxFilter !== undefined ? (sandboxFilter ? 'sandbox' : 'live') : 'all',
     };
   }
@@ -384,11 +367,31 @@ export class AdminService implements OnModuleInit {
     };
   }
 
-  async updateUser(userId: string, body: Partial<Pick<User, 'role' | 'plan' | 'credits' | 'isPremium'>>) {
+  async updateUser(userId: string, body: Partial<Pick<User, 'role' | 'plan' | 'credits' | 'isPremium' | 'isTestAccount'>>) {
     const user = await this.usersRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
-    Object.assign(user, body);
-    return this.usersRepo.save(user);
+    // Only these fields are editable here (the body used to be copied onto the user wholesale).
+    const { role, plan, credits, isPremium, isTestAccount } = body;
+    const becameTestAccount = isTestAccount === true && !user.isTestAccount;
+    Object.assign(user, Object.fromEntries(
+      Object.entries({ role, plan, credits, isPremium, isTestAccount }).filter(([, v]) => v !== undefined),
+    ));
+    if (becameTestAccount) user.isSandbox = true;
+    const saved = await this.usersRepo.save(user);
+    if (becameTestAccount) await this.labelUserDataAsTest(userId);
+    return saved;
+  }
+
+  /**
+   * Marking a test account also moves that one user's existing records to test data, so their trial
+   * stories, orders and AI costs drop out of revenue and cost reports. Nothing else is relabelled.
+   */
+  private async labelUserDataAsTest(userId: string): Promise<void> {
+    const tables = ['stories', 'universes', 'orders', 'merchandise_orders', 'ai_usage_logs', 'story_generation_costs'];
+    for (const table of tables) {
+      await this.dataSource.query(`UPDATE "${table}" SET "isSandbox" = true WHERE "userId" = $1 AND "isSandbox" = false`, [userId])
+        .catch((err: unknown) => this.logger.warn(`Test-account relabel skipped for ${table}: ${err instanceof Error ? err.message : String(err)}`));
+    }
   }
 
   async listUniverses(page = 1, limit = 20, search?: string) {
@@ -1457,8 +1460,6 @@ export class AdminService implements OnModuleInit {
       BASIC_PLAN_PAGES: ['BASIC_PLAN_PAGES'],
       STANDARD_PLAN_PAGES: ['STANDARD_PLAN_PAGES'],
       PREMIUM_PLAN_PAGES: ['PREMIUM_PLAN_PAGES'],
-      MAX_IMAGES_PER_STORY_DEV: ['MAX_IMAGES_PER_STORY_DEV'],
-      MAX_IMAGES_PER_STORY_PROD: ['MAX_IMAGES_PER_STORY_PROD'],
     };
     const envKeys = envAliases[key] ?? [key];
     for (const envKey of envKeys) {

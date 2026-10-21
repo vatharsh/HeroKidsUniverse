@@ -10,6 +10,7 @@ import { UpdateUniverseDto } from './dto/update-universe.dto';
 import { UniverseMemory } from './universe-memory.entity';
 import { Universe, UniverseVisualState } from './universe.entity';
 import { ContentSafetyService } from '../ai/content-safety.service';
+import { isSandboxFor } from '../common/sandbox';
 
 @Injectable()
 export class UniversesService {
@@ -27,14 +28,9 @@ export class UniversesService {
     private readonly safety: ContentSafetyService,
   ) {}
 
-  private async isSandboxMode(): Promise<boolean> {
-    const row = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
-    return row ? row.value === 'true' : true;
-  }
-
   async create(userId: string, dto: CreateUniverseDto): Promise<Universe> {
     await this.safety.assertSafeInput({ name: dto.name, heroTitle: dto.heroTitle, tagline: dto.tagline }, userId);
-    const isSandbox = await this.isSandboxMode();
+    const isSandbox = await isSandboxFor(this.settingsRepo.manager.connection, userId);
     return this.universesRepository.save(
       this.universesRepository.create({
         userId,

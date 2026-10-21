@@ -154,33 +154,6 @@ export class GenerationService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    try {
-      const setting = await this.platformSettingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
-      const isSandbox = setting ? setting.value === 'true' : true;
-      if (isSandbox) {
-        const [logsResult, costsResult] = await Promise.all([
-          this.aiUsageLogsRepo
-            .createQueryBuilder()
-            .update()
-            .set({ isSandbox: true })
-            .where('isSandbox = false')
-            .execute(),
-          this.storyGenerationCostsRepo
-            .createQueryBuilder()
-            .update()
-            .set({ isSandbox: true })
-            .where('isSandbox = false')
-            .execute(),
-        ]);
-        const total = (logsResult.affected ?? 0) + (costsResult.affected ?? 0);
-        if (total > 0) {
-          this.logger.log(`Backfilled ${logsResult.affected} ai_usage_logs + ${costsResult.affected} story_generation_costs to isSandbox=true`);
-        }
-      }
-    } catch (err) {
-      this.logger.warn('AI isSandbox backfill skipped', err);
-    }
-
     // Rescue stories stuck in-progress from a prior process crash
     try {
       const stuckCutoff = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
@@ -231,7 +204,8 @@ export class GenerationService implements OnModuleInit {
     const updateJob = (patch: Partial<GenerationJob>) => this.jobsRepo.update(job.id, patch);
 
     try {
-      const isSandbox = await this.getBooleanSetting('SANDBOX_MODE', true);
+      // Test or live was decided when the story was created (launch switch or test account).
+      const isSandbox = aiUsageContext.getStore()?.isSandbox ?? false;
 
       // Daily AI hard-limit guard — only enforced in live mode to avoid blocking dev work
       if (!isSandbox) {
@@ -755,14 +729,8 @@ export class GenerationService implements OnModuleInit {
     } else if (mode === 'story_cover_first_two_pages') {
       maxImages = 3;
     } else {
-      const capKey: keyof typeof SETTING_DEFAULTS = isSandbox ? 'MAX_IMAGES_PER_STORY_DEV' : 'MAX_IMAGES_PER_STORY_PROD';
-      maxImages = await this.getNumberSetting(capKey, Number(SETTING_DEFAULTS[capKey].value));
-      if (maxImages < total) {
-        this.logger.warn(
-          `${capKey} is ${maxImages}, but full_generation was requested for ${total} pages. Generating all pages.`,
-        );
-        maxImages = total;
-      }
+      // Full generation draws every page (the old Dev/Prod image caps were always overridden here).
+      maxImages = total;
     }
 
     const { imageBackend, imageProvider, imageModel, costPerImage } = await this.resolveImageModelCost();
@@ -2259,8 +2227,6 @@ export class GenerationService implements OnModuleInit {
       BASIC_PLAN_PAGES: ['BASIC_PLAN_PAGES'],
       STANDARD_PLAN_PAGES: ['STANDARD_PLAN_PAGES'],
       PREMIUM_PLAN_PAGES: ['PREMIUM_PLAN_PAGES'],
-      MAX_IMAGES_PER_STORY_DEV: ['MAX_IMAGES_PER_STORY_DEV'],
-      MAX_IMAGES_PER_STORY_PROD: ['MAX_IMAGES_PER_STORY_PROD'],
     };
 
     for (const envKey of envAliases[key] ?? [key]) {

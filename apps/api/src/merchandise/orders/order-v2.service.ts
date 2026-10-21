@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 
@@ -22,9 +22,10 @@ import { OrderItemAttribute } from './order-item-attribute.entity';
 import { OrderItemAttributeValue } from './order-item-attribute-value.entity';
 import { OrderItem } from './order-item.entity';
 import { StoreAvailabilityService } from '../store-availability.service';
+import { isSandboxFor } from '../../common/sandbox';
 
 @Injectable()
-export class OrderV2Service implements OnModuleInit {
+export class OrderV2Service {
   private readonly logger = new Logger(OrderV2Service.name);
 
   constructor(
@@ -60,26 +61,6 @@ export class OrderV2Service implements OnModuleInit {
     private readonly settingsRepo: Repository<PlatformSetting>,
     private readonly store: StoreAvailabilityService,
   ) {}
-
-  async onModuleInit() {
-    try {
-      const setting = await this.settingsRepo.findOne({ where: { key: 'SANDBOX_MODE' } });
-      const isSandbox = setting ? setting.value === 'true' : true;
-      if (isSandbox) {
-        const result = await this.ordersRepo
-          .createQueryBuilder()
-          .update()
-          .set({ isSandbox: true })
-          .where('isSandbox = false')
-          .execute();
-        if (result.affected && result.affected > 0) {
-          this.logger.log(`Backfilled ${result.affected} v2 orders to isSandbox=true`);
-        }
-      }
-    } catch (err) {
-      this.logger.warn('Order isSandbox backfill skipped', err);
-    }
-  }
 
   async createOrder(userId: string, dto: CreateOrderV2Dto) {
     // Merch checkout only — credit-pack purchases create their orders in CreditPacksService.
@@ -199,6 +180,8 @@ export class OrderV2Service implements OnModuleInit {
 
       const order = await manager.save(Order, manager.create(Order, {
         userId,
+        // Test or live is decided now (launch switch or test account) — v2 orders were never labelled before.
+        isSandbox: await isSandboxFor(manager.connection, userId),
         orderNumber: await this.generateOrderNumber(manager),
         orderType,
         status: CommerceOrderStatus.Paid,
