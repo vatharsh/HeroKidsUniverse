@@ -51,8 +51,9 @@ async function request<T>(
     },
   });
 
-  // Token expired — try silent refresh once
-  if (res.status === 401 && !_isRetry) {
+  // Token expired — try silent refresh once. Only when we actually sent a token: a 401 from the
+  // login form itself means a wrong password, and must show the server's message, not "session expired".
+  if (res.status === 401 && !_isRetry && token && !path.startsWith("/auth/login")) {
     const refresh = getRefreshToken();
     if (refresh) {
       const refreshRes = await fetch(`${BASE}/auth/refresh`, {
