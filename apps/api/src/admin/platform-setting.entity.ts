@@ -38,6 +38,7 @@ export const PUBLIC_SETTING_KEYS = [
   'ENABLE_VIDEO_EXPORT',
   'ENABLE_INFLUENCER_PROGRAM',
   'FREE_PREVIEW_PAGES',
+  'CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT',
 ] as const;
 
 export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {

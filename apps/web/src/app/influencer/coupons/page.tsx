@@ -4,6 +4,7 @@ import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -22,6 +23,8 @@ interface PortalMe {
 export default function InfluencerCouponsPage() {
   const [data, setData] = useState<PortalMe | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { flags } = usePublicPlatformSettings();
+  const packCapPct = Number(flags.CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT ?? 15);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -52,6 +55,7 @@ export default function InfluencerCouponsPage() {
                 <p className="font-mono font-bold text-xl text-violet-700">{coupon.code}</p>
                 <p className="text-sm text-gray-500 mt-1">
                   {coupon.discountType === "percentage" ? `${coupon.discountValue}% off` : `₹${coupon.discountValue} off`}
+                  {coupon.discountType === "percentage" && coupon.discountValue > packCapPct ? ` (${packCapPct}% on story credit packs)` : ""}
                   {" · "}Used {coupon.usageCount} times
                   {coupon.expiresAt ? ` · Expires ${new Date(coupon.expiresAt).toLocaleDateString()}` : ""}
                 </p>

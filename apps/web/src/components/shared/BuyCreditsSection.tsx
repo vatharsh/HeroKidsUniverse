@@ -41,7 +41,7 @@ function loadRazorpayScript(): Promise<boolean> {
 
 // ── Coupons ───────────────────────────────────────────────────────────────────
 
-interface PackQuote { subtotal: number; discount: number; total: number; error?: string }
+interface PackQuote { subtotal: number; discount: number; total: number; cappedAtPct?: number; error?: string }
 interface AppliedCoupon { code: string; quotes: Record<string, PackQuote> }
 
 const COUPON_STORAGE_KEY = "hk_coupon_code";
@@ -97,7 +97,12 @@ function PackCard({ pack, quote, couponCode, onBuy }: { pack: CreditPack; quote?
           )}
           <p className="text-ink font-black text-2xl">₹{Number(effectivePrice).toLocaleString()}</p>
           {hasCoupon ? (
-            <p className="text-emerald-600 text-xs font-bold">{couponCode} saves you ₹{quote.discount.toLocaleString()}</p>
+            <>
+              <p className="text-emerald-600 text-xs font-bold">{couponCode} saves you ₹{quote.discount.toLocaleString()}</p>
+              {quote.cappedAtPct !== undefined && (
+                <p className="text-ink-muted text-[11px]">Max {quote.cappedAtPct}% off on credit packs</p>
+              )}
+            </>
           ) : isOnSale && pack.savingsAmount > 0 && (
             <p className="text-emerald-600 text-xs font-bold">Save ₹{pack.savingsAmount.toLocaleString()}</p>
           )}
@@ -324,6 +329,7 @@ export default function BuyCreditsSection({ onPurchased }: BuyCreditsSectionProp
   const refreshPacks = packs.filter(p => p.packType === "avatar_refreshes");
 
   const handleBuy = (p: CreditPack) => void onBuy(p);
+  const cappedPct = coupon ? Object.values(coupon.quotes).find(q => q.cappedAtPct !== undefined)?.cappedAtPct : undefined;
 
   return (
     <div className="mt-2 space-y-10">
@@ -337,7 +343,14 @@ export default function BuyCreditsSection({ onPurchased }: BuyCreditsSectionProp
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-ink flex items-center gap-2">
               <Tag className="w-4 h-4 text-emerald-600" />
-              <span><span className="font-black">{coupon.code}</span> applied — discounted prices are shown below.</span>
+              <span>
+                <span className="font-black">{coupon.code}</span> applied — discounted prices are shown below.
+                {cappedPct !== undefined && (
+                  <span className="block text-xs text-ink-muted mt-0.5">
+                    Coupons can take at most {cappedPct}% off a credit pack, so your discount is {cappedPct}% here.
+                  </span>
+                )}
+              </span>
             </p>
             <button onClick={removeCoupon} className="text-ink-muted hover:text-ink text-xs font-bold flex items-center gap-1">
               <X className="w-3.5 h-3.5" /> Remove

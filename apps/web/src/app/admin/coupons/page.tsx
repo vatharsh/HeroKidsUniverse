@@ -6,6 +6,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -66,6 +67,7 @@ function PlatformCouponModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { flags } = usePublicPlatformSettings();
   const [form, setForm] = useState<FormState>(
     coupon
       ? {
@@ -122,6 +124,7 @@ function PlatformCouponModal({
     }
   }
 
+  const packCapPct = Number(flags.CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT ?? 15);
   const example = 1000;
   const raw = form.discountType === "percentage"
     ? (example * Number(form.discountValue || 0)) / 100
@@ -251,6 +254,11 @@ function PlatformCouponModal({
               <span className="text-gray-500">Commission</span>
               <span className="text-right text-gray-400 font-semibold">None</span>
             </div>
+            {form.discountType === "percentage" && Number(form.discountValue) > packCapPct && (
+              <p className="text-[11px] text-amber-700 mt-2">
+                On credit packs this coupon gives {packCapPct}% off (the pack limit in Settings). Customers are told at checkout.
+              </p>
+            )}
           </div>
         </div>
         <div className="px-5 py-4 border-t border-gray-100">

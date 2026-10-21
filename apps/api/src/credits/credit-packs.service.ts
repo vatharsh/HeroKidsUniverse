@@ -28,6 +28,8 @@ export interface PackPricing {
   subtotal: number;
   discount: number;
   total: number;
+  /** Set when the pack limit (CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT) cut the coupon down — shown to the customer. */
+  cappedAtPct?: number;
   coupon: {
     code: string;
     couponCodeId: string;
@@ -174,12 +176,12 @@ export class CreditPacksService {
   /** Prices every active pack with a coupon so the shop can show the discounted amounts before paying. */
   async quoteCoupon(userId: string, code: string) {
     const packs = await this.creditPacksRepository.find({ where: { isActive: true, isDeleted: false } });
-    const quotes: Record<string, { subtotal: number; discount: number; total: number; error?: string }> = {};
+    const quotes: Record<string, { subtotal: number; discount: number; total: number; cappedAtPct?: number; error?: string }> = {};
     let firstError: string | undefined;
     for (const pack of packs) {
       try {
-        const { subtotal, discount, total } = await this.priceWithCoupon(userId, pack, code);
-        quotes[pack.id] = { subtotal, discount, total };
+        const { subtotal, discount, total, cappedAtPct } = await this.priceWithCoupon(userId, pack, code);
+        quotes[pack.id] = { subtotal, discount, total, cappedAtPct };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Coupon could not be applied';
         firstError ??= message;
@@ -350,7 +352,9 @@ export class CreditPacksService {
       discount = Math.min(discount, coupon.maxDiscountAmount);
     }
     const maxPct = await this.getNumberSetting('CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT');
-    discount = Math.min(discount, round2((subtotal * maxPct) / 100), subtotal - MIN_CHARGE_INR);
+    const packLimit = round2((subtotal * maxPct) / 100);
+    const cappedAtPct = discount > packLimit ? maxPct : undefined;
+    discount = Math.min(discount, packLimit, subtotal - MIN_CHARGE_INR);
     // Whole rupees, so the shop shows clean prices (₹134, not ₹134.10).
     discount = Math.max(0, Math.floor(discount));
 
@@ -358,6 +362,7 @@ export class CreditPacksService {
       subtotal,
       discount,
       total: round2(subtotal - discount),
+      cappedAtPct,
       coupon: {
         code: coupon.code ?? code,
         couponCodeId: coupon.couponCodeId,
