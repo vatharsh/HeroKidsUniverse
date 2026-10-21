@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -49,6 +49,8 @@ import { CastMember, GeminiCharacterLocator } from '../ai/providers/gemini-chara
 import { wavToMp3 } from './audio-compress';
 import { layoutBubbles } from './bubble-layout';
 import { GenerationJob, JobStatus } from './generation-job.entity';
+import { MailService } from '../mail/mail.service';
+import { storyReadyEmail } from '../mail/story-ready-email';
 
 const THEME_LABELS: Record<StoryTheme, string> = {
   [StoryTheme.SpaceAdventure]: 'an exciting space adventure with rockets, planets, and alien friends',
@@ -151,6 +153,7 @@ export class GenerationService implements OnModuleInit {
     @InjectRepository(PlatformSetting) private readonly platformSettingsRepo: Repository<PlatformSetting>,
     private readonly characterLocator: GeminiCharacterLocator,
     private readonly safety: ContentSafetyService,
+    @Optional() private readonly mail?: MailService,
   ) {}
 
   async onModuleInit() {
@@ -631,6 +634,7 @@ export class GenerationService implements OnModuleInit {
         completedAt: new Date(),
       });
       this.logger.log(`Story ${storyId} generated successfully`);
+      void this.emailStoryReady(storyId);
     } catch (err) {
       this.logger.error(`Story ${storyId} generation failed`, err);
       const msg = isContentSafetyError(err)
@@ -651,6 +655,27 @@ export class GenerationService implements OnModuleInit {
       } catch (refundErr) {
         this.logger.error(`Credit refund failed for user ${userId}, story ${storyId}`, refundErr);
       }
+    }
+  }
+
+  /** Tells the parent their story is ready. Never blocks or fails the story. */
+  private async emailStoryReady(storyId: string): Promise<void> {
+    if (!this.mail) return;
+    try {
+      const story = await this.storiesRepo.findOne({ where: { id: storyId }, relations: { hero: true } });
+      if (!story) return;
+      const user = await this.usersRepo.findOne({ where: { id: story.userId } });
+      if (!user?.email) return;
+      await this.mail.send(storyReadyEmail({
+        to: user.email,
+        parentName: user.name || 'there',
+        heroName: story.hero?.name || 'Your hero',
+        storyTitle: story.title || 'Your new story',
+        storyId: story.id,
+        coverImageUrl: story.coverImageUrl,
+      }));
+    } catch (err) {
+      this.logger.warn(`Story-ready email not sent for ${storyId}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

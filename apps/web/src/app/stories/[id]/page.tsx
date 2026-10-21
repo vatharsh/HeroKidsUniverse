@@ -4,6 +4,7 @@ import { Clapperboard, FileText, Loader2, Package, Share2, Trash2 } from "lucide
 import { useParams, useRouter } from "next/navigation";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
@@ -554,6 +555,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function StoryReaderPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user: authUser } = useAuth();
 
   const [story, setStory]         = useState<Story | null>(null);
   const [error, setError]         = useState("");
@@ -858,6 +860,9 @@ export default function StoryReaderPage() {
             <p className="text-white/60 text-xs mt-1.5 leading-relaxed">
               You don&apos;t need to wait here — explore your universe, characters or past stories.
               We&apos;ll keep building {heroName}&apos;s story, and it will be waiting on your dashboard.
+            </p>
+            <p className="text-gold text-xs font-semibold mt-2.5">
+              📧 We&apos;ll email you{authUser?.email ? <> at <span className="text-white">{authUser.email}</span></> : null}{" "}as soon as it&apos;s ready.
             </p>
             <div className="flex flex-wrap justify-center gap-2 mt-3">
               <a href="/dashboard" className="rounded-full bg-brand hover:bg-brand-dark text-white text-xs font-semibold px-4 py-2 transition">
