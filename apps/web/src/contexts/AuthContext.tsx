@@ -65,7 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (name: string, email: string, password: string, referralCode?: string) => {
-      const tokens = await authApi.register({ name, email, password, referralCode });
+      // Only called after the parent ticks the consent box on the sign-up form.
+      const tokens = await authApi.register({ name, email, password, referralCode, acceptTerms: true });
       setTokens(tokens.accessToken, tokens.refreshToken);
       const me = await authApi.me();
       setUser(me);

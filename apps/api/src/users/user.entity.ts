@@ -90,6 +90,13 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isSandbox!: boolean;
 
+  /** When the parent/guardian accepted the Terms and Privacy Policy, and which version they saw. */
+  @Column({ type: 'timestamp', nullable: true })
+  termsAcceptedAt!: Date | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  termsVersion!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

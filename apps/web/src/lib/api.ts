@@ -108,6 +108,7 @@ export const authApi = {
     email: string;
     password: string;
     referralCode?: string;
+    acceptTerms: boolean;
   }) => request<Tokens>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
 
   login: (payload: { email: string; password: string }) =>

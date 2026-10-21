@@ -12,78 +12,102 @@ export default function PrivacyPage() {
     <LegalPage
       eyebrow="Privacy"
       title="Privacy Policy"
-      description="How Hero Kids Universe handles account details, story data, images, orders, and support communication."
-      updatedAt="26 June 2026"
+      description="How Hero Kids Universe handles your account, your child's details and photos, the stories our AI creates, payments, and orders."
+      updatedAt="21 October 2026"
       sections={[
         {
           title: "Who we are",
           body: [
-            "Hero Kids Universe is operated by Accurate IT Solution, located at 136 Industrial Area Phase-2, Panchkula, Haryana, 134113, India.",
-            "You can contact us about privacy, account, or data questions at support@accurateitsolution.in.",
+            "Hero Kids Universe is operated by Accurate IT Solution, 136 Industrial Area Phase-2, Panchkula, Haryana, 134113, India (\"we\", \"us\").",
+            "For anything about privacy, your data, or this policy, write to support@accurateitsolution.in. This address also reaches our Grievance Officer (see \"Questions and complaints\" below).",
           ],
         },
         {
-          title: "Information we collect",
+          title: "A service for parents, about children",
           body: [
-            "When you create an account, we collect information such as your name, email address, login details, subscription or credit balance, and activity needed to provide the service.",
-            "When you create heroes, characters, universes, and stories, we store the details you enter, such as names, dates of birth, story prompts, selected themes, generated story text, generated avatars, generated illustrations, narration, and universe memory.",
-            "When you place a merchandise or physical order, we may collect shipping details such as recipient name, phone number, address, city, state, postal code, order items, order status, and delivery information.",
+            "Accounts are created and managed by a parent or legal guardian. Children do not sign up or log in themselves.",
+            "When you sign up you confirm that you are the parent or legal guardian of the children whose details and photos you add, and you consent to us processing that information as described in this policy. We record when you gave this consent.",
+            "If you add other family members or friends (for example grandparents or cousins), please only do so with their permission, or their guardian's permission for a child.",
           ],
         },
         {
-          title: "Photos and generated images",
+          title: "What we collect",
           body: [
-            "Photo uploads are used to create personalized avatars and storybook-style results. We do not use original uploaded photos for advertising, resale, or unrelated model training.",
-            "Our intended product behavior is that original uploaded photos are not retained as permanent customer assets after the avatar workflow. Generated avatars, story illustrations, product mockups, and final story assets may be stored so your account, stories, and orders continue to work.",
-            "Please upload only photos that you have the right and consent to use, especially where a child or another family member appears in the photo.",
+            "Account details: your name, email address, password (stored only as a secure hash), and optionally a phone number.",
+            "Details about your hero and characters: names, dates of birth (to keep their age right in the pictures), gender, relationship to the hero, costume or appearance notes, and the story ideas you type.",
+            "What we create for you: the cartoon avatars, a short written description of each character's appearance (for example hair style, skin tone, glasses) used to draw them consistently, stories, illustrations, narration audio, videos, PDFs, and your universe's history (quests, villains, gear earned).",
+            "Purchases and orders: credit packs bought, coupon codes used, payment status and references, and for physical orders the delivery name, phone number and address.",
+            "Basic technical records such as log entries and error reports, kept to run and secure the service.",
+          ],
+        },
+        {
+          title: "Photos you upload",
+          body: [
+            "A photo is used only to create a cartoon avatar and the appearance description above. It is processed in memory and sent to our AI providers for that purpose. We do not store the original photo on our servers or in our storage.",
+            "We keep the cartoon avatar and the appearance description, because they are needed to draw your characters in every story. You can replace or delete them at any time.",
+            "Before an avatar is made, the photo is automatically checked to make sure it is a suitable family photo.",
+            "Please upload only photos you have the right to use. We never use your photos or your child's information for advertising, and we never sell them.",
+          ],
+        },
+        {
+          title: "AI providers we use",
+          body: [
+            "Stories, pictures, avatars, narration and our safety checks are created by Google's Gemini artificial-intelligence services. The text you type, your characters' details and photos are sent to Google only to create your content and to check it for child safety. If we add or change an AI provider, we will update this list.",
+            "Google processes this data under its Gemini API terms for paid business use, which do not allow it to use the data to train its models. Its servers may be located outside India.",
+          ],
+        },
+        {
+          title: "Other service providers",
+          body: [
+            "We also use providers for hosting and storage (cloud servers and Cloudflare storage for images, audio and video files), payments (Razorpay), and email. They receive only what they need to provide their service to us.",
+            "We do not sell personal information. We may disclose information when required by law, a court order or a government authority, or to prevent fraud, abuse or harm to a child.",
           ],
         },
         {
           title: "Payments",
           body: [
-            "We do not store credit card, debit card, UPI, net banking, or other full payment instrument details on Hero Kids Universe servers.",
-            "Payments may be handled through third-party payment providers. We may store payment status, transaction reference, amount, currency, refund status, and order reference so we can provide receipts, support, refunds, and fraud prevention.",
+            "Payments are handled by Razorpay. We never see or store your card, UPI or net-banking details. We keep the payment status, amount, reference number and any coupon used, for receipts, refunds and accounting.",
           ],
         },
         {
-          title: "How we use information",
+          title: "Cookies and browser storage",
           body: [
-            "We use your information to create and manage accounts, generate stories and avatars, remember universe continuity, process orders, provide customer support, prevent misuse, improve product reliability, and comply with legal obligations.",
-            "We may use aggregated or anonymized operational information to understand service performance, cost, errors, and product usage. This does not identify individual children or families.",
+            "We store a small amount of information in your browser to keep you signed in, to remember a coupon code you applied, and to remember messages you have dismissed.",
+            "We do not use advertising cookies, and we do not use third-party analytics or tracking tools.",
           ],
         },
         {
-          title: "Sharing of information",
+          title: "How long we keep data",
           body: [
-            "We do not sell personal information. We may share limited information with service providers who help us run the service, including hosting, storage, AI generation, payment processing, analytics, customer support, delivery, printing, and security providers.",
-            "We may disclose information when required by law, court order, government request, enforcement of our Terms, prevention of fraud or abuse, or protection of users and the platform.",
+            "Your account, characters, avatars and stories are kept while your account is active, so your universe keeps working.",
+            "When you delete a story, its pictures, narration audio and video are deleted too; when you delete a character, their avatar is deleted. When you ask us to delete your account, we delete your children's details, avatars, stories and other content. We keep only what the law requires, such as invoices and payment records, for the required period.",
           ],
         },
         {
-          title: "Children and parents",
+          title: "Your rights",
           body: [
-            "Hero Kids Universe is designed for families and children, but accounts and purchases should be created and managed by a parent, guardian, or responsible adult.",
-            "Parents or guardians can contact us to request help with reviewing, correcting, exporting, or deleting account information where legally and technically possible.",
-          ],
-        },
-        {
-          title: "Data retention and deletion",
-          body: [
-            "We keep account, story, universe, generated asset, transaction, and order information for as long as needed to provide the service, support the user, comply with accounting or legal obligations, resolve disputes, and protect the platform.",
-            "You may request deletion of your account or specific content by emailing support@accurateitsolution.in. Some records, such as invoices, payments, order history, dispute records, and legal logs, may need to be retained as required by law or legitimate business needs.",
+            "As the parent or guardian you can ask us to show you the information we hold, correct it, delete it, or withdraw your consent. Withdrawing consent means we will delete your children's information and you will no longer be able to create stories for them.",
+            "Write to support@accurateitsolution.in from your account's email address. We will reply within 30 days.",
           ],
         },
         {
           title: "Security",
           body: [
-            "We use reasonable technical and organizational measures to protect user information. No internet service is completely risk-free, so please use a strong password and keep account access private.",
-            "If you believe your account or data has been accessed without permission, contact us immediately at support@accurateitsolution.in.",
+            "We use encrypted connections, hashed passwords, access controls and limited staff access to protect your information. No online service is completely risk-free, so please keep your password private.",
+            "If we become aware of a data breach that affects you, we will inform you and the authorities as the law requires. If you think your account has been accessed without permission, contact us straight away.",
           ],
         },
         {
-          title: "Updates to this policy",
+          title: "Questions and complaints",
           body: [
-            "We may update this Privacy Policy as the product, law, or business changes. The updated date on this page will show when the latest version became effective.",
+            "Grievance Officer, Accurate IT Solution, 136 Industrial Area Phase-2, Panchkula, Haryana, 134113, India. Email: support@accurateitsolution.in. We acknowledge complaints within 2 working days and aim to resolve them within 30 days.",
+            "If you are not satisfied with our answer, you may approach the Data Protection Board of India.",
+          ],
+        },
+        {
+          title: "Changes to this policy",
+          body: [
+            "If we change this policy in an important way, we will tell you by email or in the app before the change applies. The date at the top shows the latest version.",
           ],
         },
       ]}

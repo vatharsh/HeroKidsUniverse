@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -125,9 +126,25 @@ export default function RegisterPage() {
             <p className="text-ink-muted text-xs mt-1">Enter a friend&apos;s code to get bonus credits</p>
           </div>
 
+          <label className="flex items-start gap-3 text-sm text-ink-mid cursor-pointer">
+            <input
+              type="checkbox"
+              required
+              checked={accepted}
+              onChange={(e) => setAccepted(e.target.checked)}
+              className="mt-1 w-4 h-4 accent-brand flex-shrink-0"
+            />
+            <span>
+              I am the parent or legal guardian of the children whose details and photos I add, and I agree to the{" "}
+              <a href="/terms" target="_blank" className="text-brand font-semibold hover:underline">Terms</a> and{" "}
+              <a href="/privacy" target="_blank" className="text-brand font-semibold hover:underline">Privacy Policy</a>.
+              I understand that stories, pictures and narration are made by AI.
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !accepted}
             className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all hover:scale-[1.02] shadow-brand"
           >
             {loading ? "Creating account…" : "Create Free Account →"}

@@ -1470,6 +1470,16 @@ export default function StoryReaderPage() {
           </button>
         </div>
 
+        <p className="text-white/40 text-[11px] text-center max-w-md leading-relaxed">
+          This story, its pictures and narration were made by AI and checked for child safety. Please read it before sharing it with your child.{" "}
+          <a
+            href={`mailto:support@accurateitsolution.in?subject=${encodeURIComponent(`Problem with story: ${story.title ?? story.id}`)}`}
+            className="underline hover:text-white/70"
+          >
+            Report a problem
+          </a>
+        </p>
+
         {/* Free preview → invite to unlock full adventures */}
         {isLastPage && story.isPreview && (
           <div className="w-full max-w-md rounded-3xl border border-gold/30 bg-white/10 p-5 text-center">

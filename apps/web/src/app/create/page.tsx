@@ -1650,6 +1650,10 @@ function CreatePageInner() {
               }
             </button>
             <p className="text-ink-muted text-xs text-center mt-3">Generation runs in the background — you can close this tab and come back.</p>
+            <p className="text-ink-muted text-[11px] text-center mt-2 leading-relaxed">
+              Stories, pictures and narration are made by AI and checked for child safety. AI can make mistakes, so please read each story before sharing it.
+              By generating you agree to our <a href="/terms" target="_blank" className="underline">Terms</a>.
+            </p>
           </section>
         )}
 

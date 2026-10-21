@@ -21,8 +21,8 @@ export default function Footer() {
         </div>
 
         <div className="flex justify-between items-center flex-wrap gap-4 pt-5 text-sm text-white/40">
-          <p>Made with ✨ for magical childhoods</p>
-          <p>© 2025 Accurate IT Solution. All rights reserved.</p>
+          <p>Made with ✨ for magical childhoods · Stories, pictures and narration are AI-generated</p>
+          <p>© {new Date().getFullYear()} Accurate IT Solution. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -15,6 +15,9 @@ import { CurrentUserPayload } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
+/** Bump when the Terms or Privacy Policy change materially (matches the date on those pages). */
+const TERMS_VERSION = '2026-10-21';
+
 export interface AuthUserResponse {
   id: string;
   name: string;
@@ -81,6 +84,8 @@ export class AuthService {
         previewCredits: freePreviewStories,
         referredBy,
         isSandbox,
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
       }),
     );
 
