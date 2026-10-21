@@ -5,6 +5,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Repository } from 'typeorm';
 
 import { PlatformSetting, SETTING_DEFAULTS } from '../../admin/platform-setting.entity';
+import { AiUsageRecorder } from '../ai-usage-recorder.service';
+import { AiOperation } from '../entities/ai-usage-log.entity';
 
 export interface CastMember {
   name: string;
@@ -34,6 +36,7 @@ export class GeminiCharacterLocator {
     private readonly config: ConfigService,
     @InjectRepository(PlatformSetting)
     private readonly settingsRepo: Repository<PlatformSetting>,
+    private readonly usage: AiUsageRecorder,
   ) {
     this.genAI = new GoogleGenerativeAI(this.config.get<string>('GEMINI_API_KEY') ?? '');
   }
@@ -73,6 +76,10 @@ export class GeminiCharacterLocator {
       { inlineData: { mimeType: image.mimeType, data: image.data } },
       { text: prompt },
     ]);
+    void this.usage.record({
+      provider: 'gemini', model: modelName, operation: AiOperation.SpeechBubbleDetection,
+      inputTokens: result.response.usageMetadata?.promptTokenCount, outputTokens: result.response.usageMetadata?.candidatesTokenCount,
+    });
     const parsed = JSON.parse(result.response.text()) as {
       characters?: Array<{ name?: string; head_box?: Box2d; mouth?: [number, number] | null }>;
     };

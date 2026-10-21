@@ -33,6 +33,7 @@ import { Hero } from '../heroes/hero.entity';
 import { HeroPower } from '../powers/hero-power.entity';
 import { UniverseVillain, VillainStatus } from '../universes/universe-villain.entity';
 import { pickStoryShape } from './story-shapes';
+import { aiUsageContext } from '../ai/ai-usage-recorder.service';
 import { ContentSafetyError, ContentSafetyService, isContentSafetyError } from '../ai/content-safety.service';
 import type { StoryGenerationInput } from '../ai/interfaces/story-generation.provider';
 import { Quest, QuestStatus } from '../quests/quest.entity';
@@ -213,6 +214,15 @@ export class GenerationService implements OnModuleInit {
   }
 
   async generateStory(storyId: string, userId: string): Promise<void> {
+    // Every AI call made while writing and illustrating this story is logged against it.
+    const story = await this.storiesRepo.findOne({ where: { id: storyId }, select: { id: true, universeId: true, isSandbox: true } });
+    return aiUsageContext.run(
+      { userId, storyId, universeId: story?.universeId ?? null, isSandbox: story?.isSandbox ?? false },
+      () => this.runStoryGeneration(storyId, userId),
+    );
+  }
+
+  private async runStoryGeneration(storyId: string, userId: string): Promise<void> {
     const job = await this.jobsRepo.save(
       this.jobsRepo.create({ userId, storyId, status: JobStatus.Queued, progressPercentage: 0 }),
     );

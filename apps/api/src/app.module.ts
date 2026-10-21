@@ -78,6 +78,7 @@ import { UniverseMemory } from './universes/universe-memory.entity';
 import { UniverseVillain } from './universes/universe-villain.entity';
 import { ContentSafetyModule } from './ai/content-safety.service';
 import { MailModule } from './mail/mail.service';
+import { AiUsageModule } from './ai/ai-usage-recorder.service';
 import { EmailCode } from './auth/email-code.entity';
 import { EmailVerifiedGuard } from './auth/guards/email-verified.guard';
 import { Universe } from './universes/universe.entity';
@@ -92,6 +93,7 @@ import { UsersModule } from './users/users.module';
   imports: [
     ContentSafetyModule,
     MailModule,
+    AiUsageModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', 'apps/api/.env'],

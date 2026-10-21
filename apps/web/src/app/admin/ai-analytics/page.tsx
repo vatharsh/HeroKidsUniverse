@@ -24,6 +24,8 @@ interface TopUser { userId: string; name: string; email: string; storyCount: num
 interface UniverseAnalytic { universeId: string; universeName: string; storyCount: number; imagesGenerated: number; audioCount: number; totalAiCostUsd: number; }
 
 interface AiAnalytics {
+  /** % of stories started in the last 30 days that finished (null = none). */
+  generationSuccessRate?: number | null;
   aiCostToday: number; aiCostThisMonth: number;
   totalStoriesGenerated: number; totalImagesGenerated: number;
   totalNarrationSeconds: number; totalVideosGenerated: number;
@@ -73,12 +75,17 @@ interface SettingGroup { title: string; description: string; items: SettingDef[]
 
 function fmt$(n: number | null | undefined, digits = 3) {
   if (n == null) return "—";
+  // Safety checks and bubble detection cost fractions of a cent — show enough digits to see them.
+  if (n > 0 && n < 10 ** -digits) return `$${n.toPrecision(2)}`;
   return `$${n.toFixed(digits)}`;
 }
 
+/** USD→INR from Settings (USD_INR_RATE), loaded when the page opens — it was hard-coded to 96. */
+let usdInrRate = 96;
+
 function fmtINR(usd: number | null | undefined) {
   if (usd == null) return "—";
-  return `₹${Math.round(usd * 96).toLocaleString()}`;
+  return `₹${Math.round(usd * usdInrRate).toLocaleString()}`;
 }
 
 function confColor(v: number | null | undefined) {
@@ -182,7 +189,10 @@ function OverviewTab({ analytics, loading }: { analytics: AiAnalytics | null; lo
     else if ((analytics.qaAvgConfidence ?? 0) >= 65) score += 15;
     if (analytics.aiCostToday < 5) score += 25;
     else if (analytics.aiCostToday < 15) score += 15;
-    if (analytics.totalStoriesGenerated > 0) score += 25;
+    // Stories that finished vs failed in the last 30 days (was: "any story ever generated", always true).
+    const success = analytics.generationSuccessRate;
+    if (success == null || success >= 95) score += 25;
+    else if (success >= 85) score += 15;
     return score;
   })();
   const healthLabel = healthScore >= 80 ? "Excellent" : healthScore >= 60 ? "Good" : healthScore >= 40 ? "Fair" : "Needs Attention";
@@ -195,17 +205,20 @@ function OverviewTab({ analytics, loading }: { analytics: AiAnalytics | null; lo
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         {/* Health Score */}
         <div className="md:col-span-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col items-center justify-center gap-2">
-          <svg viewBox="0 0 64 64" className="w-24 h-24 -rotate-90">
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#f3f4f6" strokeWidth="6" />
-            <circle cx="32" cy="32" r="26" fill="none" stroke={healthRingCol} strokeWidth="6"
-              strokeDasharray={`${2 * Math.PI * 26 * healthScore / 100} ${2 * Math.PI * 26 * (1 - healthScore / 100)}`}
-              strokeLinecap="round" style={{ transition: "stroke-dasharray 0.5s" }} />
-          </svg>
-          <div className="text-center -mt-16">
-            <p className={`text-2xl font-black ${healthCol}`}>{healthScore}</p>
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider">{healthLabel}</p>
+          {/* Score and label sit inside the ring (absolutely centred) so they never overlap the stroke. */}
+          <div className="relative w-28 h-28">
+            <svg viewBox="0 0 64 64" className="absolute inset-0 w-full h-full -rotate-90">
+              <circle cx="32" cy="32" r="27" fill="none" stroke="#f3f4f6" strokeWidth="5" />
+              <circle cx="32" cy="32" r="27" fill="none" stroke={healthRingCol} strokeWidth="5"
+                strokeDasharray={`${2 * Math.PI * 27 * healthScore / 100} ${2 * Math.PI * 27 * (1 - healthScore / 100)}`}
+                strokeLinecap="round" style={{ transition: "stroke-dasharray 0.5s" }} />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <p className={`text-2xl font-black leading-none ${healthCol}`}>{healthScore}</p>
+              <p className="text-[9px] text-gray-400 uppercase tracking-wider mt-1 leading-none">{healthLabel}</p>
+            </div>
           </div>
-          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mt-4">AI Health Score</p>
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mt-2">AI Health Score</p>
         </div>
 
         {/* KPIs */}
@@ -366,8 +379,8 @@ function RunsTab() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-[10px] text-gray-400 space-y-0.5">
-                      {r.storyPromptVersion && <p>S:{r.storyPromptVersion}</p>}
-                      {r.imagePromptVersion && <p>I:{r.imagePromptVersion}</p>}
+                      {r.storyPromptVersion && <p title="Story prompt version">Prompt {r.storyPromptVersion}</p>}
+                      {r.imagePromptVersion && <p title="Image model">{r.imagePromptVersion}</p>}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-400 tabular-nums whitespace-nowrap">
@@ -1325,7 +1338,8 @@ function ModelsTab({ analytics, loading }: { analytics: AiAnalytics | null; load
 // ─── TAB: Characters ───────────────────────────────────────────────────────────
 
 function CharactersTab() {
-  type CanonRow = { id: string; heroName: string; universeName?: string; userName?: string; lastUsedAt?: string; identityStability?: number; characterConfidence?: number; };
+  // Matches GET /admin/character-canons (it never had heroName/items — the tab always looked empty).
+  type CanonRow = { id: string; entityName?: string; canonType?: string; status?: string; updatedAt?: string; identityStability?: number | string | null; characterConfidence?: number | string | null; };
   const [data, setData] = useState<CanonRow[]>([]);
   const [loading, setLoading] = useState(false);
   const loaded = useRef(false);
@@ -1334,8 +1348,8 @@ function CharactersTab() {
     if (loaded.current) return;
     loaded.current = true;
     setLoading(true);
-    apiFetch("/admin/character-canons?limit=50").then((res: { items: CanonRow[] } | CanonRow[]) => {
-      setData(Array.isArray(res) ? res : res.items ?? []);
+    apiFetch("/admin/character-canons?limit=50").then((res: { data: CanonRow[] } | CanonRow[]) => {
+      setData(Array.isArray(res) ? res : res.data ?? []);
     }).catch(() => null).finally(() => setLoading(false));
   }, []);
 
@@ -1356,7 +1370,7 @@ function CharactersTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Hero", "Universe", "User", "Identity Stability", "Confidence", "Last Used"].map(h => (
+                {["Character", "Type", "Status", "Identity Stability", "Confidence", "Updated"].map(h => (
                   <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400">{h}</th>
                 ))}
               </tr>
@@ -1366,16 +1380,17 @@ function CharactersTab() {
                 <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 text-sm">No character canons yet.</td></tr>
               ) : data.map(r => (
                 <tr key={r.id} className="hover:bg-gray-50/50">
-                  <td className="px-4 py-2.5 font-medium text-gray-800 text-xs">{r.heroName}</td>
-                  <td className="px-4 py-2.5 text-xs text-gray-500">{r.universeName ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-xs text-gray-400">{r.userName ?? "—"}</td>
-                  <td className="px-4 py-2.5">{scoreBar(r.identityStability != null ? r.identityStability * 10 : null)}</td>
+                  <td className="px-4 py-2.5 font-medium text-gray-800 text-xs">{r.entityName ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-500 capitalize">{r.canonType ? r.canonType.replace(/_/g, " ") : "—"}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-400">{r.status ?? "—"}</td>
+                  {/* Both scores are already 0–100 (they used to be multiplied by 10 again). */}
+                  <td className="px-4 py-2.5">{scoreBar(r.identityStability != null ? Number(r.identityStability) : null, 100)}</td>
                   <td className="px-4 py-2.5">
                     {r.characterConfidence != null ? (
-                      <span className={`text-xs font-bold ${confColor(r.characterConfidence * 10)}`}>{(r.characterConfidence * 10).toFixed(1)}</span>
+                      <span className={`text-xs font-bold ${confColor(Number(r.characterConfidence))}`}>{Number(r.characterConfidence).toFixed(1)}</span>
                     ) : <span className="text-gray-300 text-xs">—</span>}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-gray-400">{r.lastUsedAt ? new Date(r.lastUsedAt).toLocaleDateString() : "—"}</td>
+                  <td className="px-4 py-2.5 text-xs text-gray-400">{r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -2193,6 +2208,7 @@ const AI_OPERATIONS = [
   "story_generation","image_generation","narration","avatar_generation",
   "character_sheet_generation","cover_generation","story_page_generation",
   "video_generation","merchandise_generation","story_continuation",
+  "safety_check","speech_bubble_detection","quality_check","appearance_analysis",
 ];
 
 function LogsTab() {
@@ -2321,7 +2337,12 @@ export default function AiControlCenter() {
   const loadAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
     try {
-      const data = await apiFetch("/admin/ai-analytics");
+      const [data, settings] = await Promise.all([
+        apiFetch("/admin/ai-analytics"),
+        apiFetch("/admin/settings").catch(() => []),
+      ]);
+      const rate = Number((settings as Array<{ key: string; value: string }>).find(r => r.key === "USD_INR_RATE")?.value);
+      if (Number.isFinite(rate) && rate > 0) usdInrRate = rate;
       setAnalytics(data as AiAnalytics);
     } catch {
       setAnalytics(null);

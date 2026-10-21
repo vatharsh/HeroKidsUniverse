@@ -46,14 +46,15 @@ interface QaSettings {
   retryStrategy: string;
 }
 
+/** null = that check is switched off in QA settings (it used to record a made-up 8/10). */
 export interface PageQaResult {
   pageNumber: number;
-  identityScore: number;
-  storyScore: number;
-  expressionScore: number;
-  dialogueScore: number;
-  compositionScore: number;
-  narrationScore: number;
+  identityScore: number | null;
+  storyScore: number | null;
+  expressionScore: number | null;
+  dialogueScore: number | null;
+  compositionScore: number | null;
+  narrationScore: number | null;
   overallScore: number;
   issues: string[];
   accepted: boolean;
@@ -68,12 +69,12 @@ export interface StoryQaResult {
   overallStatus: string;
   pages: PageQaResult[];
   finalPages: StoryPage[];
-  avgIdentityScore: number;
-  avgStoryScore: number;
-  avgExpressionScore: number;
-  avgDialogueScore: number;
-  avgCompositionScore: number;
-  avgNarrationScore: number;
+  avgIdentityScore: number | null;
+  avgStoryScore: number | null;
+  avgExpressionScore: number | null;
+  avgDialogueScore: number | null;
+  avgCompositionScore: number | null;
+  avgNarrationScore: number | null;
   pagesRetried: number;
   topIssues: string[];
 }
@@ -171,7 +172,7 @@ export class AIQualityAssuranceService {
         }
 
         if (pr.accepted) continue;
-        if (pr.identityScore >= settings.minIdentityScore) continue; // only retry identity failures
+        if (pr.identityScore === null || pr.identityScore >= settings.minIdentityScore) continue; // only retry identity failures
         const originalPage = finalPages.find((p) => p.pageNumber === pr.pageNumber);
         if (!originalPage?.imageUrl) continue;
 
@@ -290,7 +291,7 @@ export class AIQualityAssuranceService {
     } catch {}
 
     // Update character confidence
-    if (heroCanon) {
+    if (heroCanon && avgStoryScore !== null) {
       await this.updateCharacterConfidence(heroCanon, pageResults, avgStoryScore).catch(() => {});
     }
 
@@ -335,49 +336,48 @@ export class AIQualityAssuranceService {
       await Promise.all([
         settings.enableIdentityQa
           ? this.scoreIdentity(page, hero, heroCanon).catch(() => 5)
-          : Promise.resolve(8),
+          : Promise.resolve(null),
         settings.enableStoryQa
           ? Promise.resolve(this.scoreStory(page, storyVisualState, allPages, issues))
-          : Promise.resolve(8),
+          : Promise.resolve(null),
         settings.enableExpressionQa
           ? Promise.resolve(this.scoreExpression(page, issues))
-          : Promise.resolve(8),
+          : Promise.resolve(null),
         settings.enableDialogueQa
           ? Promise.resolve(this.scoreDialogue(page, issues))
-          : Promise.resolve(8),
+          : Promise.resolve(null),
         settings.enableCompositionQa
           ? this.scoreComposition(page, issues).catch(() => 8)
-          : Promise.resolve(8),
+          : Promise.resolve(null),
         settings.enableNarrationQa
           ? Promise.resolve(this.scoreNarration(page, issues))
-          : Promise.resolve(8),
+          : Promise.resolve(null),
       ]);
 
-    // Weighted page score (0–10)
-    const weights = settings;
-    const totalW = weights.weightIdentity + weights.weightStory + weights.weightExpression
-      + weights.weightDialogue + weights.weightComposition + weights.weightNarration;
-    const overallScore = (
-      identityScore * weights.weightIdentity +
-      storyScore * weights.weightStory +
-      expressionScore * weights.weightExpression +
-      dialogueScore * weights.weightDialogue +
-      compositionScore * weights.weightComposition +
-      narrationScore * weights.weightNarration
-    ) / totalW;
+    // Weighted page score (0–10) over the checks that actually ran.
+    const overallScore = this.weightedScore([
+      [identityScore, settings.weightIdentity],
+      [storyScore, settings.weightStory],
+      [expressionScore, settings.weightExpression],
+      [dialogueScore, settings.weightDialogue],
+      [compositionScore, settings.weightComposition],
+      [narrationScore, settings.weightNarration],
+    ]) ?? 0;
 
-    const accepted = identityScore >= settings.minIdentityScore
-      && storyScore >= settings.minStoryScore
-      && expressionScore >= settings.minExpressionScore;
+    const passes = (score: number | null, min: number) => score === null || score >= min;
+    const accepted = passes(identityScore, settings.minIdentityScore)
+      && passes(storyScore, settings.minStoryScore)
+      && passes(expressionScore, settings.minExpressionScore);
 
+    const round1 = (n: number | null) => (n === null ? null : Math.round(n * 10) / 10);
     return {
       pageNumber: page.pageNumber,
-      identityScore: Math.round(identityScore * 10) / 10,
-      storyScore: Math.round(storyScore * 10) / 10,
-      expressionScore: Math.round(expressionScore * 10) / 10,
-      dialogueScore: Math.round(dialogueScore * 10) / 10,
-      compositionScore: Math.round(compositionScore * 10) / 10,
-      narrationScore: Math.round(narrationScore * 10) / 10,
+      identityScore: round1(identityScore),
+      storyScore: round1(storyScore),
+      expressionScore: round1(expressionScore),
+      dialogueScore: round1(dialogueScore),
+      compositionScore: round1(compositionScore),
+      narrationScore: round1(narrationScore),
       overallScore: Math.round(overallScore * 10) / 10,
       issues,
       accepted,
@@ -590,27 +590,18 @@ export class AIQualityAssuranceService {
   private calculateConfidence(pages: PageQaResult[], settings: QaSettings): number {
     if (pages.length === 0) return 0;
 
-    const avgIdentity    = this.avg(pages.map((p) => p.identityScore));
-    const avgStory       = this.avg(pages.map((p) => p.storyScore));
-    const avgExpression  = this.avg(pages.map((p) => p.expressionScore));
-    const avgDialogue    = this.avg(pages.map((p) => p.dialogueScore));
-    const avgComposition = this.avg(pages.map((p) => p.compositionScore));
-    const avgNarration   = this.avg(pages.map((p) => p.narrationScore));
-
-    const totalWeight =
-      settings.weightIdentity + settings.weightStory + settings.weightExpression +
-      settings.weightDialogue + settings.weightComposition + settings.weightNarration +
-      settings.weightStateConsistency;
-
-    const raw = (
-      avgIdentity    * settings.weightIdentity +
-      avgStory       * settings.weightStory +
-      avgExpression  * settings.weightExpression +
-      avgDialogue    * settings.weightDialogue +
-      avgComposition * settings.weightComposition +
-      avgNarration   * settings.weightNarration +
-      avgStory       * settings.weightStateConsistency  // reuse story score for state consistency weight
-    ) / totalWeight;
+    const avgStory = this.avg(pages.map((p) => p.storyScore));
+    // Only checks that ran count; switched-off ones no longer pull the score towards a fake 8.
+    const raw = this.weightedScore([
+      [this.avg(pages.map((p) => p.identityScore)), settings.weightIdentity],
+      [avgStory, settings.weightStory],
+      [this.avg(pages.map((p) => p.expressionScore)), settings.weightExpression],
+      [this.avg(pages.map((p) => p.dialogueScore)), settings.weightDialogue],
+      [this.avg(pages.map((p) => p.compositionScore)), settings.weightComposition],
+      [this.avg(pages.map((p) => p.narrationScore)), settings.weightNarration],
+      [avgStory, settings.weightStateConsistency], // story score stands in for state consistency
+    ]);
+    if (raw === null) return 0;
 
     return Math.min(100, Math.max(0, Math.round(raw * 10)));
   }
@@ -630,6 +621,7 @@ export class AIQualityAssuranceService {
   ): Promise<void> {
     const identityScores = pageResults.map((p) => p.identityScore);
     const newAvgIdentity = this.avg(identityScores); // 0–10
+    if (newAvgIdentity === null) return; // identity check is switched off — nothing new to learn
     const prevStability = canon.identityStability ?? newAvgIdentity * 10;
     const updatedStability = prevStability * 0.7 + newAvgIdentity * 10 * 0.3; // EMA α=0.3
     const avatarQuality = (canon.qualityScore ?? 80);
@@ -655,15 +647,23 @@ export class AIQualityAssuranceService {
     });
     const valid = recent.filter((s) => s.overallConfidence !== null).map((s) => s.overallConfidence!);
     if (valid.length === 0) return;
-    const avg = this.avg(valid);
+    const avg = this.avg(valid) ?? 0;
     await this.universesRepo.update(story.universeId, { avgConfidence: Math.round(avg * 10) / 10 });
   }
 
   // ─── Utility ─────────────────────────────────────────────────────────────
 
-  private avg(nums: number[]): number {
-    if (nums.length === 0) return 0;
-    return nums.reduce((a, b) => a + b, 0) / nums.length;
+  /** Average of the scores that exist; null when the check didn't run at all. */
+  private avg(nums: Array<number | null>): number | null {
+    const present = nums.filter((n): n is number => n !== null && n !== undefined);
+    if (present.length === 0) return null;
+    return present.reduce((a, b) => a + b, 0) / present.length;
+  }
+
+  private weightedScore(parts: Array<[number | null, number]>): number | null {
+    const used = parts.filter((p): p is [number, number] => p[0] !== null && p[1] > 0);
+    const weight = used.reduce((sum, [, w]) => sum + w, 0);
+    return weight ? used.reduce((sum, [score, w]) => sum + score * w, 0) / weight : null;
   }
 
   private collectTopIssues(pages: PageQaResult[]): string[] {

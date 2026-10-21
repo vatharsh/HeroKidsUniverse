@@ -20,6 +20,8 @@ import {
 import type { CharacterIdentity } from '../../heroes/hero.entity';
 import { PromptRegistryService } from '../prompt-registry.service';
 import { AVATAR_STYLE, BACKGROUND_SCENE_STYLE, STORYBOOK_STYLE } from '../style.constants';
+import { AiUsageRecorder } from '../ai-usage-recorder.service';
+import { AiOperation } from '../entities/ai-usage-log.entity';
 
 @Injectable()
 export class OpenAIImageProvider implements ImageGenerationProvider {
@@ -30,6 +32,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
   constructor(
     private readonly config: ConfigService,
     private readonly promptRegistry: PromptRegistryService,
+    private readonly usage: AiUsageRecorder,
   ) {
     const apiKey = this.config.get<string>('OPEN_AI_API_KEY') ?? this.config.get<string>('OPENAI_API_KEY') ?? '';
     this.model = this.config.get<string>('OPENAI_IMAGE_MODEL') ?? 'gpt-image-1';
@@ -421,6 +424,7 @@ export class OpenAIImageProvider implements ImageGenerationProvider {
         }],
         max_tokens: 150,
       });
+      void this.usage.record({ provider: 'openai', model: response.model ?? 'gpt-4o-mini', operation: AiOperation.AppearanceAnalysis, inputTokens: response.usage?.prompt_tokens, outputTokens: response.usage?.completion_tokens });
       const description = response.choices[0]?.message?.content?.trim() ?? null;
       if (description) this.logger.log(`Character appearance extracted: ${description.slice(0, 80)}…`);
       return description;
@@ -467,6 +471,7 @@ Description to parse:
 "${description}"`,
         }],
       });
+      void this.usage.record({ provider: 'openai', model: response.model ?? 'gpt-4o-mini', operation: AiOperation.AppearanceAnalysis, inputTokens: response.usage?.prompt_tokens, outputTokens: response.usage?.completion_tokens });
       const content = response.choices[0]?.message?.content;
       if (!content) return null;
       return JSON.parse(content) as CharacterIdentity;
@@ -678,6 +683,7 @@ Description to parse:
         }],
         max_tokens: 200,
       });
+      void this.usage.record({ provider: 'openai', model: response.model ?? 'gpt-4o-mini', operation: AiOperation.QualityCheck, inputTokens: response.usage?.prompt_tokens, outputTokens: response.usage?.completion_tokens });
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) return null;
@@ -736,6 +742,7 @@ Description to parse:
         }],
         max_tokens: 500,
       });
+      void this.usage.record({ provider: 'openai', model: response.model ?? 'gpt-4o-mini', operation: AiOperation.SpeechBubbleDetection, inputTokens: response.usage?.prompt_tokens, outputTokens: response.usage?.completion_tokens });
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) return null;
@@ -811,6 +818,7 @@ Description to parse:
         }],
         max_tokens: 200,
       });
+      void this.usage.record({ provider: 'openai', model: response.model ?? 'gpt-4o-mini', operation: AiOperation.QualityCheck, inputTokens: response.usage?.prompt_tokens, outputTokens: response.usage?.completion_tokens });
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) return null;

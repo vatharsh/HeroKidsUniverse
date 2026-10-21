@@ -11,6 +11,8 @@ import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 import { Repository } from 'typeorm';
 
 import { PlatformSetting } from '../admin/platform-setting.entity';
+import { AiUsageRecorder, aiUsageContext } from './ai-usage-recorder.service';
+import { AiOperation } from './entities/ai-usage-log.entity';
 
 /** Thrown when generated content (story text or a picture) fails the child-safety check. */
 export class ContentSafetyError extends Error {
@@ -180,6 +182,7 @@ export class ContentSafetyService {
     private readonly config: ConfigService,
     @InjectRepository(PlatformSetting)
     private readonly settingsRepo: Repository<PlatformSetting>,
+    private readonly usage: AiUsageRecorder,
   ) {}
 
   /** Throws a friendly 400 if any field a parent typed isn't suitable for a children's story. */
@@ -200,9 +203,10 @@ export class ContentSafetyService {
         throw this.inputError(field);
       }
     }
-    const verdict = await this.moderateText(
-      entries.map(([, v]) => v).join('\n'),
-      'input',
+    // Log the review against this parent (outside story generation there's no usage context yet).
+    const verdict = await aiUsageContext.run(
+      { ...(aiUsageContext.getStore() ?? {}), userId },
+      () => this.moderateText(entries.map(([, v]) => v).join('\n'), 'input'),
     );
     if (!verdict.safe) {
       this.logger.warn(
@@ -218,9 +222,9 @@ export class ContentSafetyService {
     userId?: string,
   ): Promise<void> {
     if (!(await this.isEnabled())) return;
-    const verdict = await this.moderateImage(
-      photo.buffer.toString('base64'),
-      photo.mimetype,
+    const verdict = await aiUsageContext.run(
+      { ...(aiUsageContext.getStore() ?? {}), userId },
+      () => this.moderateImage(photo.buffer.toString('base64'), photo.mimetype),
     );
     if (!verdict.safe) {
       this.logger.warn(
@@ -289,8 +293,9 @@ export class ContentSafetyService {
     const genAI = this.getClient();
     if (!genAI) return { safe: true, reasons: [] };
     try {
+      const modelName = await this.reviewModel();
       const model = genAI.getGenerativeModel({
-        model: await this.reviewModel(),
+        model: modelName,
         generationConfig: {
           responseMimeType: 'application/json',
           temperature: 0,
@@ -300,6 +305,13 @@ export class ContentSafetyService {
         contents: [{ role: 'user', parts }],
       });
       const response = result.response;
+      void this.usage.record({
+        provider: 'gemini',
+        model: modelName,
+        operation: AiOperation.SafetyCheck,
+        inputTokens: response.usageMetadata?.promptTokenCount,
+        outputTokens: response.usageMetadata?.candidatesTokenCount,
+      });
       if (
         response.promptFeedback?.blockReason ||
         ['SAFETY', 'PROHIBITED_CONTENT', 'IMAGE_SAFETY'].includes(

@@ -11,6 +11,14 @@ export enum AiOperation {
   VideoGeneration = 'video_generation',
   MerchandiseGeneration = 'merchandise_generation',
   StoryContinuation = 'story_continuation',
+  /** Child-safety review of typed text, photos, stories and pictures. */
+  SafetyCheck = 'safety_check',
+  /** Finding speakers' heads and mouths to place speech bubbles. */
+  SpeechBubbleDetection = 'speech_bubble_detection',
+  /** Face-likeness and apparent-age checks on finished pictures. */
+  QualityCheck = 'quality_check',
+  /** Describing a character's appearance from a photo or avatar. */
+  AppearanceAnalysis = 'appearance_analysis',
 }
 
 @Entity('ai_usage_logs')

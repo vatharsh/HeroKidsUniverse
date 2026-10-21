@@ -821,7 +821,7 @@ export class AdminService implements OnModuleInit {
         addSandboxFilter(this.aiUsageRepo
           .createQueryBuilder('ai')
           .select('COALESCE(SUM(ai.imagesGenerated), 0)', 'sum')
-          .where('ai.operation = :op', { op: AiOperation.ImageGeneration }))
+          .where('ai.operation IN (:...ops)', { ops: [AiOperation.ImageGeneration, AiOperation.CharacterSheetGeneration] }))
           .getRawOne<{ sum: string }>()
           .then((r) => toNumber(r?.sum)),
         addSandboxFilter(this.aiUsageRepo
@@ -830,17 +830,37 @@ export class AdminService implements OnModuleInit {
           .where('ai.operation = :op', { op: AiOperation.Narration }))
           .getRawOne<{ sum: string }>()
           .then((r) => toNumber(r?.sum)),
-        this.storiesRepo.count({ where: { videoStatus: VideoStatus.Completed } }),
+        // Phone (videoStatus) and landscape (videoVariants) exports both count.
+        this.dataSource.query<Array<{ n: string }>>(
+          `SELECT (COUNT(*) FILTER (WHERE "videoStatus" = 'completed')
+                 + COUNT(*) FILTER (WHERE "videoVariants"->'landscape'->>'status' = 'completed'))::text AS n FROM stories`,
+        ).then((r) => toNumber(r[0]?.n)),
       ]);
 
-    const totalStoriesGenerated = isSandbox !== undefined
-      ? await addCostSandboxFilter(this.costRepo.createQueryBuilder('cost').select('COUNT(*)', 'cnt'))
-          .getRawOne<{ cnt: string }>().then((r) => toNumber(r?.cnt))
-      : await this.storiesRepo.count();
+    // Finished stories only (failed and in-progress ones used to be counted).
+    const totalStoriesGenerated = await this.storiesRepo.count({
+      where: { status: StoryStatus.Completed, ...(isSandbox !== undefined ? { isSandbox } : {}) },
+    });
 
-    const avgCostPerStory = totalStoriesGenerated ? aiCostThisMonth / totalStoriesGenerated : 0;
-    const avgCostPerImage = totalImagesGenerated ? aiCostThisMonth / totalImagesGenerated : 0;
-    const avgCostPerNarrationMinute = totalNarrationSeconds ? aiCostThisMonth / (totalNarrationSeconds / 60) : 0;
+    // Averages compare like with like over this month. Before, all AI spend this month was divided by
+    // the all-time number of stories / images / narration minutes, which mixed everything together.
+    const monthRows = await this.dataSource.query<Array<Record<string, string | null>>>(
+      `SELECT
+         COALESCE(SUM("estimatedCostUsd") FILTER (WHERE "storyId" IS NOT NULL), 0) AS "storyCost",
+         COUNT(DISTINCT "storyId")                                                  AS "stories",
+         COALESCE(SUM("estimatedCostUsd") FILTER (WHERE operation IN ('image_generation','character_sheet_generation')), 0) AS "imageCost",
+         COALESCE(SUM("imagesGenerated") FILTER (WHERE operation IN ('image_generation','character_sheet_generation')), 0)  AS "images",
+         COALESCE(SUM("estimatedCostUsd") FILTER (WHERE operation = 'narration'), 0) AS "narrationCost",
+         COALESCE(SUM("audioSeconds") FILTER (WHERE operation = 'narration'), 0)     AS "narrationSeconds"
+       FROM ai_usage_logs
+       WHERE "createdAt" >= $1 ${isSandbox !== undefined ? 'AND "isSandbox" = $2' : ''}`,
+      isSandbox !== undefined ? [monthStart, isSandbox] : [monthStart],
+    );
+    const m = monthRows[0] ?? {};
+    const ratio = (cost: unknown, count: unknown) => (toNumber(count) ? toNumber(cost) / toNumber(count) : 0);
+    const avgCostPerStory = ratio(m.storyCost, m.stories);
+    const avgCostPerImage = ratio(m.imageCost, m.images);
+    const avgCostPerNarrationMinute = ratio(m.narrationCost, toNumber(m.narrationSeconds) / 60);
 
     const byProvider = await addSandboxFilter(this.aiUsageRepo
       .createQueryBuilder('ai')
@@ -934,11 +954,20 @@ export class AdminService implements OnModuleInit {
          AVG("avgStoryScore")      AS avgStory,
          AVG("pagesRetried")       AS avgRetries,
          COUNT(*)                  AS totalRuns,
-         ROUND(100.0 * COUNT(*) FILTER (WHERE "overallStatus" = 'pass') / NULLIF(COUNT(*), 0), 1) AS passRate
+         ROUND(100.0 * COUNT(*) FILTER (WHERE "overallStatus" IN ('pass','pass_with_warning')) / NULLIF(COUNT(*), 0), 1) AS passRate
        FROM story_qa_runs
        WHERE "createdAt" >= NOW() - INTERVAL '30 days'`,
     );
     const qaAvg = qaAvgRows[0] ?? null;
+
+    // Share of stories started in the last 30 days that actually finished (failed ones were refunded).
+    const successRows = await this.dataSource.query<Array<{ done: string; failed: string }>>(
+      `SELECT COUNT(*) FILTER (WHERE status = 'completed')::text AS done,
+              COUNT(*) FILTER (WHERE status = 'failed')::text    AS failed
+       FROM stories WHERE "createdAt" >= NOW() - INTERVAL '30 days'`,
+    );
+    const finished = toNumber(successRows[0]?.done) + toNumber(successRows[0]?.failed);
+    const generationSuccessRate = finished ? (toNumber(successRows[0]?.done) / finished) * 100 : null;
 
     return {
       aiCostToday,
@@ -957,12 +986,14 @@ export class AdminService implements OnModuleInit {
       topExpensiveUsers,
       universeAnalytics,
       isSandbox: isSandbox ?? null,
+      generationSuccessRate,
       // QA summary — added backward-compatibly (null when no QA runs exist)
-      qaAvgConfidence:    qaAvg?.avgconfidence   !== undefined ? Number(qaAvg.avgconfidence)   : null,
-      qaAvgIdentity:      qaAvg?.avgidentity     !== undefined ? Number(qaAvg.avgidentity)     : null,
-      qaAvgStory:         qaAvg?.avgstory        !== undefined ? Number(qaAvg.avgstory)        : null,
-      qaAvgRetries:       qaAvg?.avgretries      !== undefined ? Number(qaAvg.avgretries)      : null,
-      qaPassRate:         qaAvg?.passrate        !== undefined ? Number(qaAvg.passrate)        : null,
+      // null (not 0) when there's no data, so the dashboard shows "—" instead of a fake 0.
+      qaAvgConfidence:    qaAvg?.avgconfidence   != null ? Number(qaAvg.avgconfidence)   : null,
+      qaAvgIdentity:      qaAvg?.avgidentity     != null ? Number(qaAvg.avgidentity)     : null,
+      qaAvgStory:         qaAvg?.avgstory        != null ? Number(qaAvg.avgstory)        : null,
+      qaAvgRetries:       qaAvg?.avgretries      != null ? Number(qaAvg.avgretries)      : null,
+      qaPassRate:         qaAvg?.passrate        != null ? Number(qaAvg.passrate)        : null,
       qaTotalRuns:        qaAvg?.totalruns       !== undefined ? Number(qaAvg.totalruns)       : 0,
     };
   }
@@ -998,8 +1029,13 @@ export class AdminService implements OnModuleInit {
            qr."avgIdentityScore" AS "avgIdentityScore",
            qr."avgStoryScore" AS "avgStoryScore",
            qr."pagesRetried" AS "pagesRetried",
-           qr."storyPromptVersion" AS "storyPromptVersion",
-           qr."imagePromptVersion" AS "imagePromptVersion",
+           -- The prompt version the story was actually written with (the QA_* version settings were never updated).
+           COALESCE(
+             (SELECT gl."promptVersion" FROM story_generation_logs gl WHERE gl."storyId" = s.id ORDER BY gl."createdAt" DESC LIMIT 1),
+             qr."storyPromptVersion"
+           ) AS "storyPromptVersion",
+           -- Image prompts are built in code, so show the image model the pictures were drawn with instead.
+           (SELECT ul.model FROM ai_usage_logs ul WHERE ul."storyId" = s.id AND ul.operation = 'image_generation' ORDER BY ul."createdAt" DESC LIMIT 1) AS "imagePromptVersion",
            qr."qaVersion" AS "qaVersion",
            qr."generationTimeMs" AS "qaTimeMs",
            gc."storyCostUsd" AS "storyCostUsd",
@@ -1532,15 +1568,16 @@ export class AdminService implements OnModuleInit {
       }>>(
         `SELECT
            COUNT(*)::int AS totalruns,
-           COALESCE(AVG("overallConfidence"), 0) AS avgoverallconfidence,
-           COALESCE(AVG("avgIdentityScore"), 0) AS avgidentityscore,
-           COALESCE(AVG("avgStoryScore"), 0) AS avgstoryscore,
-           COALESCE(AVG("avgExpressionScore"), 0) AS avgexpressionscore,
-           COALESCE(AVG("avgDialogueScore"), 0) AS avgdialoguescoreval,
-           COALESCE(AVG("avgCompositionScore"), 0) AS avgcompositionscore,
-           COALESCE(AVG("avgNarrationScore"), 0) AS avgnarrationscore,
+           AVG("overallConfidence") AS avgoverallconfidence,
+           AVG("avgIdentityScore") AS avgidentityscore,
+           AVG("avgStoryScore") AS avgstoryscore,
+           AVG("avgExpressionScore") AS avgexpressionscore,
+           AVG("avgDialogueScore") AS avgdialoguescoreval,
+           AVG("avgCompositionScore") AS avgcompositionscore,
+           AVG("avgNarrationScore") AS avgnarrationscore,
+           -- "Passed" = every story that shipped (pass or pass with warning), matching "accepted first time".
            CASE WHEN COUNT(*) = 0 THEN 0 ELSE
-             SUM(CASE WHEN "overallStatus" = 'pass' THEN 1 ELSE 0 END)::float / COUNT(*) * 100 END AS passrate,
+             SUM(CASE WHEN "overallStatus" IN ('pass','pass_with_warning') THEN 1 ELSE 0 END)::float / COUNT(*) * 100 END AS passrate,
            CASE WHEN COUNT(*) = 0 THEN 0 ELSE
              SUM(CASE WHEN "pagesRetried" > 0 THEN 1 ELSE 0 END)::float / COUNT(*) * 100 END AS retryrate,
            SUM(CASE WHEN "pagesRetried" = 0 AND "overallStatus" IN ('pass','pass_with_warning') THEN 1 ELSE 0 END) AS storiesacceptedfirstattempt,
@@ -1596,13 +1633,14 @@ export class AdminService implements OnModuleInit {
     const a = agg[0] ?? {};
     return {
       totalRuns:                    Number(a.totalruns ?? 0),
-      avgOverallConfidence:         Math.round(Number(a.avgoverallconfidence ?? 0) * 10) / 10,
-      avgIdentityScore:             Math.round(Number(a.avgidentityscore ?? 0) * 10) / 10,
-      avgStoryScore:                Math.round(Number(a.avgstoryscore ?? 0) * 10) / 10,
-      avgExpressionScore:           Math.round(Number(a.avgexpressionscore ?? 0) * 10) / 10,
-      avgDialogueScore:             Math.round(Number(a.avgdialoguescoreval ?? 0) * 10) / 10,
-      avgCompositionScore:          Math.round(Number(a.avgcompositionscore ?? 0) * 10) / 10,
-      avgNarrationScore:            Math.round(Number(a.avgnarrationscore ?? 0) * 10) / 10,
+      // null = that check didn't run in this period (switched off), shown as "—".
+      avgOverallConfidence:         round1OrNull(a.avgoverallconfidence),
+      avgIdentityScore:             round1OrNull(a.avgidentityscore),
+      avgStoryScore:                round1OrNull(a.avgstoryscore),
+      avgExpressionScore:           round1OrNull(a.avgexpressionscore),
+      avgDialogueScore:             round1OrNull(a.avgdialoguescoreval),
+      avgCompositionScore:          round1OrNull(a.avgcompositionscore),
+      avgNarrationScore:            round1OrNull(a.avgnarrationscore),
       passRate:                     Math.round(Number(a.passrate ?? 0) * 10) / 10,
       retryRate:                    Math.round(Number(a.retryrate ?? 0) * 10) / 10,
       storiesAcceptedFirstAttempt:  Number(a.storiesacceptedfirstattempt ?? 0),
@@ -1627,4 +1665,10 @@ export class AdminService implements OnModuleInit {
       })),
     };
   }
+}
+
+function round1OrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
 }

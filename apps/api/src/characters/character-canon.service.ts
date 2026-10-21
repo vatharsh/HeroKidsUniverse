@@ -409,6 +409,10 @@ Return ONLY valid JSON matching this exact structure (no markdown):
         approvedAvatarUrl: row.approvedAvatarUrl,
         appearanceSummary: row.appearanceSummary,
         generationVersion: row.generationVersion,
+        // 0–100 scores kept up to date by the QA engine after each story.
+        identityStability: row.identityStability,
+        storyConsistency: row.storyConsistency,
+        characterConfidence: row.characterConfidence,
         entityName: row.heroId
           ? heroMap.get(row.heroId)
           : row.characterId

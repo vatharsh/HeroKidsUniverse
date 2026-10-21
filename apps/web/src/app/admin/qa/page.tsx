@@ -33,13 +33,14 @@ interface ConfidenceTrendPoint {
 
 interface QaDashboard {
   totalRuns: number;
-  avgOverallConfidence: number;
-  avgIdentityScore: number;
-  avgStoryScore: number;
-  avgExpressionScore: number;
-  avgDialogueScore: number;
-  avgCompositionScore: number;
-  avgNarrationScore: number;
+  // null = that check is switched off in QA Settings (no data), shown as "Off".
+  avgOverallConfidence: number | null;
+  avgIdentityScore: number | null;
+  avgStoryScore: number | null;
+  avgExpressionScore: number | null;
+  avgDialogueScore: number | null;
+  avgCompositionScore: number | null;
+  avgNarrationScore: number | null;
   passRate: number;
   retryRate: number;
   storiesAcceptedFirstAttempt: number;
@@ -118,7 +119,16 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function ScoreBar({ score, label }: { score: number; label: string }) {
+function ScoreBar({ score, label }: { score: number | null; label: string }) {
+  if (score === null) {
+    return (
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-gray-400 w-32 flex-shrink-0">{label}</span>
+        <div className="flex-1 h-2 bg-gray-50 rounded-full" />
+        <span className="text-[10px] font-semibold text-gray-400 w-8 text-right" title="This check is switched off in QA Settings">Off</span>
+      </div>
+    );
+  }
   const pct = Math.round(score * 10);
   const color =
     pct >= 85 ? "bg-emerald-500" :
@@ -280,9 +290,9 @@ export default function QaDashboardPage() {
 
       {/* Top KPI grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
-        <MetricCard label="Avg Confidence"        value={`${data.avgOverallConfidence.toFixed(1)}%`} accent="violet" />
+        <MetricCard label="Avg Confidence"        value={data.avgOverallConfidence == null ? "—" : `${data.avgOverallConfidence.toFixed(1)}%`} accent="violet" />
         <MetricCard label="Avg Identity Score"    value={fmt1(data.avgIdentityScore) + "/10"}       accent="sky"    />
-        <MetricCard label="Pass Rate"             value={`${data.passRate.toFixed(0)}%`}             accent="emerald"/>
+        <MetricCard label="Pass Rate"             value={`${data.passRate.toFixed(0)}%`}             accent="emerald" sub="incl. pass with warning" />
         <MetricCard label="Retry Rate"            value={`${data.retryRate.toFixed(0)}%`}             accent="amber"  sub={`${data.storiesRequiringRetry} stories retried`} />
         <MetricCard label="Failed Pages"          value={String(data.failedPages)}                   accent="rose"   />
       </div>
