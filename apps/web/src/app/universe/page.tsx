@@ -15,7 +15,13 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Memory {
+/** Picked on the server from the story's own illustrations (no extra AI images). */
+interface Thumbed {
+  thumbnailUrl?: string | null;
+  thumbnailStoryId?: string | null;
+}
+
+interface Memory extends Thumbed {
   id: string;
   type: string;
   title: string;
@@ -24,7 +30,7 @@ interface Memory {
   createdAt: string;
 }
 
-interface Quest {
+interface Quest extends Thumbed {
   id: string;
   title: string;
   description: string | null;
@@ -32,7 +38,7 @@ interface Quest {
   createdAt: string;
 }
 
-interface Power {
+interface Power extends Thumbed {
   id: string;
   name: string;
   emoji: string | null;
@@ -42,7 +48,7 @@ interface Power {
   createdAt: string;
 }
 
-interface Villain {
+interface Villain extends Thumbed {
   id: string;
   name: string;
   look: string | null;
@@ -60,7 +66,7 @@ const VILLAIN_STATUS: Record<Villain["status"], { label: string; className: stri
   escaped:    { label: "⚠ Escaped — may return", className: "bg-red-100 text-red-700" },
 };
 
-interface Arc {
+interface Arc extends Thumbed {
   id: string;
   title: string;
   summary: string | null;
@@ -470,7 +476,9 @@ function UniversePageInner() {
                           {meta.emoji}
                         </div>
                         {/* Card */}
-                        <div className={`flex-1 border rounded-2xl px-5 py-4 ${meta.color}`}>
+                        <div className={`flex-1 border rounded-2xl px-5 py-4 flex gap-4 ${meta.color}`}>
+                          {memory.thumbnailUrl && <Thumb item={memory} fallback={meta.emoji} size="w-14 h-14" />}
+                          <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
                             <p className="font-semibold text-sm leading-snug">{memory.title}</p>
                             <span className="text-xs opacity-60 whitespace-nowrap mt-0.5">
@@ -488,6 +496,7 @@ function UniversePageInner() {
                                 📖 {storyTitleMap[memory.storyId]}
                               </a>
                             )}
+                          </div>
                           </div>
                         </div>
                       </div>
@@ -517,9 +526,7 @@ function UniversePageInner() {
               <div className="grid gap-4">
                 {openQuests.map((quest) => (
                   <div key={quest.id} className="bg-white rounded-2xl shadow-card p-6 flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 text-xl">
-                      📜
-                    </div>
+                    <Thumb item={quest} fallback="📜" badge="📜" className="bg-orange-100 border-orange-200" />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-[family-name:var(--font-display)] text-ink text-lg">{quest.title}</p>
@@ -550,7 +557,7 @@ function UniversePageInner() {
                 <div className="grid gap-3">
                   {completedQuests.map((quest) => (
                     <div key={quest.id} className="bg-white rounded-2xl p-5 flex items-center gap-4 opacity-70">
-                      <span className="text-xl">✅</span>
+                      <Thumb item={quest} fallback="✅" size="w-10 h-10" className="text-xl rounded-xl" />
                       <p className="text-ink-mid text-sm line-through">{quest.title}</p>
                     </div>
                   ))}
@@ -579,9 +586,7 @@ function UniversePageInner() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {group.items.map((power) => (
                           <div key={power.id} className="bg-white rounded-2xl shadow-card p-6 flex items-start gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-gold-light/30 border border-gold/20 flex items-center justify-center text-2xl flex-shrink-0">
-                              {power.emoji ?? group.fallback}
-                            </div>
+                            <Thumb item={power} fallback={power.emoji ?? group.fallback} badge={power.emoji ?? group.fallback} size="w-20 h-20" className="bg-gold-light/30 border-gold/20" />
                             <div>
                               <p className="font-[family-name:var(--font-display)] text-ink text-lg">{power.name}</p>
                               {power.description && (
@@ -625,9 +630,7 @@ function UniversePageInner() {
                       <div className="p-6 flex-1">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-2xl flex-shrink-0">
-                              ⚔️
-                            </div>
+                            <Thumb item={v} fallback="⚔️" size="w-20 h-20" className="bg-red-50 border-red-200" />
                             <div>
                               <p className="font-[family-name:var(--font-display)] text-ink text-lg leading-tight">{v.name}</p>
                               <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -681,7 +684,7 @@ function UniversePageInner() {
                 {arcs.map((arc) => (
                   <div key={arc.id} className="bg-white rounded-2xl shadow-card p-6">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="text-2xl">{arc.status === "active" ? "🔥" : "✅"}</span>
+                      <Thumb item={arc} fallback={arc.status === "active" ? "🔥" : "✅"} badge={arc.status === "active" ? "🔥" : "✅"} />
                       <div>
                         <p className="font-[family-name:var(--font-display)] text-ink text-lg">{arc.title}</p>
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -709,6 +712,26 @@ function UniversePageInner() {
       <Footer />
     </div>
   );
+}
+
+function Thumb({ item, fallback, size = "w-16 h-16", badge, className = "" }: {
+  item: Thumbed; fallback: string; size?: string; badge?: string; className?: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const url = item.thumbnailUrl && !broken ? resolveMediaUrl(item.thumbnailUrl) : null;
+  const box = (
+    <div className={`relative ${size} flex-shrink-0 rounded-2xl overflow-hidden bg-ink/5 border border-ink/10 flex items-center justify-center text-2xl ${className}`}>
+      {url
+        ? <img src={url} alt="" loading="lazy" onError={() => setBroken(true)} className="w-full h-full object-cover" />
+        : fallback}
+      {url && badge && (
+        <span className="absolute bottom-0.5 right-0.5 text-xs leading-none bg-white/90 rounded-full w-5 h-5 flex items-center justify-center shadow-sm">{badge}</span>
+      )}
+    </div>
+  );
+  return item.thumbnailStoryId
+    ? <a href={`/stories/${item.thumbnailStoryId}`} title="Open the story" className="flex-shrink-0 hover:opacity-90 transition-opacity">{box}</a>
+    : box;
 }
 
 function EmptyState({ icon, title, body, universeId }: { icon: string; title: string; body: string; universeId?: string }) {

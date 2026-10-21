@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { PlatformSetting } from '../admin/platform-setting.entity';
 import { HeroPower } from '../powers/hero-power.entity';
@@ -11,6 +11,8 @@ import { UniverseMemory } from './universe-memory.entity';
 import { Universe, UniverseVisualState } from './universe.entity';
 import { ContentSafetyService } from '../ai/content-safety.service';
 import { isSandboxFor } from '../common/sandbox';
+import { Story, StoryStatus } from '../stories/story.entity';
+import { pickThumbnail, type StoryImages } from './universe-thumbnails';
 
 @Injectable()
 export class UniversesService {
@@ -26,6 +28,8 @@ export class UniversesService {
     @InjectRepository(PlatformSetting)
     private readonly settingsRepo: Repository<PlatformSetting>,
     private readonly safety: ContentSafetyService,
+    @InjectRepository(Story)
+    private readonly storiesRepository: Repository<Story>,
   ) {}
 
   async create(userId: string, dto: CreateUniverseDto): Promise<Universe> {
@@ -44,7 +48,7 @@ export class UniversesService {
   }
 
   async findMine(userId: string): Promise<Universe[]> {
-    return this.universesRepository.find({
+    const universes = await this.universesRepository.find({
       where: { userId },
       relations: { memories: true, quests: true, powers: true, arcs: true, villains: true },
       order: {
@@ -56,6 +60,39 @@ export class UniversesService {
         villains: { updatedAt: 'DESC' },
       },
     });
+    await this.attachThumbnails(userId, universes);
+    return universes;
+  }
+
+  /** Adds thumbnailUrl/thumbnailStoryId to every villain, power, quest, memory and arc, from story art. */
+  private async attachThumbnails(userId: string, universes: Universe[]): Promise<void> {
+    if (!universes.length) return;
+    const stories = await this.storiesRepository.find({
+      where: { userId, universeId: In(universes.map((u) => u.id)), status: StoryStatus.Completed },
+      select: { id: true, universeId: true, arcId: true, coverImageUrl: true, pages: true, createdAt: true },
+      order: { createdAt: 'ASC' },
+    });
+    const byId = new Map<string, StoryImages>(stories.map((s) => [s.id, s]));
+    const story = (id: string | null | undefined) => (id ? byId.get(id) : undefined);
+
+    for (const universe of universes) {
+      for (const v of universe.villains ?? []) {
+        Object.assign(v, pickThumbnail(story(v.firstStoryId) ?? story(v.lastStoryId), { character: v.name, name: v.name }));
+      }
+      for (const p of universe.powers ?? []) {
+        Object.assign(p, pickThumbnail(story(p.earnedInStoryId), { name: p.name, prefer: 'last' }));
+      }
+      for (const q of universe.quests ?? []) {
+        const from = q.status === QuestStatus.Completed ? story(q.completedInStoryId) ?? story(q.openedInStoryId) : story(q.openedInStoryId);
+        Object.assign(q, pickThumbnail(from, { name: q.title, prefer: 'last', fallback: 'lastPage' }));
+      }
+      for (const m of universe.memories ?? []) {
+        Object.assign(m, pickThumbnail(story(m.storyId), { name: m.title, prefer: 'last' }));
+      }
+      for (const a of universe.arcs ?? []) {
+        Object.assign(a, pickThumbnail(stories.find((s) => s.arcId === a.id)));
+      }
+    }
   }
 
   async update(userId: string, id: string, dto: UpdateUniverseDto): Promise<Universe> {
