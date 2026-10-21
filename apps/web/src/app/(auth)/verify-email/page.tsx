@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, type FormEvent, useEffect, useState } from "react";
+import { Suspense, type FormEvent, useEffect, useRef, useState } from "react";
 
 import Logo from "@/components/shared/Logo";
 import { ApiError, useAuth } from "@/contexts/AuthContext";
@@ -18,6 +18,7 @@ function VerifyEmailInner() {
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(60);
+  const autoSent = useRef(false);
 
   // Signed out → sign in first; already verified → carry on.
   useEffect(() => {
@@ -25,6 +26,17 @@ function VerifyEmailInner() {
     if (!user) router.replace(`/login?redirect=${encodeURIComponent(`/verify-email?next=${destination}`)}`);
     else if (!user.emailVerificationRequired) router.replace(destination);
   }, [loading, user, router, destination]);
+
+  // Existing parents arrive here from login with no code yet, so send one as soon as the screen opens.
+  // Right after sign-up a code was already sent; the server's 60-second limit then answers 429 and we
+  // simply keep waiting for that first email.
+  useEffect(() => {
+    if (loading || !user?.emailVerificationRequired || autoSent.current) return;
+    autoSent.current = true;
+    authApi.resendVerification()
+      .then((res) => setCooldown(res.resendInSeconds || 60))
+      .catch(() => { /* a code was sent moments ago — nothing to do */ });
+  }, [loading, user]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
