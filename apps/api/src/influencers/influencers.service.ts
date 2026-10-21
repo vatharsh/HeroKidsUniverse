@@ -432,7 +432,7 @@ export class InfluencersService implements OnModuleInit {
 
     const currentCommissionRate = await this.calculateCommissionRate(id);
     const [couponCodes, wallet, summary, recentCommissions, recentPayouts, linkedUser] = await Promise.all([
-      this.couponCodesRepo.find({ where: { influencerId: id, isDeleted: false }, order: { createdAt: 'DESC' } }),
+      this.couponCodesRepo.find({ where: { influencerId: id, isDeleted: false }, order: { isActive: 'DESC', createdAt: 'DESC' } }),
       this.getWallet(id),
       this.commissionsRepo
         .createQueryBuilder('commission')
@@ -440,6 +440,7 @@ export class InfluencersService implements OnModuleInit {
         .addSelect('COALESCE(SUM(commission.commissionAmount), 0)', 'totalEarned')
         .where('commission.influencerId = :id', { id })
         .andWhere('commission.isDeleted = false')
+        .andWhere('commission.status != :cancelled', { cancelled: CommissionStatus.Cancelled }) // refunded/cancelled sales don't count
         .getRawOne<{ count: string; totalEarned: string }>(),
       this.commissionsRepo.find({
         where: { influencerId: id, isDeleted: false },
@@ -665,7 +666,8 @@ export class InfluencersService implements OnModuleInit {
   async listCouponCodes(influencerId: string) {
     return this.couponCodesRepo.find({
       where: { influencerId, isDeleted: false },
-      order: { createdAt: 'DESC' },
+      // Working codes first — the portal also treats the first one as the influencer's main code.
+      order: { isActive: 'DESC', createdAt: 'DESC' },
     });
   }
 
@@ -889,6 +891,7 @@ export class InfluencersService implements OnModuleInit {
         .addSelect('COALESCE(SUM(commission.commissionAmount), 0)', 'earned')
         .where('commission.influencerId = :id', { id: influencer.id })
         .andWhere('commission.isDeleted = false')
+        .andWhere('commission.status != :cancelled', { cancelled: CommissionStatus.Cancelled }) // refunded/cancelled sales don't count
         .getRawOne<{ count: string; revenue: string; earned: string }>(),
       this.calculateCommissionRate(influencer.id),
     ]);
@@ -936,6 +939,7 @@ export class InfluencersService implements OnModuleInit {
         .addSelect('COALESCE(SUM(commission.commissionAmount), 0)', 'earned')
         .where('commission.influencerId = :id', { id: influencer.id })
         .andWhere('commission.isDeleted = false')
+        .andWhere('commission.status != :cancelled', { cancelled: CommissionStatus.Cancelled }) // refunded/cancelled sales don't count
         .getRawOne<{ count: string; revenue: string; earned: string }>(),
       this.calculateCommissionRate(influencer.id),
     ]);

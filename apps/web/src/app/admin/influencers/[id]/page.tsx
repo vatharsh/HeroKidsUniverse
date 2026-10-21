@@ -644,7 +644,7 @@ export default function InfluencerDetailPage() {
                   ].map(([label, value]) => value ? (
                     <div key={label as string} className="flex justify-between border-b border-gray-50 py-1">
                       <span className="text-gray-400">{label}</span>
-                      <span className="text-gray-800 font-medium capitalize">{value}</span>
+                      <span className={`text-gray-800 font-medium ${label === "Email" || label === "Handle" ? "" : "capitalize"}`}>{value}</span>
                     </div>
                   ) : null)}
                 </div>

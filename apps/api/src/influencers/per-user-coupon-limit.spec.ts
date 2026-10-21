@@ -347,6 +347,12 @@ describe('Per-User Coupon Usage Limit', () => {
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 1000, 900, 100, 900, 10, 90, 'approved', NOW(), NULL, NULL, false, NOW(), NOW())`,
         [influencerId, puulCouponId, cancelOrderId, CANCEL_ORDER_NUM, parentUserId],
       );
+      // Credit the wallet like a real order does, so the reversal below nets to zero
+      // (otherwise every run drains the influencer's real balance).
+      await dbQuery(
+        `UPDATE influencer_wallets SET "approvedAmount" = "approvedAmount" + 90 WHERE "influencerId" = $1 AND "isDeleted" = false`,
+        [influencerId],
+      );
       // Insert usage record
       await insertUsageRecord(puulCouponId, parentUserId, cancelOrderId);
     }, 10000);
