@@ -3,6 +3,7 @@
 import { Check, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { fetchActivePacks, type CreditPack } from "@/lib/credits";
 
@@ -119,7 +120,12 @@ const FALLBACK_PACKS = [
 
 type DisplayPack = CreditPack & { features?: string[]; cta?: string };
 
+/** Pack buttons open Top Up (not story creation); visitors sign in first and land back on it. */
+const TOP_UP_PATH = "/dashboard?topup=1";
+
 export default function PricingSection() {
+  const { user } = useAuth();
+  const buyHref = user ? TOP_UP_PATH : `/login?redirect=${encodeURIComponent(TOP_UP_PATH)}`;
   const [packs, setPacks] = useState<DisplayPack[]>(FALLBACK_PACKS as DisplayPack[]);
   const [loading, setLoading] = useState(true);
 
@@ -217,7 +223,7 @@ export default function PricingSection() {
                   )}
 
                   <a
-                    href="/create"
+                    href={buyHref}
                     className={cn(
                       "w-full py-3.5 rounded-full font-bold text-base transition-all text-center mt-auto",
                       pack.isMostPopular
