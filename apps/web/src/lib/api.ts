@@ -142,6 +142,7 @@ export const heroesApi = {
 
 export const storiesApi = {
   list: () => request<unknown[]>("/stories"),
+  listForUniverse: (universeId: string) => request<unknown[]>(`/stories?universeId=${encodeURIComponent(universeId)}`),
   get: (id: string) => request<unknown>(`/stories/${id}`),
   create: (payload: unknown) =>
     request<unknown>("/stories", { method: "POST", body: JSON.stringify(payload) }),

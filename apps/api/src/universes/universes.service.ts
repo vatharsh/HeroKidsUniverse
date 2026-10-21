@@ -51,15 +51,21 @@ export class UniversesService {
     const universes = await this.universesRepository.find({
       where: { userId },
       relations: { memories: true, quests: true, powers: true, arcs: true, villains: true },
-      order: {
-        createdAt: 'ASC',
-        memories: { createdAt: 'DESC' },
-        quests: { createdAt: 'DESC' },
-        powers: { createdAt: 'DESC' },
-        arcs: { createdAt: 'DESC' },
-        villains: { updatedAt: 'DESC' },
-      },
+      // One query per list, sorted here rather than in SQL: a single join multiplies the rows
+      // (memories × quests × powers × villains) and sorting nested lists in the query made TypeORM
+      // build a slow one — the universe page took 1–3 seconds once a universe had dozens of episodes.
+      relationLoadStrategy: 'query',
+      order: { createdAt: 'ASC' },
     });
+    const newestFirst = <T>(items: T[] | undefined, key: (item: T) => Date) =>
+      (items ?? []).sort((a, b) => key(b).getTime() - key(a).getTime());
+    for (const universe of universes) {
+      newestFirst(universe.memories, (m) => m.createdAt);
+      newestFirst(universe.quests, (q) => q.createdAt);
+      newestFirst(universe.powers, (p) => p.createdAt);
+      newestFirst(universe.arcs, (a) => a.createdAt);
+      newestFirst(universe.villains, (v) => v.updatedAt);
+    }
     await this.attachThumbnails(userId, universes);
     return universes;
   }

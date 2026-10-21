@@ -7,7 +7,7 @@ import { Zap, Target, Clock, BookOpen, Trophy, Loader2, ChevronRight, Sword, Pen
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useAuth } from "@/contexts/AuthContext";
-import { getAccessToken } from "@/lib/api";
+import { getAccessToken, storiesApi } from "@/lib/api";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { resolveMediaUrl } from "@/lib/media-url";
 
@@ -134,22 +134,19 @@ function UniversePageInner() {
 
   const universe = universes[selectedIdx] ?? null;
 
-  // Fetch episodes whenever the selected universe changes
+  // Fetch episodes whenever the selected universe changes. storiesApi renews an expired login, and a
+  // late reply for a universe the parent already switched away from is ignored.
   useEffect(() => {
     if (!universe) return;
-    const token = getAccessToken();
-    if (!token) return;
+    let stale = false;
+    setEpisodes([]);
     setEpisodesLoading(true);
     setEpisodePage(0);
-    fetch(`${BASE}/stories?universeId=${universe.id}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(async (res) => {
-        if (res.ok) {
-          const { data } = await res.json();
-          setEpisodes((data as Episode[]).filter(e => e.status === "completed"));
-        }
-      })
+    storiesApi.listForUniverse(universe.id)
+      .then((data) => { if (!stale) setEpisodes((data as Episode[]).filter(e => e.status === "completed")); })
       .catch(() => {})
-      .finally(() => setEpisodesLoading(false));
+      .finally(() => { if (!stale) setEpisodesLoading(false); });
+    return () => { stale = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [universe?.id]);
 
