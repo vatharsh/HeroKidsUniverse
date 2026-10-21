@@ -12,7 +12,7 @@ import {
   Repository,
 } from 'typeorm';
 
-import { PlatformSetting } from '../admin/platform-setting.entity';
+import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
 import { Order } from '../merchandise/orders/order.entity';
 import { User, UserRole } from '../users/user.entity';
 import { CouponUsageRecord } from './coupon-usage-record.entity';
@@ -72,6 +72,19 @@ export interface CreateCommissionParams {
   discountAmount: number;
   shippingAmount: number;
   taxAmount: number;
+}
+
+/** Used only if every global tier has been deleted. Matches the seeded defaults. */
+const FALLBACK_TIERS = [
+  { minSuccessfulOrders: 250, commissionRate: 15 },
+  { minSuccessfulOrders: 100, commissionRate: 12 },
+  { minSuccessfulOrders: 0, commissionRate: 10 },
+];
+
+/** Rules sorted by minSuccessfulOrders DESC; picks the highest tier reached. */
+function rateForOrders(rules: Array<{ minSuccessfulOrders: number; commissionRate: number | string }>, orders: number): number {
+  const matched = rules.find((rule) => orders >= Number(rule.minSuccessfulOrders));
+  return Number(matched?.commissionRate ?? rules[rules.length - 1].commissionRate);
 }
 
 @Injectable()
@@ -204,34 +217,43 @@ export class InfluencersService implements OnModuleInit {
       ],
     });
 
-    let rules = await this.commissionRulesRepo.find({
+    // Per-influencer override rules win outright. Otherwise the influencer's own "Default Commission %"
+    // is their starting rate and the global tiers can only raise it as they sell more.
+    const overrideRules = await this.commissionRulesRepo.find({
       where: { influencerId, isActive: true, isDeleted: false },
       order: { minSuccessfulOrders: 'DESC' },
     });
 
-    if (!rules.length) {
-      rules = await this.commissionRulesRepo.find({
+    let rate: number;
+    if (overrideRules.length) {
+      rate = rateForOrders(overrideRules, successfulOrders);
+    } else {
+      const globalRules = await this.commissionRulesRepo.find({
         where: { influencerId: IsNull(), isActive: true, isDeleted: false },
         order: { minSuccessfulOrders: 'DESC' },
       });
+      const tierRate = globalRules.length ? rateForOrders(globalRules, successfulOrders) : rateForOrders(FALLBACK_TIERS, successfulOrders);
+      rate = Math.max(Number(influencer.commissionPct) || 0, tierRate);
     }
 
-    let rate = 10;
-    if (!rules.length) {
-      if (successfulOrders >= 500) rate = 20;
-      else if (successfulOrders >= 200) rate = 15;
-      else if (successfulOrders >= 100) rate = 12;
-    } else {
-      const matched = rules.find((rule) => successfulOrders >= rule.minSuccessfulOrders);
-      rate = Number(matched?.commissionRate ?? rules[rules.length - 1].commissionRate);
-    }
+    const platformMax = await this.maxCommissionPct();
+    const influencerMax = influencer.maxCommissionRate === null ? null : Number(influencer.maxCommissionRate);
+    return Math.max(0, Math.min(rate, platformMax, influencerMax ?? Infinity));
+  }
 
-    const maxRate = influencer.maxCommissionRate === null ? null : Number(influencer.maxCommissionRate);
-    if (maxRate !== null && maxRate < rate) {
-      return maxRate;
+  private async assertWithinCommissionLimit(rates: Array<number | string | null | undefined>) {
+    const max = await this.maxCommissionPct();
+    const over = rates.map(Number).filter((r) => Number.isFinite(r) && r > max);
+    if (over.length) {
+      throw new BadRequestException(`Commission can't be more than ${max}%. Change the limit in Settings → Max Influencer Commission if you really need more.`);
     }
+  }
 
-    return rate;
+  /** INFLUENCER_MAX_COMMISSION_PCT — no influencer rate can go above this, overrides included. */
+  async maxCommissionPct(): Promise<number> {
+    const row = await this.dataSource.getRepository(PlatformSetting).findOne({ where: { key: 'INFLUENCER_MAX_COMMISSION_PCT' } });
+    const value = Number(row?.value ?? SETTING_DEFAULTS.INFLUENCER_MAX_COMMISSION_PCT.value);
+    return Number.isFinite(value) && value >= 0 ? value : 15;
   }
 
   async createCommissionForOrder(params: CreateCommissionParams): Promise<void> {
@@ -454,11 +476,21 @@ export class InfluencersService implements OnModuleInit {
       }),
       influencer.userId ? this.usersRepo.findOne({ where: { id: influencer.userId } }) : Promise.resolve(null),
     ]);
+    // The admin page's override editor reads these; without them it always looked empty.
+    const commissionRules = await this.commissionRulesRepo.find({
+      where: { influencerId: id, isActive: true, isDeleted: false },
+      order: { minSuccessfulOrders: 'ASC' },
+    });
 
     return {
       ...influencer,
       wallet,
       currentCommissionRate,
+      commissionRules: commissionRules.map((rule) => ({
+        id: rule.id,
+        minSuccessfulOrders: Number(rule.minSuccessfulOrders),
+        commissionRate: Number(rule.commissionRate),
+      })),
       login: {
         enabled: Boolean(influencer.userId) && influencer.active && influencer.status === InfluencerStatus.Active,
         hasAccount: Boolean(influencer.userId),
@@ -477,6 +509,7 @@ export class InfluencersService implements OnModuleInit {
   }
 
   async createInfluencer(dto: Partial<Influencer>) {
+    await this.assertWithinCommissionLimit([dto.commissionPct]);
     const temporaryPassword = this.readString(dto, 'temporaryPassword');
     const initialCouponCode = this.readString(dto, 'couponCode');
     const initialCouponDiscountType = this.readString(dto, 'initialCouponDiscountType') as CouponDiscountType | null;
@@ -577,6 +610,7 @@ export class InfluencersService implements OnModuleInit {
   async updateInfluencer(id: string, dto: Partial<Influencer>) {
     const influencer = await this.influencersRepo.findOne({ where: { id, isDeleted: false } });
     if (!influencer) throw new NotFoundException('Influencer not found');
+    await this.assertWithinCommissionLimit([dto.commissionPct]);
     Object.assign(influencer, dto);
     if (dto.email) {
       influencer.email = dto.email.toLowerCase();
@@ -808,6 +842,7 @@ export class InfluencersService implements OnModuleInit {
   }
 
   async upsertCommissionRules(influencerId: string | null, rules: CommissionRuleInput[]) {
+    await this.assertWithinCommissionLimit(rules.map((rule) => rule.commissionRate));
     return this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(InfluencerCommissionRule);
       const existing = await repo.find({

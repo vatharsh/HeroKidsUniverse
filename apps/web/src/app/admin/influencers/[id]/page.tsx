@@ -333,7 +333,7 @@ function CommissionRulesEditor({
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
-  async function save() {
+  async function save(clear = false) {
     const token = getAccessToken();
     if (!token) return;
     setSaving(true);
@@ -346,7 +346,7 @@ function CommissionRulesEditor({
       const res = await fetch(`${BASE}/admin/influencers/${influencerId}/commission-rules`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(clear ? [] : payload),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({})) as { message?: string };
@@ -364,6 +364,11 @@ function CommissionRulesEditor({
 
   return (
     <div>
+      {rules.length > 0 && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+          Custom rules are on: they replace the standard tiers and this influencer&apos;s Default Commission %.
+        </p>
+      )}
       {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
       <div className="space-y-2 mb-3">
         {rows.map((row, i) => (
@@ -399,6 +404,15 @@ function CommissionRulesEditor({
         >
           <Plus className="w-3 h-3" /> Add Tier
         </button>
+        {rules.length > 0 && (
+          <button
+            onClick={() => void save(true)}
+            disabled={saving}
+            className="text-xs text-gray-500 hover:text-red-600 transition disabled:opacity-50"
+          >
+            Use standard tiers
+          </button>
+        )}
         <button
           onClick={() => void save()}
           disabled={saving}
@@ -595,7 +609,7 @@ export default function InfluencerDetailPage() {
                     { key: "phone",         label: "Phone" },
                     { key: "platform",      label: "Platform" },
                     { key: "socialHandle",  label: "Social Handle" },
-                    { key: "commissionPct", label: "Commission %" },
+                    { key: "commissionPct", label: "Default Commission % (starting rate)" },
                     { key: "paymentMethod", label: "Payment Method" },
                   ] as { key: string; label: string }[]).map(({ key, label }) => (
                     <div key={key}>
@@ -637,7 +651,7 @@ export default function InfluencerDetailPage() {
                     ["Phone",    detail.phone],
                     ["Platform", detail.platform],
                     ["Handle",   detail.socialHandle],
-                    ["Commission", `${detail.commissionPct}%`],
+                    ["Default rate", `${detail.commissionPct}%`],
                     ["Payment",  detail.paymentMethod],
                     ["Status",   detail.status ?? (detail.active ? "active" : "inactive")],
                     ["Joined",   new Date(detail.createdAt).toLocaleDateString()],
@@ -828,7 +842,7 @@ export default function InfluencerDetailPage() {
             </div>
             <div className="px-5 py-4">
               <p className="text-xs text-gray-400 mb-3">Leave empty to use global tier rules. Set per-influencer overrides here.</p>
-              <CommissionRulesEditor influencerId={id} rules={rules} onSaved={load} />
+              <CommissionRulesEditor key={rules.map(r => `${r.minSuccessfulOrders}:${r.commissionRate}`).join("|") || "none"} influencerId={id} rules={rules} onSaved={load} />
             </div>
           </div>
 

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -70,6 +71,8 @@ function generateCodeSuggestions(name: string, discountValue: string): string[] 
 
 function NewModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [step, setStep] = useState<1 | 2>(1);
+  const { flags } = usePublicPlatformSettings();
+  const maxCommission = Number(flags.INFLUENCER_MAX_COMMISSION_PCT ?? 15);
   const [profile, setProfile] = useState({
     name: "", email: "", phone: "", platform: "", socialHandle: "",
     commissionPct: "10", paymentMethod: "upi", status: "active",
@@ -255,13 +258,18 @@ function NewModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
                   <input
                     type="number"
                     min="0"
-                    max="100"
+                    max={maxCommission}
                     value={profile.commissionPct}
                     onChange={e => setProfile(p => ({ ...p, commissionPct: e.target.value }))}
                     className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 pr-7 text-gray-800 text-sm focus:outline-none focus:border-violet-400 transition"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">%</span>
                 </div>
+                <p className={`text-[11px] mt-1 leading-snug ${Number(profile.commissionPct) > maxCommission ? "text-red-600 font-semibold" : "text-gray-400"}`}>
+                  {Number(profile.commissionPct) > maxCommission
+                    ? `Max is ${maxCommission}% (Settings).`
+                    : `Starting rate. Tiers raise it as they sell more, up to ${maxCommission}%.`}
+                </p>
               </div>
               <div>
                 <label className="text-gray-500 text-xs block mb-1">Status</label>

@@ -1191,11 +1191,9 @@ export class AdminService {
     return this.influencersService.createInfluencer(body);
   }
 
+  /** PATCH /admin/influencers/:id lands here too — use InfluencersService so its checks (commission limit) apply. */
   async updateInfluencer(id: string, body: Partial<Influencer>) {
-    const influencer = await this.influencersRepo.findOne({ where: { id } });
-    if (!influencer) throw new NotFoundException('Influencer not found');
-    Object.assign(influencer, body);
-    return this.influencersRepo.save(influencer);
+    return this.influencersService.updateInfluencer(id, body);
   }
 
   async createPlatformCoupon(dto: {

@@ -39,6 +39,7 @@ export const PUBLIC_SETTING_KEYS = [
   'ENABLE_INFLUENCER_PROGRAM',
   'FREE_PREVIEW_PAGES',
   'CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT',
+  'INFLUENCER_MAX_COMMISSION_PCT',
 ] as const;
 
 export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
@@ -61,6 +62,7 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   CONTENT_SAFETY_ENABLED:         { value: 'true', type: 'boolean', description: 'Child-safety checks on everything parents type, every uploaded photo, and every generated story and picture (word list + strict Gemini review)' },
   SAFETY_CHECK_MODEL:             { value: 'gemini-3.8-flash', type: 'string', description: 'Gemini model that reviews typed text, uploaded photos, and every generated story and picture for child safety' },
   CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT: { value: '15', type: 'number', description: 'Most a coupon can take off a credit pack, in % of the pack price (keeps packs above AI cost even after influencer commission)' },
+  INFLUENCER_MAX_COMMISSION_PCT: { value: '15', type: 'number', description: 'Hard limit on any influencer commission rate (%), including per-influencer overrides. With a 10% coupon, 15% keeps marketing near 25% of a sale.' },
   SANDBOX_MODE:                   { value: 'true',  type: 'boolean', description: 'Launch switch. ON = everything created from now on is test data. Turn OFF at launch; from then on only test accounts create test data. Never relabels existing records.' },
   ENABLE_MERCHANDISE:             { value: 'false', type: 'boolean', description: 'Show merchandise-related product surfaces' },
   ENABLE_NARRATION:               { value: 'true', type: 'boolean', description: 'Enable narration generation' },
