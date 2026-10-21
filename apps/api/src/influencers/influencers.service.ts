@@ -109,8 +109,8 @@ export class InfluencersService implements OnModuleInit {
     await this.commissionRulesRepo.save([
       this.commissionRulesRepo.create({ influencerId: null, minSuccessfulOrders: 0, commissionRate: 10, isActive: true }),
       this.commissionRulesRepo.create({ influencerId: null, minSuccessfulOrders: 100, commissionRate: 12, isActive: true }),
-      this.commissionRulesRepo.create({ influencerId: null, minSuccessfulOrders: 200, commissionRate: 15, isActive: true }),
-      this.commissionRulesRepo.create({ influencerId: null, minSuccessfulOrders: 500, commissionRate: 20, isActive: true }),
+      // Capped at 15%: with a 10% coupon on top, marketing stays near 25% of each sale.
+      this.commissionRulesRepo.create({ influencerId: null, minSuccessfulOrders: 250, commissionRate: 15, isActive: true }),
     ]);
   }
 

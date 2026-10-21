@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { couponShareLink } from "@/lib/coupon-link";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
@@ -35,9 +36,9 @@ export default function InfluencerCouponsPage() {
       .catch(() => null);
   }, []);
 
-  function handleCopy(id: string, code: string) {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopiedId(id);
+  function handleCopy(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(key);
       setTimeout(() => setCopiedId(null), 2000);
     });
   }
@@ -45,10 +46,11 @@ export default function InfluencerCouponsPage() {
   return (
     <div className="rounded-3xl border border-violet-100 bg-white p-6 shadow-sm">
       <h2 className="font-[family-name:var(--font-display)] text-3xl text-gray-900 mb-2">My Coupon Codes</h2>
-      <p className="text-gray-500 mb-6">Use these codes in your posts and shares.</p>
+      <p className="text-gray-500 mb-6">Share your link in posts, stories and bios — parents who open it get your discount automatically at checkout.</p>
       <div className="space-y-4">
         {(data?.couponCodes ?? []).map((coupon) => {
-          const copied = copiedId === coupon.id;
+          const usable = coupon.isActive && !(coupon.expiresAt && new Date(coupon.expiresAt) < new Date());
+          const link = couponShareLink(coupon.code);
           return (
             <div key={coupon.id} className="rounded-2xl border border-gray-100 p-4 flex items-center justify-between gap-4">
               <div>
@@ -59,25 +61,39 @@ export default function InfluencerCouponsPage() {
                   {" · "}Used {coupon.usageCount} times
                   {coupon.expiresAt ? ` · Expires ${new Date(coupon.expiresAt).toLocaleDateString()}` : ""}
                 </p>
-                <p className="text-sm text-gray-700 mt-2">
-                  "Use my code <span className="font-semibold">{coupon.code}</span> to create a magical HeroKids Universe storybook."
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopy(coupon.id, coupon.code)}
-                className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 cursor-pointer select-none min-w-[160px] justify-center
-                  ${copied
-                    ? "bg-emerald-500 text-white scale-95"
-                    : "bg-violet-600 hover:bg-violet-700 text-white hover:scale-105 active:scale-95"
-                  }`}
-              >
-                {copied ? (
-                  <><Check className="w-4 h-4" /> Copied!</>
+                {usable ? (
+                  <>
+                    <p className="text-sm text-gray-700 mt-2">
+                      &ldquo;Use my code <span className="font-semibold">{coupon.code}</span> to create a magical HeroKids Universe storybook.&rdquo;
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1 break-all">{link}</p>
+                  </>
                 ) : (
-                  <><Copy className="w-4 h-4" /> Copy Code</>
+                  <p className="text-xs font-semibold text-gray-400 mt-2">{coupon.isActive ? "Expired" : "Inactive"} — not working any more</p>
                 )}
-              </button>
+              </div>
+              {usable && (
+                <div className="flex flex-col gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(`${coupon.id}:link`, link)}
+                    className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-all duration-200 min-w-[160px] justify-center ${
+                      copiedId === `${coupon.id}:link` ? "bg-emerald-500 text-white" : "bg-violet-600 hover:bg-violet-700 text-white"
+                    }`}
+                  >
+                    {copiedId === `${coupon.id}:link` ? <><Check className="w-4 h-4" /> Link copied!</> : <><Link2 className="w-4 h-4" /> Copy my link</>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(`${coupon.id}:code`, coupon.code)}
+                    className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-200 min-w-[160px] justify-center border ${
+                      copiedId === `${coupon.id}:code` ? "border-emerald-500 text-emerald-600" : "border-violet-200 text-violet-700 hover:bg-violet-50"
+                    }`}
+                  >
+                    {copiedId === `${coupon.id}:code` ? <><Check className="w-4 h-4" /> Copied!</> : <><Copy className="w-4 h-4" /> Copy code</>}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

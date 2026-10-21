@@ -18,8 +18,7 @@ interface Rule {
 const DEFAULT_TIERS: { min: string; rate: string }[] = [
   { min: "0",   rate: "10" },
   { min: "100", rate: "12" },
-  { min: "200", rate: "15" },
-  { min: "500", rate: "20" },
+  { min: "250", rate: "15" },
 ];
 
 export default function InfluencerSettingsPage() {
@@ -162,7 +161,7 @@ export default function InfluencerSettingsPage() {
               </button>
 
               <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-700 mb-6">
-                <strong>Recommended max:</strong> 20% commission rate. Individual influencer rules override global rules entirely.
+                <strong>Recommended max:</strong> 15% commission. With a 10% coupon on top, that keeps total marketing cost at about 25% of the sale. Individual influencer rules override global rules entirely.
               </div>
 
               <div className="flex items-center justify-between">

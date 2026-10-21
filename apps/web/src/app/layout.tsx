@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bangers, Boogaloo, Nunito } from "next/font/google";
+import CouponCapture from "@/components/shared/CouponCapture";
 import { AuthProvider } from "@/contexts/AuthContext";
 import "./globals.css";
 
@@ -43,6 +44,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${boogaloo.variable} ${nunito.variable} ${bangers.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-cream text-ink" suppressHydrationWarning>
+        <CouponCapture />
         <AuthProvider>
           {children}
         </AuthProvider>

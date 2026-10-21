@@ -1,9 +1,10 @@
 "use client";
 
-import { BadgePercent, Banknote, Check, CheckCircle2, Copy, ShoppingBag, Wallet } from "lucide-react";
+import { BadgePercent, Banknote, Check, CheckCircle2, Link2, ShoppingBag, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { couponShareLink } from "@/lib/coupon-link";
 import { cn } from "@/lib/utils";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
@@ -136,9 +137,9 @@ export default function InfluencerDashboardPage() {
                       <p className="text-xs text-gray-400 mt-0.5">total uses</p>
                     </div>
 
-                    <button
+                    {status === "Active" && <button
                       type="button"
-                      onClick={() => handleCopy(coupon.id, coupon.code)}
+                      onClick={() => handleCopy(coupon.id, couponShareLink(coupon.code))}
                       className={cn(
                         "flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200",
                         copied
@@ -146,8 +147,8 @@ export default function InfluencerDashboardPage() {
                           : "bg-violet-600 hover:bg-violet-700 text-white hover:scale-105 active:scale-95"
                       )}
                     >
-                      {copied ? <><Check className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-                    </button>
+                      {copied ? <><Check className="w-3.5 h-3.5" /> Link copied!</> : <><Link2 className="w-3.5 h-3.5" /> Copy my link</>}
+                    </button>}
                   </div>
                 </div>
               );

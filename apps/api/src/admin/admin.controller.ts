@@ -259,8 +259,10 @@ export class AdminController {
     @Query('page') page = '1',
     @Query('limit') limit = '20',
     @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('platform') platform?: string,
   ) {
-    return this.adminService.listInfluencers(Number(page), Number(limit), search);
+    return this.adminService.listInfluencers(Number(page), Number(limit), search, status, platform);
   }
 
   @Post('influencers')

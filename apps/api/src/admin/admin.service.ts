@@ -1178,52 +1178,13 @@ export class AdminService {
     };
   }
 
-  async listInfluencers(page = 1, limit = 20, search?: string) {
-    const qb = this.influencersRepo.createQueryBuilder('influencer');
-    if (search?.trim()) {
-      qb.andWhere('(influencer.name ILIKE :q OR influencer.code ILIKE :q OR influencer.email ILIKE :q OR influencer.platform ILIKE :q)', {
-        q: `%${search.trim()}%`,
-      });
-    }
-    const [influencers, total] = await qb.orderBy('influencer.createdAt', 'DESC').skip((page - 1) * limit).take(limit).getManyAndCount();
-    const stats = await Promise.all(
-      influencers.map(async (influencer) => {
-        const [usersReferred, storiesGenerated, revenueRow, commissionRow, paidRow] = await Promise.all([
-          this.referralsRepo.count({ where: { influencerId: influencer.id } }),
-          this.referralsRepo
-            .createQueryBuilder('ref')
-            .leftJoin('stories', 'story', 'story.userId = ref.userId')
-            .where('ref.influencerId = :id', { id: influencer.id })
-            .select('COUNT(DISTINCT story.id)', 'count')
-            .getRawOne<{ count: string }>(),
-          this.referralsRepo
-            .createQueryBuilder('ref')
-            .select('SUM(ref.revenueInr)', 'sum')
-            .where('ref.influencerId = :id', { id: influencer.id })
-            .getRawOne<{ sum: string }>(),
-          this.referralsRepo
-            .createQueryBuilder('ref')
-            .select('SUM(ref.commissionInr)', 'sum')
-            .where('ref.influencerId = :id', { id: influencer.id })
-            .getRawOne<{ sum: string }>(),
-          this.referralsRepo
-            .createQueryBuilder('ref')
-            .select('SUM(CASE WHEN ref.commissionPaid = true THEN ref.commissionInr ELSE 0 END)', 'sum')
-            .where('ref.influencerId = :id', { id: influencer.id })
-            .getRawOne<{ sum: string }>(),
-        ]);
-
-        return {
-          ...influencer,
-          usersReferred,
-          storiesGenerated: toNumber(storiesGenerated?.count),
-          revenueGeneratedInr: toNumber(revenueRow?.sum),
-          commissionOwedInr: toNumber(commissionRow?.sum),
-          commissionPaidInr: toNumber(paidRow?.sum),
-        };
-      }),
-    );
-    return makePage(stats, total, page, limit);
+  /**
+   * GET /admin/influencers lands here (this controller is registered before the influencers module's),
+   * so hand it to InfluencersService: it hides deleted influencers, applies the status/platform
+   * filters and returns real wallet balances. The old referral-based totals were always ₹0.
+   */
+  async listInfluencers(page = 1, limit = 20, search?: string, status?: string, platform?: string) {
+    return this.influencersService.listInfluencers({ page, limit, search, status, platform });
   }
 
   async createInfluencer(body: Partial<Influencer>) {

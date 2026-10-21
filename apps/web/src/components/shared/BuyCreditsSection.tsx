@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/api";
 import { fetchActivePacks, type CreditPack } from "@/lib/credits";
 import { cn } from "@/lib/utils";
+import { COUPON_STORAGE_KEY } from "@/lib/coupon-link";
 
 declare global {
   interface Window {
@@ -44,7 +45,6 @@ function loadRazorpayScript(): Promise<boolean> {
 interface PackQuote { subtotal: number; discount: number; total: number; cappedAtPct?: number; error?: string }
 interface AppliedCoupon { code: string; quotes: Record<string, PackQuote> }
 
-const COUPON_STORAGE_KEY = "hk_coupon_code";
 
 function rememberCoupon(code: string | null) {
   try {
