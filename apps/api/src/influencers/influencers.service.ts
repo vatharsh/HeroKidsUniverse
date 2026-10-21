@@ -178,6 +178,10 @@ export class InfluencersService implements OnModuleInit {
       if (!influencer || influencer.status !== InfluencerStatus.Active) {
         return { valid: false, errorMessage: 'This coupon is no longer available.' };
       }
+      // No discount — and no commission — on an influencer's own purchases.
+      if (context?.userId && influencer.userId && influencer.userId === context.userId) {
+        return { valid: false, errorMessage: "This is your own code — share it with parents instead." };
+      }
     }
 
     if (context?.userId && coupon.perUserUsageLimit !== null && coupon.perUserUsageLimit !== undefined) {
