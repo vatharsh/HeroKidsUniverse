@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -29,9 +30,14 @@ interface AuthContextValue {
     email: string,
     password: string,
     referralCode?: string,
-  ) => Promise<void>;
+  ) => Promise<User>;
   logout: () => Promise<void>;
+  /** Re-reads the signed-in user (e.g. after verifying their email). */
+  refreshUser: () => Promise<User | null>;
 }
+
+/** Pages a parent can still open before verifying their email. */
+const OPEN_BEFORE_VERIFICATION = ["/verify-email", "/login", "/register", "/forgot-password", "/terms", "/privacy", "/contact"];
 
 // ── Context ──────────────────────────────────────────────────────────────────
 
@@ -70,9 +76,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTokens(tokens.accessToken, tokens.refreshToken);
       const me = await authApi.me();
       setUser(me);
+      return me;
     },
     [],
   );
+
+  const refreshUser = useCallback(async () => {
+    if (!getAccessToken()) return null;
+    const me = await authApi.me();
+    setUser(me);
+    return me;
+  }, []);
+
+  // A parent who hasn't verified their email is sent to the code screen from anywhere in the app.
+  const pathname = usePathname();
+  const router = useRouter();
+  useEffect(() => {
+    if (!user?.emailVerificationRequired || !pathname || pathname === "/") return;
+    if (OPEN_BEFORE_VERIFICATION.some((p) => pathname.startsWith(p))) return;
+    router.replace(`/verify-email?next=${encodeURIComponent(pathname)}`);
+  }, [user, pathname, router]);
 
   const logout = useCallback(async () => {
     try {
@@ -85,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

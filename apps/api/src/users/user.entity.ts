@@ -90,6 +90,10 @@ export class User {
   @Column({ type: 'boolean', default: false })
   isSandbox!: boolean;
 
+  /** Set once the parent enters the code we emailed; parents can't use the app until then. */
+  @Column({ type: 'timestamp', nullable: true })
+  emailVerifiedAt!: Date | null;
+
   /** When the parent/guardian accepted the Terms and Privacy Policy, and which version they saw. */
   @Column({ type: 'timestamp', nullable: true })
   termsAcceptedAt!: Date | null;

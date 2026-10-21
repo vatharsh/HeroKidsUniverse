@@ -77,6 +77,9 @@ import { StoriesModule } from './stories/stories.module';
 import { UniverseMemory } from './universes/universe-memory.entity';
 import { UniverseVillain } from './universes/universe-villain.entity';
 import { ContentSafetyModule } from './ai/content-safety.service';
+import { MailModule } from './mail/mail.service';
+import { EmailCode } from './auth/email-code.entity';
+import { EmailVerifiedGuard } from './auth/guards/email-verified.guard';
 import { Universe } from './universes/universe.entity';
 import { UniversesModule } from './universes/universes.module';
 import { UploadModule } from './upload/upload.module';
@@ -88,6 +91,7 @@ import { UsersModule } from './users/users.module';
 @Module({
   imports: [
     ContentSafetyModule,
+    MailModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', 'apps/api/.env'],
@@ -109,6 +113,7 @@ import { UsersModule } from './users/users.module';
           Universe,
           UniverseMemory,
           UniverseVillain,
+          EmailCode,
           Quest,
           HeroPower,
           StoryArc,
@@ -184,6 +189,11 @@ import { UsersModule } from './users/users.module';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      // After sign-in, before roles: parents must verify their email before using the app.
+      provide: APP_GUARD,
+      useClass: EmailVerifiedGuard,
     },
     {
       provide: APP_GUARD,

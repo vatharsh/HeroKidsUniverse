@@ -23,6 +23,10 @@ function LoginPageInner() {
     setLoading(true);
     try {
       const me = await login(email, password);
+      if (me.emailVerificationRequired) {
+        router.push(`/verify-email?next=${encodeURIComponent(redirectTo?.startsWith("/") ? redirectTo : "/dashboard")}`);
+        return;
+      }
       if (redirectTo && redirectTo.startsWith("/")) {
         router.push(redirectTo);
         return;
@@ -67,6 +71,12 @@ function LoginPageInner() {
         <p className="text-ink-muted text-sm text-center mb-8">
           Sign in to continue creating stories
         </p>
+
+        {searchParams.get("reset") === "1" && !error && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-3 mb-5">
+            Your password has been changed. Sign in with your new password.
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-5">

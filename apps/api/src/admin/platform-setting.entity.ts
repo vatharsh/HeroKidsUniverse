@@ -57,6 +57,7 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   FREE_HERO_AVATAR_GENERATIONS:   { value: '3', type: 'number', description: 'Free hero avatar generations per account (shared by all heroes); after that each one uses an Avatar Refresh' },
   OPENAI_AVATAR_COST_PER_IMAGE:   { value: '0.19', type: 'number', description: 'Cost tracking for one OpenAI avatar (gpt-image-1, high quality, photo edit) in USD' },
   GEMINI_AVATAR_COST_PER_IMAGE:   { value: '0.067', type: 'number', description: 'Cost tracking for one Gemini avatar in USD' },
+  EMAIL_VERIFICATION_REQUIRED:    { value: 'true', type: 'boolean', description: 'New parents must confirm their email with a 6-digit code before using the app (only enforced once email sending is configured)' },
   CONTENT_SAFETY_ENABLED:         { value: 'true', type: 'boolean', description: 'Child-safety checks on everything parents type, every uploaded photo, and every generated story and picture (word list + strict Gemini review)' },
   SAFETY_CHECK_MODEL:             { value: 'gemini-3.8-flash', type: 'string', description: 'Gemini model that reviews typed text, uploaded photos, and every generated story and picture for child safety' },
   CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT: { value: '15', type: 'number', description: 'Most a coupon can take off a credit pack, in % of the pack price (keeps packs above AI cost even after influencer commission)' },

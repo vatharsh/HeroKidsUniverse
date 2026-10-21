@@ -8,6 +8,8 @@ import { CreditTransaction } from '../credits/credit-transaction.entity';
 import { Influencer } from '../influencers/influencer.entity';
 import { User } from '../users/user.entity';
 import { AuthController } from './auth.controller';
+import { EmailCode } from './email-code.entity';
+import { EmailCodeService } from './email-code.service';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -15,9 +17,9 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Influencer, PlatformSetting, CreditTransaction]), PassportModule, JwtModule.register({})],
+  imports: [TypeOrmModule.forFeature([User, Influencer, PlatformSetting, CreditTransaction, EmailCode]), PassportModule, JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, JwtAuthGuard, JwtRefreshGuard],
+  providers: [AuthService, EmailCodeService, JwtStrategy, JwtRefreshStrategy, JwtAuthGuard, JwtRefreshGuard],
   exports: [JwtAuthGuard],
 })
 export class AuthModule {}

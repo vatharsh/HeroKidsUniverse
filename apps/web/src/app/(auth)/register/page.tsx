@@ -23,8 +23,8 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      await register(name, email, password, referralCode || undefined);
-      router.push("/onboarding");
+      const me = await register(name, email, password, referralCode || undefined);
+      router.push(me.emailVerificationRequired ? "/verify-email?next=/onboarding" : "/onboarding");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
     } finally {

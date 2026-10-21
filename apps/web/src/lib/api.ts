@@ -95,6 +95,9 @@ export interface User {
   isPremium: boolean;
   referralCode: string;
   createdAt: string;
+  emailVerified?: boolean;
+  /** True while this parent still has to enter the emailed code before using the app. */
+  emailVerificationRequired?: boolean;
 }
 
 export interface Tokens {
@@ -117,6 +120,18 @@ export const authApi = {
   me: () => request<User>("/auth/me"),
 
   logout: () => request<void>("/auth/logout", { method: "POST" }),
+
+  verifyEmail: (code: string) =>
+    request<User>("/auth/verify-email", { method: "POST", body: JSON.stringify({ code }) }),
+
+  resendVerification: () =>
+    request<{ alreadyVerified: boolean; resendInSeconds: number }>("/auth/verify-email/resend", { method: "POST" }),
+
+  forgotPassword: (email: string) =>
+    request<{ message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+
+  resetPassword: (payload: { email: string; code: string; newPassword: string }) =>
+    request<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify(payload) }),
 };
 
 export const heroesApi = {

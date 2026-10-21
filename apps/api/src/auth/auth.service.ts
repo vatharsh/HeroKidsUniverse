@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -14,6 +14,9 @@ import { User, UserRole } from '../users/user.entity';
 import { CurrentUserPayload } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { EmailCodeService } from './email-code.service';
+import { isEmailVerificationRequired, needsEmailVerification } from './email-verification-policy';
+import { MailService } from '../mail/mail.service';
 
 /** Bump when the Terms or Privacy Policy change materially (matches the date on those pages). */
 const TERMS_VERSION = '2026-10-21';
@@ -28,6 +31,7 @@ export interface AuthUserResponse {
   avatarRefreshTokens: number;
   previewCredits: number;
   role?: string;
+  emailVerified: boolean;
 }
 
 export interface AuthTokensResponse {
@@ -38,6 +42,8 @@ export interface AuthTokensResponse {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -49,7 +55,53 @@ export class AuthService {
     private readonly creditTransactionsRepository: Repository<CreditTransaction>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly emailCodes: EmailCodeService,
+    private readonly mail: MailService,
   ) {}
+
+  /** Signed-in parent: is a code still needed, and was one just sent? */
+  private async verificationRequiredFor(user: User): Promise<boolean> {
+    return !user.emailVerifiedAt && needsEmailVerification(user.role)
+      && isEmailVerificationRequired(this.platformSettingsRepository, this.mail);
+  }
+
+  async sendVerificationCode(userId: string) {
+    const user = await this.usersRepository.findOneOrFail({ where: { id: userId } });
+    if (user.emailVerifiedAt) return { alreadyVerified: true, resendInSeconds: 0 };
+    return { alreadyVerified: false, ...(await this.emailCodes.send(user, 'verify_email')) };
+  }
+
+  async verifyEmail(userId: string, code: string) {
+    const user = await this.usersRepository.findOneOrFail({ where: { id: userId } });
+    if (!user.emailVerifiedAt) {
+      await this.emailCodes.consume(user, 'verify_email', code);
+      await this.usersRepository.update(user.id, { emailVerifiedAt: new Date() });
+    }
+    return this.me({ id: user.id, email: user.email });
+  }
+
+  /** Always answers the same way, so it can't be used to find out who has an account. */
+  async forgotPassword(email: string) {
+    const user = await this.usersRepository.findOne({ where: { email: email.toLowerCase().trim() } });
+    if (user) {
+      await this.emailCodes.send(user, 'reset_password').catch((err: unknown) => {
+        this.logger.warn(`Password reset code not sent for ${user.id}: ${err instanceof Error ? err.message : String(err)}`);
+      });
+    }
+    return { message: 'If an account exists for that email, we have sent a code to reset the password.' };
+  }
+
+  async resetPassword(email: string, code: string, newPassword: string) {
+    const user = await this.usersRepository.findOne({ where: { email: email.toLowerCase().trim() } });
+    if (!user) throw new UnauthorizedException('That code isn\'t right. Please ask for a new one.');
+    await this.emailCodes.consume(user, 'reset_password', code);
+    await this.usersRepository.update(user.id, {
+      passwordHash: await bcrypt.hash(newPassword, 12),
+      // Receiving the code proves they own the inbox.
+      emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+    });
+    return { message: 'Your password has been changed. You can sign in now.' };
+  }
 
   async register(registerDto: RegisterDto): Promise<AuthTokensResponse> {
     const email = registerDto.email.toLowerCase();
@@ -109,6 +161,13 @@ export class AuthService {
           referenceId: `free_preview:${freePreviewStories}`,
         }),
       );
+    }
+
+    // Send the sign-up code straight away; if it fails the parent can ask for another on the next screen.
+    if (await this.verificationRequiredFor(user)) {
+      await this.emailCodes.send(user, 'verify_email').catch((err: unknown) => {
+        this.logger.error(`Sign-up code not sent for ${user.id}: ${err instanceof Error ? err.message : String(err)}`);
+      });
     }
 
     const tokens = await this.signTokens(user);
@@ -182,6 +241,8 @@ export class AuthService {
       previewCredits: user.previewCredits,
       referralCode: user.referralCode,
       createdAt: user.createdAt,
+      emailVerified: !!user.emailVerifiedAt,
+      emailVerificationRequired: await this.verificationRequiredFor(user),
     };
   }
 
@@ -217,6 +278,7 @@ export class AuthService {
       avatarRefreshTokens: user.avatarRefreshTokens,
       previewCredits: user.previewCredits,
       role: user.role,
+      emailVerified: !!user.emailVerifiedAt,
     };
   }
 
