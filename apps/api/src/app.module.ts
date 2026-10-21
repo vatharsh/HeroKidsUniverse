@@ -76,6 +76,7 @@ import { Story } from './stories/story.entity';
 import { StoriesModule } from './stories/stories.module';
 import { UniverseMemory } from './universes/universe-memory.entity';
 import { UniverseVillain } from './universes/universe-villain.entity';
+import { ContentSafetyModule } from './ai/content-safety.service';
 import { Universe } from './universes/universe.entity';
 import { UniversesModule } from './universes/universes.module';
 import { UploadModule } from './upload/upload.module';
@@ -86,6 +87,7 @@ import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
+    ContentSafetyModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', 'apps/api/.env'],

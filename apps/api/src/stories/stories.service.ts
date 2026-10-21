@@ -18,6 +18,7 @@ import { User } from '../users/user.entity';
 import { CreateStoryDto } from './dto/create-story.dto';
 import { storyAssetUrls } from './story-assets';
 import { Story, StoryMode, StoryStatus } from './story.entity';
+import { ContentSafetyService } from '../ai/content-safety.service';
 
 @Injectable()
 export class StoriesService {
@@ -42,6 +43,7 @@ export class StoriesService {
     private readonly generationService: GenerationService,
     private readonly companionsService: CompanionsService,
     private readonly uploadService: UploadService,
+    private readonly safety: ContentSafetyService,
   ) {}
 
   private async isSandboxMode(): Promise<boolean> {
@@ -50,6 +52,7 @@ export class StoriesService {
   }
 
   async create(userId: string, createStoryDto: CreateStoryDto): Promise<Story> {
+    await this.safety.assertSafeInput({ storyContext: createStoryDto.storyContext, companionName: createStoryDto.companionName }, userId);
     const hero = await this.heroesRepository.findOne({
       where: { id: createStoryDto.heroId, userId },
     });

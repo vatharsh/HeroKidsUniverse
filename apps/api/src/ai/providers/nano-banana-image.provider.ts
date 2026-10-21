@@ -17,6 +17,8 @@ import type {
 import type { CharacterIdentity } from '../../heroes/hero.entity';
 import { OpenAIImageProvider } from './openai-image.provider';
 import { AVATAR_STYLE, STORYBOOK_STYLE } from '../style.constants';
+import { ContentSafetyError } from '../content-safety.service';
+import { CHILD_SAFE_IMAGE_RULE, GEMINI_CHILD_SAFETY_SETTINGS, isGeminiSafetyStop } from '../gemini-safety';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GeminiSDK = any;
@@ -346,7 +348,9 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
         responseModalities: ['TEXT', 'IMAGE'],
         ...(aspectRatio ? { imageConfig: { aspectRatio } } : {}),
       } as GeminiSDK,
+      safetySettings: GEMINI_CHILD_SAFETY_SETTINGS,
     });
+    parts = [...parts, { text: CHILD_SAFE_IMAGE_RULE }];
 
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -355,8 +359,14 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
           contents: [{ role: 'user', parts }],
         });
 
+        const candidate = result?.response?.candidates?.[0];
+        if (isGeminiSafetyStop(candidate?.finishReason, result?.response?.promptFeedback?.blockReason)) {
+          // A safety refusal is an answer, not a glitch — never retry it or send it to another provider.
+          throw new ContentSafetyError(`image refused by Gemini safety filters (${candidate?.finishReason ?? result?.response?.promptFeedback?.blockReason})`);
+        }
+
         // Extract the image part from the response
-        const responseParts: GeminiSDK[] = result?.response?.candidates?.[0]?.content?.parts ?? [];
+        const responseParts: GeminiSDK[] = candidate?.content?.parts ?? [];
         this.logger.debug(`Nano Banana response parts: ${responseParts.map((p: GeminiSDK) => p?.inlineData?.mimeType ?? 'text').join(', ')}`);
 
         const imagePart = responseParts.find(
@@ -370,6 +380,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
 
         return { imageUrl: '', imageBase64: imagePart.inlineData.data };
       } catch (err) {
+        if (err instanceof ContentSafetyError) throw err;
         lastError = err instanceof Error ? err : new Error(String(err));
         const msg = lastError.message;
         this.logger.error(`Nano Banana attempt ${attempt + 1} failed: ${msg.slice(0, 300)}`);
@@ -434,6 +445,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
     const model = genAI.getGenerativeModel({
       model: NanoBananaImageProvider.IMAGE_MODEL,
       generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+      safetySettings: GEMINI_CHILD_SAFETY_SETTINGS,
     });
 
     let lastError: Error | null = null;
@@ -453,9 +465,9 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
           (promptFeedback?.blockReason ? ` blockReason=${promptFeedback.blockReason}` : ''),
         );
 
-        // Safety block — no point retrying, fall through to throw so dispatcher can fall back
-        if (finishReason === 'SAFETY' || promptFeedback?.blockReason) {
-          throw new Error(`SAFETY_BLOCK:finishReason=${finishReason} block=${promptFeedback?.blockReason ?? 'none'}`);
+        // Safety refusal — no point retrying, and the dispatcher must not send it to OpenAI instead.
+        if (isGeminiSafetyStop(finishReason, promptFeedback?.blockReason)) {
+          throw new ContentSafetyError(`avatar refused by Gemini safety filters (${finishReason}/${promptFeedback?.blockReason ?? 'none'})`);
         }
 
         const imagePart = responseParts.find(
@@ -474,7 +486,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
         this.logger.error(`Nano Banana avatar attempt ${attempt + 1} failed: ${msg.slice(0, 300)}`);
 
         // Do not retry safety blocks — fall through immediately
-        if (msg.startsWith('SAFETY_BLOCK')) throw lastError;
+        if (err instanceof ContentSafetyError) throw err;
 
         if (msg.includes('429') || msg.includes('503') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('high demand')) {
           const delay = Math.min(30_000, 5_000 * (attempt + 1));

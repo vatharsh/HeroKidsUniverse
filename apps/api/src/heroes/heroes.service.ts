@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 
@@ -10,6 +10,7 @@ import { UploadService } from '../upload/upload.service';
 import { CreateHeroDto } from './dto/create-hero.dto';
 import { UpdateHeroDto } from './dto/update-hero.dto';
 import { Hero } from './hero.entity';
+import { ContentSafetyService } from '../ai/content-safety.service';
 
 type HeroResponse = Hero & { age: number };
 
@@ -26,6 +27,7 @@ export class HeroesService {
     @Inject(IMAGE_GENERATION_PROVIDER)
     private readonly imageProvider: ImageGenerationProvider,
     private readonly dataSource: DataSource,
+    private readonly safety: ContentSafetyService,
   ) {}
 
   async create(
@@ -33,6 +35,10 @@ export class HeroesService {
     createHeroDto: CreateHeroDto,
     photo?: Express.Multer.File,
   ): Promise<HeroResponse> {
+    await this.safety.assertSafeInput({ name: createHeroDto.name }, userId);
+    if (createHeroDto.avatarUrl && !this.uploadService.isOwnAssetUrl(createHeroDto.avatarUrl)) {
+      throw new BadRequestException('Avatar must be an image created in HeroKids Universe.');
+    }
     let avatarUrl = createHeroDto.avatarUrl ?? null;
 
     let avatarDescription: string | null = null;
@@ -80,6 +86,10 @@ export class HeroesService {
     updateHeroDto: UpdateHeroDto,
     photo?: Express.Multer.File,
   ): Promise<HeroResponse> {
+    await this.safety.assertSafeInput({ name: updateHeroDto.name, costumeDescription: updateHeroDto.costumeDescription }, userId);
+    if (updateHeroDto.avatarUrl && !this.uploadService.isOwnAssetUrl(updateHeroDto.avatarUrl)) {
+      throw new BadRequestException('Avatar must be an image created in HeroKids Universe.');
+    }
     const hero = await this.findHeroEntity(userId, id);
     const oldAvatarUrl = hero.avatarUrl;
 
@@ -201,6 +211,7 @@ export class HeroesService {
    * rules as the avatar studio. Creating or editing heroes used to generate avatars with no limit.
    */
   private async generateChargedAvatar(userId: string, name: string, photo: Express.Multer.File, heroId?: string) {
+    await this.safety.assertSafePhoto(photo, userId);
     const reservation = await reserveAvatarGeneration(this.dataSource, userId, 'hero', { referenceId: heroId ?? null });
     const result = await this.generateAvatar(userId, name, photo, heroId);
     if (!result.avatarUrl) await releaseAvatarGeneration(this.dataSource, reservation);

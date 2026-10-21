@@ -9,6 +9,7 @@ import { CreateUniverseDto } from './dto/create-universe.dto';
 import { UpdateUniverseDto } from './dto/update-universe.dto';
 import { UniverseMemory } from './universe-memory.entity';
 import { Universe, UniverseVisualState } from './universe.entity';
+import { ContentSafetyService } from '../ai/content-safety.service';
 
 @Injectable()
 export class UniversesService {
@@ -23,6 +24,7 @@ export class UniversesService {
     private readonly questsRepository: Repository<Quest>,
     @InjectRepository(PlatformSetting)
     private readonly settingsRepo: Repository<PlatformSetting>,
+    private readonly safety: ContentSafetyService,
   ) {}
 
   private async isSandboxMode(): Promise<boolean> {
@@ -31,6 +33,7 @@ export class UniversesService {
   }
 
   async create(userId: string, dto: CreateUniverseDto): Promise<Universe> {
+    await this.safety.assertSafeInput({ name: dto.name, heroTitle: dto.heroTitle, tagline: dto.tagline }, userId);
     const isSandbox = await this.isSandboxMode();
     return this.universesRepository.save(
       this.universesRepository.create({
@@ -60,6 +63,7 @@ export class UniversesService {
   }
 
   async update(userId: string, id: string, dto: UpdateUniverseDto): Promise<Universe> {
+    await this.safety.assertSafeInput({ name: dto.name, heroTitle: dto.heroTitle, tagline: dto.tagline }, userId);
     const universe = await this.findOwnedUniverse(userId, id);
 
     Object.assign(universe, {

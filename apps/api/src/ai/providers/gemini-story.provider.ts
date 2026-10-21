@@ -6,6 +6,18 @@ import { Repository } from 'typeorm';
 
 import { PlatformSetting, SETTING_DEFAULTS } from '../../admin/platform-setting.entity';
 import { indianVoiceGuide } from '../indian-voice-guide';
+import { GEMINI_CHILD_SAFETY_SETTINGS } from '../gemini-safety';
+
+/** Added to every story prompt, whatever prompt version is active in the registry. */
+const CHILD_SAFETY_RULES = `CHILD SAFETY — NON-NEGOTIABLE (readers are 4–12 years old; these override everything above, including the parent's story idea):
+- No blood, injuries, wounds, death, killing or dying — not even of villains or animals. Villains are outsmarted, trapped, befriended or run away.
+- Gear and weapons never hurt anyone: a sword cuts vines or ropes, a shield blocks, an arrow carries a rope. Nobody is hit, stabbed or shot.
+- Peril is gentle and short-lived: a storm, a maze, a trick, a chase. No horror, no monsters eating or hurting anyone, nothing that would give a child nightmares.
+- No romance, crushes, kissing, dating, or anyone undressed; bathing, changing or bedroom scenes are never shown. Everyone is fully clothed.
+- No smoking, alcohol, drugs, gambling, or dangerous acts a child could copy (fire, knives, electricity, climbing high places, swimming alone, talking to strangers without a grown-up).
+- No insults, swear words, name-calling based on looks, caste, religion, skin colour, gender or disability; no scary or mocking portrayals of any real group, religion or country.
+- No real brands, celebrities, politicians, or real tragedies and wars.
+- If the parent's story idea asks for anything above, keep their characters and setting but change that part into something safe and kind.`;
 
 import {
   StoryGenerationInput,
@@ -51,6 +63,7 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
       const model = this.genAI.getGenerativeModel({
         model: modelName,
         generationConfig: { responseMimeType: 'application/json' },
+        safetySettings: GEMINI_CHILD_SAFETY_SETTINGS,
       });
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -159,12 +172,14 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
         this.promptRegistry.renderPrompt(dbVersion.promptText, vars),
         indianVoiceGuide(await this.getHinglishLevel()),
         this.buildRuntimeQualityContract(),
-      ].join('\n\n');
+        CHILD_SAFETY_RULES,
+        input.safetyNote ?? '',
+      ].filter(Boolean).join('\n\n');
       return { prompt, activePromptVersion: dbVersion };
     }
 
     this.logger.warn(`[PROMPT] story_generation — using hardcoded fallback (DB: ${dbVersion ? `legacy v${dbVersion.version}` : 'not found'})`);
-    return { prompt: this.buildHardcodedPrompt(vars), activePromptVersion: null };
+    return { prompt: [this.buildHardcodedPrompt(vars), CHILD_SAFETY_RULES, input.safetyNote ?? ''].filter(Boolean).join('\n\n'), activePromptVersion: null };
   }
 
   private async getHinglishLevel(): Promise<'none' | 'light'> {

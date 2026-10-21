@@ -13,6 +13,7 @@ import { UpdateCharacterDto } from './dto/update-character.dto';
 import { UpsertVisualProfileDto } from './dto/upsert-visual-profile.dto';
 import { Character } from './entities/character.entity';
 import { CharacterVisualProfile } from './entities/character-visual-profile.entity';
+import { ContentSafetyService } from '../ai/content-safety.service';
 
 @Injectable()
 export class CharactersService {
@@ -31,6 +32,7 @@ export class CharactersService {
     private readonly uploadService: UploadService,
     @Inject(IMAGE_GENERATION_PROVIDER)
     private readonly imageProvider: ImageGenerationProvider,
+    private readonly safety: ContentSafetyService,
   ) {}
 
   async create(
@@ -38,6 +40,12 @@ export class CharactersService {
     createCharacterDto: CreateCharacterDto,
     photo?: Express.Multer.File,
   ): Promise<Character> {
+    // Checked before the character slot is used, so a rejected name or photo costs nothing.
+    await this.safety.assertSafeInput({ name: createCharacterDto.name, role: createCharacterDto.role, relationship: createCharacterDto.relationship }, userId);
+    if (createCharacterDto.avatarUrl && !this.uploadService.isOwnAssetUrl(createCharacterDto.avatarUrl)) {
+      throw new BadRequestException('Avatar must be an image created in HeroKids Universe.');
+    }
+    if (photo) await this.safety.assertSafePhoto(photo, userId);
     let character = await this.dataSource.transaction(async (manager) => {
       const user = await manager.findOne(User, {
         where: { id: userId },
@@ -131,6 +139,11 @@ export class CharactersService {
     updateCharacterDto: UpdateCharacterDto,
     photo?: Express.Multer.File,
   ): Promise<Character> {
+    await this.safety.assertSafeInput({ name: updateCharacterDto.name, role: updateCharacterDto.role, relationship: updateCharacterDto.relationship }, userId);
+    if (updateCharacterDto.avatarUrl && !this.uploadService.isOwnAssetUrl(updateCharacterDto.avatarUrl)) {
+      throw new BadRequestException('Avatar must be an image created in HeroKids Universe.');
+    }
+    if (photo) await this.safety.assertSafePhoto(photo, userId);
     const character = await this.findOne(userId, id);
     const oldAvatarUrl = character.avatarUrl;
 
@@ -171,6 +184,8 @@ export class CharactersService {
     adjustmentHint?: string,
   ): Promise<{ avatarUrl: string; avatarRefreshTokens: number }> {
     if (!photo) throw new BadRequestException('Photo is required');
+    await this.safety.assertSafeInput({ adjustmentHint }, userId);
+    await this.safety.assertSafePhoto(photo, userId);
     const character = await this.findOne(userId, id);
     const oldAvatarUrl = character.avatarUrl;
 
@@ -205,6 +220,11 @@ export class CharactersService {
     dto: UpsertVisualProfileDto,
   ): Promise<CharacterVisualProfile> {
     await this.findOne(userId, characterId); // ownership check
+    await this.safety.assertSafeInput({
+      costumeDescription: dto.costumeDescription, hairDescription: dto.hairDescription, faceDescription: dto.faceDescription,
+      skinTone: dto.skinTone, eyeDescription: dto.eyeDescription, accessories: dto.accessories, colors: dto.colors,
+      doNotChangeRules: dto.doNotChangeRules,
+    }, userId);
     let profile = await this.visualProfileRepository.findOne({ where: { characterId } });
     if (!profile) {
       profile = this.visualProfileRepository.create({ characterId, universeId: null });

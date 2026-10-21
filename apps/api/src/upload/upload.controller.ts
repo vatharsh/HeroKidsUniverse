@@ -2,20 +2,16 @@ import {
   Query,
   Controller,
   Get,
+  GoneException,
   NotFoundException,
   Param,
   Post,
   Res,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import { join } from 'path';
 
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { UploadService } from './upload.service';
 
@@ -29,13 +25,10 @@ const VIDEO_UPLOAD_DIR     = join(process.cwd(), 'uploads', 'videos');
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
+  /** Raw photos are never stored (they are only used in memory to draw the cartoon avatar). */
   @Post('avatar')
-  @UseInterceptors(FileInterceptor('photo'))
-  uploadAvatar(
-    @CurrentUser() currentUser: CurrentUserPayload,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    return this.uploadService.uploadAvatar(currentUser.id, file);
+  uploadAvatar() {
+    throw new GoneException('Photos are no longer stored. Create the hero with the photo and we will draw the avatar.');
   }
 
   @Public()

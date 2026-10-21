@@ -19,6 +19,7 @@ import { UploadService } from '../upload/upload.service';
 import { User } from '../users/user.entity';
 import { UserAvatar } from './entities/user-avatar.entity';
 import { logAvatarUsage, releaseAvatarGeneration, reserveAvatarGeneration } from './avatar-allowance';
+import { ContentSafetyService } from '../ai/content-safety.service';
 
 @Injectable()
 export class AvatarsService {
@@ -33,6 +34,7 @@ export class AvatarsService {
     @Inject(IMAGE_GENERATION_PROVIDER)
     private readonly imageProvider: ImageGenerationProvider,
     private readonly uploadService: UploadService,
+    private readonly safety: ContentSafetyService,
   ) {}
 
   async getStats(userId: string) {
@@ -58,6 +60,10 @@ export class AvatarsService {
     type: 'hero' | 'character',
     adjustmentHint?: string,
   ): Promise<{ avatarUrl: string }> {
+    // Checked before anything is charged, so a rejected photo or instruction costs nothing.
+    await this.safety.assertSafeInput({ adjustmentHint }, userId);
+    await this.safety.assertSafePhoto(photo, userId);
+
     // Paid for up front (free allowance or a refresh) and refunded if anything fails.
     const reservation = await reserveAvatarGeneration(this.dataSource, userId, type);
 

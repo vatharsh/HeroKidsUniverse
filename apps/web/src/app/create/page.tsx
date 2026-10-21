@@ -595,22 +595,16 @@ function CreatePageInner() {
       if (hero) {
         heroId = hero.id;
       } else {
-        // Avatar URL: prefer already-generated cartoon; fall back to raw photo upload
-        let avatarUrl: string | undefined = heroAvatarUrl ?? undefined;
-        if (!avatarUrl && photoFile) {
-          const form = new FormData();
-          form.append("photo", photoFile);
-          const upRes = await fetch(`${BASE}/upload/avatar`, { method: "POST", headers, body: form });
-          if (!upRes.ok) throw new ApiError(upRes.status, await upRes.json());
-          const { data } = await upRes.json();
-          avatarUrl = data.avatarUrl;
-        }
+        // Avatar: use the cartoon already made in this flow. If the parent skipped that step, send the
+        // photo with the new hero so the server draws the cartoon — the raw photo itself is never stored.
+        const avatarUrl: string | undefined = heroAvatarUrl ?? undefined;
+        const heroForm = new FormData();
+        heroForm.append("name", heroName);
+        heroForm.append("dob", heroDob);
+        heroForm.append("gender", heroGender);
+        if (!avatarUrl && photoFile) heroForm.append("photo", photoFile);
 
-        const heroRes = await fetch(`${BASE}/heroes`, {
-          method: "POST",
-          headers: { ...headers, "Content-Type": "application/json" },
-          body: JSON.stringify({ name: heroName, dob: heroDob, gender: heroGender }),
-        });
+        const heroRes = await fetch(`${BASE}/heroes`, { method: "POST", headers, body: heroForm });
         if (!heroRes.ok) throw new ApiError(heroRes.status, await heroRes.json());
         const { data: newHero } = await heroRes.json();
         heroId = newHero.id;

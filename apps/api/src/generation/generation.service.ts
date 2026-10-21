@@ -33,6 +33,8 @@ import { Hero } from '../heroes/hero.entity';
 import { HeroPower } from '../powers/hero-power.entity';
 import { UniverseVillain, VillainStatus } from '../universes/universe-villain.entity';
 import { pickStoryShape } from './story-shapes';
+import { ContentSafetyError, ContentSafetyService, isContentSafetyError } from '../ai/content-safety.service';
+import type { StoryGenerationInput } from '../ai/interfaces/story-generation.provider';
 import { Quest, QuestStatus } from '../quests/quest.entity';
 import { Story, StoryMode, StoryPage, StoryScene, StoryStatus, StoryTheme, StoryVisualState } from '../stories/story.entity';
 import { ArcStatus, StoryArc } from '../story-arcs/story-arc.entity';
@@ -146,6 +148,7 @@ export class GenerationService implements OnModuleInit {
     @InjectRepository(GenerationJob) private readonly jobsRepo: Repository<GenerationJob>,
     @InjectRepository(PlatformSetting) private readonly platformSettingsRepo: Repository<PlatformSetting>,
     private readonly characterLocator: GeminiCharacterLocator,
+    private readonly safety: ContentSafetyService,
   ) {}
 
   async onModuleInit() {
@@ -344,7 +347,7 @@ export class GenerationService implements OnModuleInit {
 
       await this.storiesRepo.update(storyId, { status: StoryStatus.GeneratingStory });
 
-      const generated = await this.storyProvider.generateStory({
+      const generationInput: StoryGenerationInput = {
         heroName,
         heroAge,
         heroGender,
@@ -358,7 +361,8 @@ export class GenerationService implements OnModuleInit {
           : universeContext,
         storyContext: story.storyContext ?? undefined,
         storyVisualState: existingVisualState,
-      });
+      };
+      const generated = await this.writeChildSafeStory(generationInput, storyId);
       const normalizedGenerated = this.normalizeGeneratedStory(generated, heroName, existingVisualState);
       // In universe stories the writer often calls the hero by their title ("Commander") — make that the hero,
       // otherwise the title becomes a separate invented person in sheets, pictures and bubbles.
@@ -640,7 +644,9 @@ export class GenerationService implements OnModuleInit {
       this.logger.log(`Story ${storyId} generated successfully`);
     } catch (err) {
       this.logger.error(`Story ${storyId} generation failed`, err);
-      const msg = err instanceof Error ? err.message : 'Unknown error';
+      const msg = isContentSafetyError(err)
+        ? 'This story could not be made child-safe, so it was stopped and your credit was refunded. Please try a different story idea.'
+        : err instanceof Error ? err.message : 'Unknown error';
 
       await this.storiesRepo.update(storyId, { status: StoryStatus.Failed, errorMessage: msg });
       await updateJob({
@@ -1315,6 +1321,8 @@ export class GenerationService implements OnModuleInit {
       } catch (err) {
         settled++;
         if (onPageDone) await onPageDone(settled, illustratedScenes.length).catch(() => {});
+        // An unsafe picture must stop the whole story (and refund it) rather than leave a gap.
+        if (isContentSafetyError(err)) throw err;
         return { scene, imageOutput: null, error: err instanceof Error ? err.message : 'Unknown' };
       }
     };
@@ -1587,6 +1595,8 @@ export class GenerationService implements OnModuleInit {
       try {
         return await this.imageProvider.generateImage(input);
       } catch (err) {
+        // A child-safety failure was already redrawn once by the dispatcher — don't burn more images on it.
+        if (isContentSafetyError(err)) throw err;
         lastError = err;
         this.logger.warn(
           `Image generation attempt ${attempt}/${attempts} failed: ${
@@ -2793,6 +2803,46 @@ export class GenerationService implements OnModuleInit {
       );
     if (quests.length > 0) await this.questsRepo.save(quests);
     await this.closeStaleQuests(story.universeId);
+  }
+
+  /**
+   * Writes the story, then checks every word a child will read or hear (and every picture brief).
+   * A draft that fails is rewritten once with an explicit safety instruction; a second failure stops
+   * the story, which is then refunded.
+   */
+  private async writeChildSafeStory(input: StoryGenerationInput, storyId: string): Promise<StoryGenerationOutput> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const generated = await this.storyProvider.generateStory(
+        attempt === 0 ? input : {
+          ...input,
+          safetyNote: 'Your previous draft was rejected by the child-safety check. Rewrite it so it is gentle and suitable for a 4-year-old: no injuries, blood, death, weapons used on anyone, romance, scary horror, smoking, alcohol, insults or rude words.',
+        },
+      );
+      const verdict = await this.safety.checkStoryText(this.storyTextForSafety(generated));
+      if (verdict.safe) return generated;
+      this.logger.warn(`Story ${storyId} draft ${attempt + 1} failed the child-safety check: ${verdict.reasons.join(', ')}`);
+    }
+    throw new ContentSafetyError('story text failed the child-safety check twice');
+  }
+
+  private storyTextForSafety(generated: StoryGenerationOutput): string {
+    const pages = [
+      ...(generated.pages ?? []),
+      ...(generated.scenes ?? []).flatMap((s) => (s as { pages?: StoryGenerationOutput['pages'] }).pages ?? []),
+    ];
+    return [
+      generated.title,
+      generated.cliffhanger,
+      generated.villain?.name, generated.villain?.scheme, generated.villain?.look,
+      generated.reward?.name, generated.reward?.description,
+      ...Object.values(generated.storyVisualState?.characterLooks ?? {}),
+      ...(generated.scenes ?? []).map((s) => s.illustrationBrief),
+      ...pages.flatMap((p) => [
+        p.text, p.narrationText, p.sceneDescription,
+        ...(p.speechBubbles ?? []).map((b) => b.text),
+        ...(p.dialogue ?? []).map((d) => d.text),
+      ]),
+    ].filter((t): t is string => typeof t === 'string' && !!t.trim()).join('\n');
   }
 
   /** Saves this episode's villain, or updates them if they've appeared before (so they can return). */

@@ -161,6 +161,8 @@ export interface UniverseContext {
 }
 
 export interface StoryGenerationInput {
+  /** Extra instruction after a draft failed the child-safety check. */
+  safetyNote?: string;
   heroName: string;
   heroAge: number;
   heroGender: string;

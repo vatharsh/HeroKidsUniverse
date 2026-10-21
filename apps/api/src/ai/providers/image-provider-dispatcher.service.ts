@@ -17,6 +17,8 @@ import type {
   SpeechBubbleLayoutResult,
 } from '../interfaces/image-generation.provider';
 import type { CharacterIdentity } from '../../heroes/hero.entity';
+import { ContentSafetyError, ContentSafetyService, isContentSafetyError } from '../content-safety.service';
+import { CHILD_SAFE_IMAGE_RULE } from '../gemini-safety';
 import { NanoBananaImageProvider } from './nano-banana-image.provider';
 import { OpenAIImageProvider } from './openai-image.provider';
 
@@ -49,7 +51,24 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
     private readonly settingsRepo: Repository<PlatformSetting>,
     private readonly openai: OpenAIImageProvider,
     private readonly nanoBanana: NanoBananaImageProvider,
+    private readonly safety: ContentSafetyService,
   ) {}
+
+  /**
+   * Every picture a child might see is checked before it is used. A picture that fails is redrawn once
+   * with an extra child-safety instruction; if that fails too, a ContentSafetyError is thrown (the story
+   * then fails and the credit is refunded).
+   */
+  private async childSafe(what: string, draw: (safetyNote?: string) => Promise<ImageGenerationOutput>): Promise<ImageGenerationOutput> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const output = await draw(attempt === 0 ? undefined : CHILD_SAFE_IMAGE_RULE);
+      if (!output.imageBase64) return output; // URL-only outputs are checked by the provider's own filters
+      const verdict = await this.safety.checkImage(output.imageBase64);
+      if (verdict.safe) return output;
+      this.logger.warn(`Unsafe ${what} (attempt ${attempt + 1}): ${verdict.reasons.join(', ')} — ${attempt === 0 ? 'redrawing' : 'giving up'}`);
+    }
+    throw new ContentSafetyError(`${what} failed the child-safety check twice`);
+  }
 
   /** Returns which model name to log for usage tracking. */
   static modelNameForBackend(backend: string): string {
@@ -90,11 +109,14 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
 
   async generateImage(input: ImageGenerationInput): Promise<ImageGenerationOutput> {
     const { provider } = await this.resolveProvider();
-    return provider.generateImage({
+    const aspectRatio = input.aspectRatio ?? await this.resolveAspectRatio();
+    const model = input.model ?? await this.resolveImageModel();
+    return this.childSafe('story picture', (note) => provider.generateImage({
       ...input,
-      aspectRatio: input.aspectRatio ?? await this.resolveAspectRatio(),
-      model: input.model ?? await this.resolveImageModel(),
-    });
+      sceneDescription: note ? `${input.sceneDescription}\n${note}` : input.sceneDescription,
+      aspectRatio,
+      model,
+    }));
   }
 
   /** Which backend + model will draw the next image — used for cost logging. */
@@ -108,7 +130,13 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
     if (backend !== 'gemini' || !provider.generateCharacterSheet) {
       throw new Error('Character sheets need the Gemini image backend');
     }
-    return provider.generateCharacterSheet({ ...input, model: input.model ?? await this.resolveImageModel() });
+    const model = input.model ?? await this.resolveImageModel();
+    const generateSheet = provider.generateCharacterSheet.bind(provider);
+    return this.childSafe('character sheet', (note) => generateSheet({
+      ...input,
+      appearance: note ? [input.appearance, note].filter(Boolean).join('. ') : input.appearance,
+      model,
+    }));
   }
 
   private async resolveImageModel(): Promise<string> {
@@ -130,16 +158,21 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
 
   async generateAvatar(input: AvatarGenerationInput): Promise<ImageGenerationOutput> {
     const provider = await this.resolveAvatarProvider();
-    if (provider === this.openai) return this.openai.generateAvatar(input);
+    return this.childSafe('avatar', async (note) => {
+      const attempt = note ? { ...input, adjustmentHint: [input.adjustmentHint, note].filter(Boolean).join('. ') } : input;
+      if (provider === this.openai) return this.openai.generateAvatar(attempt);
 
-    // Gemini selected — fall back to OpenAI on safety block or empty response
-    try {
-      return await this.nanoBanana.generateAvatar(input);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Gemini avatar failed (${msg.slice(0, 120)}), falling back to OpenAI`);
-      return this.openai.generateAvatar(input);
-    }
+      // Gemini selected — fall back to OpenAI on an empty response or outage, but never on a safety
+      // refusal: that would just ask a second model to draw what the first refused.
+      try {
+        return await this.nanoBanana.generateAvatar(attempt);
+      } catch (err) {
+        if (isContentSafetyError(err)) throw err;
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Gemini avatar failed (${msg.slice(0, 120)}), falling back to OpenAI`);
+        return this.openai.generateAvatar(attempt);
+      }
+    });
   }
 
   async describeCharacterAppearance(photoBuffer: Buffer, mimeType?: string): Promise<string | null> {

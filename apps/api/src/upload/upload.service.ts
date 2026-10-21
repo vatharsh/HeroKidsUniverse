@@ -8,7 +8,6 @@ import { join } from 'path';
 const AVATAR_UPLOAD_DIR = join(process.cwd(), 'uploads', 'avatars');
 const STORY_UPLOAD_DIR = join(process.cwd(), 'uploads', 'stories');
 const CHARACTER_UPLOAD_DIR = join(process.cwd(), 'uploads', 'characters');
-const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 
 // Immutable cache: keys include a random component so they never collide on regen.
 const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable';
@@ -90,17 +89,6 @@ export class UploadService implements OnApplicationBootstrap {
   }
 
   // ── Public upload methods ─────────────────────────────────────────────────
-
-  async uploadAvatar(userId: string, file: Express.Multer.File) {
-    if (!file) throw new BadRequestException('Photo is required');
-    if (!ALLOWED_MIME.includes(file.mimetype)) throw new BadRequestException('Invalid file type');
-    if (file.size > 5 * 1024 * 1024) throw new BadRequestException('File too large');
-
-    if (this.useR2) {
-      return this.uploadToR2(userId, file);
-    }
-    return this.saveLocally(userId, file);
-  }
 
   async uploadGeneratedImage(
     userId: string,
@@ -259,18 +247,14 @@ export class UploadService implements OnApplicationBootstrap {
     return this.localUploadUrl(opts.localSubpath ? `${opts.localSubpath}/${filename}` : filename);
   }
 
-  private async uploadToR2(userId: string, file: Express.Multer.File) {
-    const key = `avatars/tryouts/${userId}/${randomUUID()}.webp`;
-    await this.putR2Object(key, file.buffer, file.mimetype);
-    return { avatarUrl: this.getPublicUrl(key) };
-  }
-
-  private async saveLocally(userId: string, file: Express.Multer.File) {
-    await mkdir(AVATAR_UPLOAD_DIR, { recursive: true });
-    const ext      = file.mimetype.split('/')[1] ?? 'jpg';
-    const filename = `${userId}-${randomUUID()}.${ext}`;
-    await writeFile(join(AVATAR_UPLOAD_DIR, filename), file.buffer);
-    return { avatarUrl: this.localUploadUrl(filename) };
+  /** True only for images we generated and stored ourselves — an avatar may never point anywhere else. */
+  isOwnAssetUrl(url: string): boolean {
+    const value = url.trim();
+    if (value.startsWith('/api/upload/files/')) return true;
+    if (this.r2PublicUrl && value.startsWith(`${this.r2PublicUrl}/`)) return true;
+    const apiBase = this.getPublicApiBaseUrl();
+    if (apiBase && value.startsWith(`${apiBase}/upload/files/`)) return true;
+    return /^http:\/\/localhost:\d+\/api\/upload\/files\//.test(value) && process.env.NODE_ENV !== 'production';
   }
 
   private getPublicApiBaseUrl(): string | null {
