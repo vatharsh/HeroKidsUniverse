@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PassportStrategy } from '@nestjs/passport';
@@ -30,6 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(payload: JwtPayload): Promise<CurrentUserPayload> {
     const user = await this.usersRepository.findOne({ where: { id: payload.sub } });
-    return { id: payload.sub, email: payload.email, role: user?.role, emailVerified: !!user?.emailVerifiedAt };
+    if (!user) throw new UnauthorizedException(); // deleted account: its old tokens stop working
+    return { id: payload.sub, email: payload.email, role: user.role, emailVerified: !!user.emailVerifiedAt };
   }
 }

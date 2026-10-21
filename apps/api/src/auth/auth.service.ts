@@ -105,7 +105,7 @@ export class AuthService {
 
   async register(registerDto: RegisterDto): Promise<AuthTokensResponse> {
     const email = registerDto.email.toLowerCase();
-    const existingUser = await this.usersRepository.findOne({ where: { email } });
+    const existingUser = await this.usersRepository.findOne({ where: { email }, withDeleted: true });
 
     if (existingUser) {
       throw new ConflictException('Email is already registered');

@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -110,6 +111,10 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  /** Soft delete: the account can't sign in and is hidden everywhere, but its data stays. */
+  @DeleteDateColumn({ type: 'timestamp', nullable: true })
+  deletedAt!: Date | null;
 
   @OneToMany(() => Hero, (hero) => hero.user)
   heroes!: Hero[];
