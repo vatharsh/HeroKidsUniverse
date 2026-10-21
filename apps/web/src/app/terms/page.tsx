@@ -58,9 +58,9 @@ export default function TermsPage() {
         {
           title: "Who owns the stories",
           body: [
-            "You may use the stories, pictures, narration and videos created for your account for personal and family purposes: reading, printing at home, gifting and sharing with family and friends.",
-            "Commercial use (for example selling the stories, pictures or books) is not allowed without our written permission. The Hero Kids Universe name, logo, website and software belong to us.",
-            "Because content is made by AI, similar stories or pictures may sometimes be created for other users, and we cannot guarantee that content is unique.",
+            "You may use the stories, pictures, narration and videos created for your account for any lawful purpose, including personal, family and commercial use (for example printing and selling books or merchandise). You do not need our permission.",
+            "If you use content commercially, you are responsible for having the permission of everyone shown or named in it (and their guardian's permission for a child), and for following the law where you sell it. You may not use the Hero Kids Universe name or logo, or suggest that we endorse your product, without our written permission. Our website and software remain ours.",
+            "Because content is made by AI, similar stories or pictures may sometimes be created for other users. We cannot guarantee that content is unique or that it does not resemble existing works, and we give no warranty about intellectual-property rights in AI-generated content.",
           ],
         },
         {
