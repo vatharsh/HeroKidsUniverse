@@ -500,6 +500,8 @@ interface Story {
   videoStatus: "not_started" | "generating" | "completed" | "failed" | "null" | null;
   videoVariants?: { landscape?: { status: string; url: string | null } } | null;
   isPreview?: boolean;
+  /** null for a standalone ("Write My Own") story. */
+  universeId?: string | null;
   hero: { name: string; age: number; gender: string; avatarUrl: string | null };
 }
 
@@ -901,17 +903,21 @@ export default function StoryReaderPage() {
   // ── Episode Recap ──────────────────────────────────────────────────────────
 
   if (showRecap && recap) {
+    // Standalone stories aren't part of a universe, so no "episode", "universe" or "to be continued" wording.
+    const inUniverse = !!story.universeId;
     return (
       <div className="min-h-screen bg-space-gradient flex flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-8">
             <div className="text-5xl mb-3 animate-bounce">🎉</div>
-            <p className="text-gold text-xs font-bold tracking-widest uppercase mb-2">Episode Complete</p>
+            <p className="text-gold text-xs font-bold tracking-widest uppercase mb-2">{inUniverse ? "Episode Complete" : "Story Complete"}</p>
             <h1 className="font-[family-name:var(--font-display)] text-white text-3xl mb-1">
-              {story.title ?? "Episode Complete!"}
+              {story.title ?? (inUniverse ? "Episode Complete!" : "Story Complete!")}
             </h1>
-            <p className="text-white/50 text-sm">Here&apos;s what happened in {story.hero?.name}&apos;s universe</p>
+            <p className="text-white/50 text-sm">
+              {inUniverse ? <>Here&apos;s what happened in {story.hero?.name}&apos;s universe</> : <>A one-off adventure starring {story.hero?.name}</>}
+            </p>
           </div>
 
           <div className="flex flex-col gap-4 mb-8">
@@ -958,7 +964,7 @@ export default function StoryReaderPage() {
             )}
 
             {/* Cliffhanger */}
-            {recap.cliffhanger && (
+            {recap.cliffhanger && inUniverse && (
               <div className="bg-brand/20 border border-brand/30 rounded-2xl p-5">
                 <p className="text-brand-light text-xs font-bold uppercase tracking-wide mb-2">📖 To be continued…</p>
                 <p className="text-white/80 text-sm italic leading-relaxed">&ldquo;{recap.cliffhanger}&rdquo;</p>
@@ -969,17 +975,32 @@ export default function StoryReaderPage() {
           <div className="flex flex-col gap-3">
             <button type="button" onClick={() => setShowRecap(false)}
               className="w-full bg-brand hover:bg-brand-dark text-white font-[family-name:var(--font-display)] text-lg py-4 rounded-full transition hover:scale-105 shadow-brand">
-              Read the Episode →
+              {inUniverse ? "Read the Episode →" : "Read the Story →"}
             </button>
             <div className="flex gap-3">
-              <a href="/universe"
-                className="flex-1 text-center bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-3 rounded-full transition">
-                View Universe
-              </a>
-              <a href="/create"
-                className="flex-1 text-center bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-3 rounded-full transition">
-                Next Episode
-              </a>
+              {inUniverse ? (
+                <>
+                  <a href="/universe"
+                    className="flex-1 text-center bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-3 rounded-full transition">
+                    View Universe
+                  </a>
+                  <a href={`/create?universeId=${story.universeId}`}
+                    className="flex-1 text-center bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-3 rounded-full transition">
+                    Next Episode
+                  </a>
+                </>
+              ) : (
+                <>
+                  <a href="/dashboard"
+                    className="flex-1 text-center bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-3 rounded-full transition">
+                    Dashboard
+                  </a>
+                  <a href="/create"
+                    className="flex-1 text-center bg-white/10 hover:bg-white/20 text-white text-sm font-semibold py-3 rounded-full transition">
+                    New Story
+                  </a>
+                </>
+              )}
             </div>
           </div>
         </div>

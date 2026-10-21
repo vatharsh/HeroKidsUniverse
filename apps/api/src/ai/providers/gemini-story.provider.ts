@@ -264,7 +264,11 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
           `- ${ctx.returningVillain.name} is this episode's villain, with a NEW scheme. Characters should recognise them ("Not ${ctx.returningVillain.name} again!").`,
           ctx.returningVillain.look ? `- Their look never changes: put exactly "${ctx.returningVillain.look}" in storyVisualState.characterLooks["${ctx.returningVillain.name}"].` : '',
         ].filter(Boolean)
-      : [
+      : ctx?.storyMode === 'continue_arc'
+        ? [
+            'VILLAIN: if the last episode\'s cliffhanger involves a villain, keep that same villain (same name and look). Otherwise create a NEW named villain with a clear goal and a memorable quirk.',
+          ]
+        : [
           'VILLAIN: create a NEW named villain with a clear, specific goal and a funny or memorable quirk.',
           ctx?.pastVillains?.length ? `- Already used in this universe (do NOT reuse these names or the same kind of creature): ${ctx.pastVillains.join(', ')}` : '',
         ].filter(Boolean);
@@ -287,15 +291,36 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
       'REWARD (optional — about every other episode): if the hero earns something, it is usually a PHYSICAL object with one clear use — e.g. a sword that cuts through enchanted vines, a shield that reflects light, a bow that shoots rope arrows, an ancient amulet that lights up near danger, a compass that points to whoever is lost, a flute that calms animals, a staff, a helmet, gauntlets, a map that redraws itself. Only occasionally a new ability. Never a duplicate of the hero\'s gear. Gear is used to protect, unlock, climb, cut through obstacles or signal — never to hurt anyone. Describe it in reward (kind "artifact" or "power") with an emoji and its look.',
     ];
 
-    const cliffhangerLine = !hasCustomStory && ctx?.lastCliffhanger
-      ? `\nLast Episode Cliffhanger (MUST pick up from this exact moment): "${ctx.lastCliffhanger}"\nLast Episode Title: "${ctx.lastStoryTitle ?? 'Previous Episode'}"`
-      : '';
+    // What this kind of episode must do. Only "Continue Adventure" picks up the last cliffhanger — before,
+    // every universe story was told to, so "New Adventure" and "New Story Arc" were really continuations.
+    const episodeModeLines = !ctx ? [] : ctx.storyMode === 'continue_arc'
+      ? (ctx.lastCliffhanger
+          ? [
+              'EPISODE TYPE — CONTINUE ADVENTURE: this episode continues the last one.',
+              `Last Episode: "${ctx.lastStoryTitle ?? 'Previous Episode'}"`,
+              `Last Episode Cliffhanger: "${ctx.lastCliffhanger}"`,
+              '- Page 1 MUST open exactly where that cliffhanger left off and react to it directly.',
+              hasCustomStory ? "- The parent's story idea describes what happens next in this continuation." : '',
+            ].filter(Boolean)
+          : ['EPISODE TYPE — CONTINUE ADVENTURE: there is no earlier episode to continue, so start a fresh adventure that fits this universe.'])
+      : ctx.storyMode === 'new_arc'
+        ? [
+            'EPISODE TYPE — NEW STORY ARC: start a brand-new chapter in this universe.',
+            '- Introduce a big new goal or threat that could run across several episodes, and open it as a quest in newQuests[].',
+            '- Do NOT continue the last episode\'s cliffhanger; keep the universe, hero, gear and companions consistent.',
+          ]
+        : [
+            'EPISODE TYPE — NEW ADVENTURE: a brand-new, self-contained adventure in this universe.',
+            '- Do NOT continue the last episode\'s cliffhanger (that is saved for a "Continue Adventure" episode). You may briefly nod to past adventures.',
+          ];
 
     const universeSection = ctx
       ? (hasCustomStory
           ? [
               `UNIVERSE CONTEXT — this adventure takes place WITHIN "${ctx.universeName}" (apply throughout):`,
               `Hero Title in this Universe: ${ctx.heroTitle ?? heroName}`,
+              '',
+              ...episodeModeLines,
               '',
               `Universe Memory (what has already happened in ${ctx.universeName}):`,
               ctx.recentMemories.length ? ctx.recentMemories.map((m) => `- ${m}`).join('\n') : '- This is the first adventure in this universe',
@@ -323,8 +348,8 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
           : [
               `UNIVERSE: ${ctx.universeName}`,
               `Hero Title: ${ctx.heroTitle ?? heroName}`,
-              `Story Mode: ${ctx.storyMode}`,
-              cliffhangerLine,
+              '',
+              ...episodeModeLines,
               '',
               'Universe Memory (what has already happened):',
               ctx.recentMemories.length ? ctx.recentMemories.map((m) => `- ${m}`).join('\n') : '- This is the first adventure',
@@ -341,8 +366,6 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
               'IMPORTANT CONTINUITY RULES:',
               '- Reference past events naturally in the story if relevant',
               '- The hero may use existing powers and gear in new ways',
-              '- If storyMode is "continue_arc", the story MUST open exactly where the last episode ended — page 1 must directly react to the cliffhanger above',
-              '- If storyMode is "new_arc", introduce a fresh threat but keep universe consistent',
               '- If the hero earns a new power in this story, add its name to newPowers[] AND add a newMemories entry with type "power_earned" and the same name as title',
               '- Report the villain in villain{}; add a "villain_defeated" memory only if villain.outcome is "defeated" or "captured"',
               '- The story may open a new quest — add its title to newQuests[] AND add a newMemories entry with type "quest_opened". If it resolves an open quest, list that exact title in questsCompleted[]',
@@ -368,7 +391,10 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
         ].join('\n')
       : '';
 
-    const themeDescriptionLine = hasCustomStory ? '' : `- Adventure theme: ${input.themeDescription}`;
+    // A theme the parent picked still sets the scene when they also typed their own idea (it was dropped before).
+    const themeDescriptionLine = hasCustomStory
+      ? (input.chosenTheme ? `- Setting: ${input.chosenTheme} — the parent's story idea takes place in this setting` : '')
+      : `- Adventure theme: ${input.themeDescription}`;
     const storySourceLine = hasCustomStory
       ? "- STAY TRUE to the user's story — do not drift into a different adventure"
       : '- Naturally reference universe history if provided';

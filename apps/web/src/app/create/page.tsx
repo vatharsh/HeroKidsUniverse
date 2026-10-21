@@ -116,6 +116,7 @@ interface ExistingHero {
   dob: string | null;
   gender: HeroGender;
   avatarUrl: string | null;
+  universeId?: string | null;
 }
 
 interface Character {
@@ -258,6 +259,7 @@ function CreatePageInner() {
 
   // Hero state
   const [hero, setHero]               = useState<ExistingHero | null>(null);
+  const [heroes, setHeroes]           = useState<ExistingHero[]>([]);
   const [heroLoading, setHeroLoading] = useState(true);
   const [heroName, setHeroName]             = useState("");
   const [heroDob, setHeroDob]               = useState("");
@@ -348,7 +350,10 @@ function CreatePageInner() {
       fetch(`${BASE}/avatars`, { headers: h }).then(r => r.json()).catch(() => ({ data: null })),
     ]).then(([heroRes, charRes, univRes, storiesRes, companionRes, avatarRes]) => {
       if (Array.isArray(heroRes.data) && heroRes.data.length > 0) {
-        setHero(heroRes.data[0] as ExistingHero);
+        const all = heroRes.data as ExistingHero[];
+        setHeroes(all);
+        // A universe's episodes star that universe's hero; otherwise start with the newest hero.
+        setHero(all.find(h => preselectedUniverseId && h.universeId === preselectedUniverseId) ?? all[0]);
       }
       if (Array.isArray(charRes.data)) {
         setCharacters(charRes.data as Character[]);
@@ -1105,14 +1110,20 @@ function CreatePageInner() {
           <section>
             <p className="text-ink-muted text-sm mb-6">
               What world will your hero explore?{" "}
-              <span className="text-ink-muted/60 text-xs">Optional — skip if you have your own story in mind.</span>
+              <span className="text-ink-muted/60 text-xs">Optional — tap a world again to unselect it, or skip if you have your own story in mind.</span>
             </p>
+            {selectedTheme && (
+              <button type="button" onClick={() => setSelectedTheme("")}
+                className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand bg-brand/5 border border-brand/20 hover:bg-brand/10 px-3 py-1.5 rounded-full transition">
+                ✕ Clear choice — I&apos;ll describe my own story
+              </button>
+            )}
             <div className="grid grid-cols-2 gap-4">
               {THEMES.map((theme) => {
                 const isSelected = selectedTheme === theme.value;
                 return (
                   <button key={theme.value} type="button"
-                    onClick={() => setSelectedTheme(theme.value)}
+                    onClick={() => setSelectedTheme(isSelected ? "" : theme.value)}
                     className={cn(
                       "group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 text-left",
                       isSelected
@@ -1170,6 +1181,25 @@ function CreatePageInner() {
                 </div>
                 <Check className="ml-auto w-4 h-4 text-brand" />
               </div>
+              {heroes.length > 1 && (
+                <div className="mt-3">
+                  <p className="text-ink-muted text-xs mb-2">Whose story is this?</p>
+                  <div className="flex flex-wrap gap-2">
+                    {heroes.map(h => (
+                      <button key={h.id} type="button" onClick={() => setHero(h)}
+                        className={cn(
+                          "flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border text-sm transition",
+                          hero?.id === h.id ? "border-brand bg-brand/10 text-brand font-semibold" : "border-ink/15 bg-white text-ink-mid hover:border-brand/40",
+                        )}>
+                        <span className="w-7 h-7 rounded-full overflow-hidden bg-brand/10 flex items-center justify-center text-xs">
+                          {h.avatarUrl ? <img src={h.avatarUrl} alt="" className="w-full h-full object-cover" /> : "🦸"}
+                        </span>
+                        {h.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Universe companion — optional per episode */}
@@ -1646,7 +1676,7 @@ function CreatePageInner() {
               className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-full text-lg shadow-brand transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
               {generating
                 ? <><Loader2 className="w-5 h-5 animate-spin" /> Creating your episode…</>
-                : <><Sparkles className="w-5 h-5" /> Generate Episode</>
+                : <><Sparkles className="w-5 h-5" /> {storyMode === "standalone" ? "Generate Story" : "Generate Episode"}</>
               }
             </button>
             <p className="text-ink-muted text-xs text-center mt-3">Generation runs in the background — you can close this tab and come back.</p>

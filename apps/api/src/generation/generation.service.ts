@@ -348,6 +348,7 @@ export class GenerationService implements OnModuleInit {
       await this.storiesRepo.update(storyId, { status: StoryStatus.GeneratingStory });
 
       const generationInput: StoryGenerationInput = {
+        chosenTheme: story.theme ? THEME_LABELS[story.theme] : undefined,
         heroName,
         heroAge,
         heroGender,
@@ -383,7 +384,10 @@ export class GenerationService implements OnModuleInit {
       // Standalone stories don't use the universe costume, but still need ONE locked outfit — the writer's.
       const effectiveCostume = isStandalone
         ? (normalizedGenerated.storyVisualState?.costume || null)
-        : (hero.costumeDescription || existingVisualState?.costume || normalizedGenerated.storyVisualState?.costume || null);
+        // The universe's saved costume keeps the hero recognisable across New Adventures too (only
+        // Continue / New Arc load the last story's visual state).
+        : (hero.costumeDescription || existingVisualState?.costume || universeContext?.visualState?.costume
+          || normalizedGenerated.storyVisualState?.costume || null);
       // Writer-designed outfit for every other character. Parents often put accessories or age in the
       // "outfit" field ("rectangular glasses"), so keep their note AND the writer's actual outfit.
       for (const [name, outfit] of Object.entries(normalizedGenerated.storyVisualState?.characterOutfits ?? {})) {
@@ -2283,8 +2287,13 @@ export class GenerationService implements OnModuleInit {
 
     const lastStory = recentStories[0] ?? null;
     const hasCustomStory = !!story.storyContext;
-    const storyShape = hasCustomStory ? null : pickStoryShape(recentStories.map((s) => s.storyVisualState?.storyShape));
-    const returningVillain = this.pickReturningVillain(villains, recentStories.map((s) => s.storyVisualState?.villainName));
+    // A continuation follows the cliffhanger, and a parent's own idea follows the parent — no forced shape.
+    const storyShape = hasCustomStory || story.storyMode === StoryMode.ContinueArc
+      ? null
+      : pickStoryShape(recentStories.map((s) => s.storyVisualState?.storyShape));
+    const returningVillain = story.storyMode === StoryMode.ContinueArc
+      ? null
+      : this.pickReturningVillain(villains, recentStories.map((s) => s.storyVisualState?.villainName));
     if (returningVillain) {
       const escapedIn = villains.find((v) => v.name === returningVillain.name)?.lastStoryId;
       if (escapedIn) {

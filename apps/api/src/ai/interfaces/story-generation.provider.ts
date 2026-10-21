@@ -163,6 +163,8 @@ export interface UniverseContext {
 export interface StoryGenerationInput {
   /** Extra instruction after a draft failed the child-safety check. */
   safetyNote?: string;
+  /** The adventure theme the parent picked (e.g. "Space Adventure"), if any — kept even when they also typed their own idea. */
+  chosenTheme?: string;
   heroName: string;
   heroAge: number;
   heroGender: string;
