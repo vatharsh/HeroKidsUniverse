@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Terms and Conditions | Hero Kids Universe",
+  title: "Terms and Conditions",
   description: "Terms and Conditions for Hero Kids Universe by Accurate IT Solution.",
 };
 
@@ -44,7 +44,7 @@ export default function TermsPage() {
           body: [
             "Hero Kids Universe is built for children aged 4–12. Story ideas, names and descriptions you type are checked, and requests for sexual content, graphic violence, cruelty, insults, hate, swearing, drugs, alcohol, smoking or self-harm are refused.",
             "Uploaded photos are checked before an avatar is made. Every generated story and picture is checked as well; if it does not pass, it is redrawn or rewritten once, and if it still does not pass the story is stopped and its credit is returned to you.",
-            "If you ever see something unsuitable, please email support@accurateitsolution.in with the story name. We will look into it, remove it where needed, and return the credit used.",
+            "If you ever see something unsuitable, please email support@herokidsuniverse.com with the story name. We will look into it, remove it where needed, and return the credit used.",
           ],
         },
         {
@@ -84,7 +84,7 @@ export default function TermsPage() {
           title: "Payments and refunds",
           body: [
             "Payments are processed by Razorpay. We do not store card, UPI or net-banking details.",
-            "Digital purchases (credits, slots, refreshes) are generally non-refundable once delivered to your account, except where a payment was taken but the purchase did not reach your account, or where the law requires a refund. For help with a payment or refund, contact support@accurateitsolution.in.",
+            "Digital purchases (credits, slots, refreshes) are generally non-refundable once delivered to your account, except where a payment was taken but the purchase did not reach your account, or where the law requires a refund. For help with a payment or refund, contact support@herokidsuniverse.com.",
           ],
         },
         {
@@ -117,7 +117,7 @@ export default function TermsPage() {
         {
           title: "Contact",
           body: [
-            "Questions about these Terms, content, payments, orders or your account: support@accurateitsolution.in.",
+            "Questions about these Terms, content, payments, orders or your account: support@herokidsuniverse.com.",
           ],
         },
       ]}

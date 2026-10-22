@@ -1495,7 +1495,7 @@ export default function StoryReaderPage() {
         <p className="text-white/40 text-[11px] text-center max-w-md leading-relaxed">
           This story, its pictures and narration were made by AI and checked for child safety. Please read it before sharing it with your child.{" "}
           <a
-            href={`mailto:support@accurateitsolution.in?subject=${encodeURIComponent(`Problem with story: ${story.title ?? story.id}`)}`}
+            href={`mailto:support@herokidsuniverse.com?subject=${encodeURIComponent(`Problem with story: ${story.title ?? story.id}`)}`}
             className="underline hover:text-white/70"
           >
             Report a problem

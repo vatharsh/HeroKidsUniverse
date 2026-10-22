@@ -745,6 +745,7 @@ function CharactersPageContent() {
   async function handleDelete(id: string) {
     const token = getAccessToken();
     if (!token) return;
+    if (!window.confirm("Delete this character? Their avatar is deleted too, and the character slot stays used — deleting doesn't give the slot back.")) return;
     setDeleting(id);
     await fetch(`${BASE}/characters/${id}`, {
       method: "DELETE",
@@ -807,8 +808,8 @@ function CharactersPageContent() {
   const roleLabel = (role: CharRole | null) => ROLES.find(r => r.value === role)?.label ?? "Other";
   const heroName  = hero?.name?.trim() || "Hero";
   const heroGender = hero?.gender ?? "child";
-  // Use characters.length as the source of truth for used slots (economy counter can be stale)
-  const usedSlots = characters.length;
+  // Slots are used up when a character is created; deleting one doesn't give it back.
+  const usedSlots = Math.max(economy.characterSlotsUsed, characters.length);
   const canAddCharacter = economy.unlimitedCharacters || usedSlots < economy.characterSlotsTotal;
 
   return (
@@ -897,7 +898,7 @@ function CharactersPageContent() {
             </h2>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-white border border-ink/10 px-3 py-1 text-ink-mid font-semibold">
-                Characters Used: {usedSlots} / {economy.unlimitedCharacters ? "Unlimited" : economy.characterSlotsTotal}
+                Slots used: {usedSlots} / {economy.unlimitedCharacters ? "Unlimited" : economy.characterSlotsTotal}
               </span>
               <span className="rounded-full bg-white border border-ink/10 px-3 py-1 text-ink-mid font-semibold">
                 {economy.avatarRefreshTokens} Avatar Refresh{economy.avatarRefreshTokens !== 1 ? "es" : ""} remaining

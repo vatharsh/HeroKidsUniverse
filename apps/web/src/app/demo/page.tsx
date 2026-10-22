@@ -34,6 +34,24 @@ const POWERS = [
     badge: "Ep. 6",
     badgeColor: "bg-blue-600/80",
   },
+  {
+    icon: "🚀",
+    name: "Star Cruiser (gear)",
+    description: "Arjun's own starship, earned when he took the controls to save the Galaxy's lost shine. Earned in Episode 2.",
+    color: "from-violet-900/60 to-indigo-950/60",
+    border: "border-violet-600/40",
+    badge: "Ep. 2",
+    badgeColor: "bg-violet-600/80",
+  },
+  {
+    icon: "💎",
+    name: "Starlight Crystal (legendary item)",
+    description: "The last spark of the Galaxy's starlight, now glowing in Arjun's pocket. Earned in Episode 6.",
+    color: "from-sky-900/60 to-cyan-950/60",
+    border: "border-sky-600/40",
+    badge: "Ep. 6",
+    badgeColor: "bg-sky-600/80",
+  },
 ];
 
 const MEMORIES = [
@@ -43,7 +61,7 @@ const MEMORIES = [
     color: "border-red-700/40 bg-red-950/30",
     labelColor: "text-red-400",
     label: "Villain Defeated",
-    episode: "Episode 9",
+    episode: "Episode 7",
     title: "The Shadow Swirl vanishes into the void",
     description: "After a 3-episode chase across The Nebula Corridors, Arjun used Cosmic Flame and Star Shield together to destroy The Shadow Swirl — but its final words hinted at a master plan.",
   },
@@ -53,7 +71,7 @@ const MEMORIES = [
     color: "border-blue-700/40 bg-blue-950/30",
     labelColor: "text-blue-400",
     label: "Character Met",
-    episode: "Episode 5",
+    episode: "Episode 1",
     title: "Nova the Robotic Star Guardian bonds with Arjun",
     description: "A crashed star-ship revealed Nova — a robot built to protect the galaxy's youngest heroes. Nova now appears in every future episode and remembers everything Arjun has ever done.",
   },
@@ -63,9 +81,9 @@ const MEMORIES = [
     color: "border-emerald-700/40 bg-emerald-950/30",
     labelColor: "text-emerald-400",
     label: "Location Discovered",
-    episode: "Episode 7",
-    title: "The Crystal Realm unlocked",
-    description: "Beyond the Nebula Corridors lies a world made entirely of resonant crystal. No hero has ever entered it. The door opened at the end of Episode 7 — and it's waiting.",
+    episode: "Episode 4",
+    title: "Glimma Meadows discovered",
+    description: "A bright world of flowers and friendly Glimma creatures — who warned Arjun that the Shadow Swirl had stolen their starlight. Arjun can return here in any future episode.",
   },
   {
     type: "power_earned",
@@ -106,14 +124,14 @@ export default function DemoUniversePage() {
         <div className="relative max-w-5xl mx-auto">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-gold text-xs font-bold tracking-widest uppercase">SAMPLE UNIVERSE · DEMO</span>
-            <span className="bg-brand/20 text-brand text-[10px] font-black px-2 py-0.5 rounded-full border border-brand/30 uppercase tracking-wide">Live Preview</span>
+            
           </div>
 
           <h1 className="font-[family-name:var(--font-display)] text-white text-4xl md:text-5xl lg:text-6xl mb-2">
             Arjun&apos;s Starfire Chronicles
           </h1>
           <p className="text-white/55 text-base italic mb-6">
-            &ldquo;One hero. One universe. Nine adventures — and it never truly ends.&rdquo;
+            &ldquo;One hero. One universe. Eight adventures — and it never truly ends.&rdquo;
           </p>
 
           <div className="flex items-center gap-2 mb-8">
@@ -126,8 +144,9 @@ export default function DemoUniversePage() {
           {/* Stats */}
           <div className="flex flex-wrap gap-3">
             {[
-              { icon: "📖", value: "9", label: "Episodes" },
+              { icon: "📖", value: "8", label: "Episodes" },
               { icon: "⚡", value: "3", label: "Powers" },
+              { icon: "🎒", value: "2", label: "Gear" },
               { icon: "🤖", value: "1", label: "Companion" },
               { icon: "⚔️", value: "1", label: "Villain Defeated" },
               { icon: "🌍", value: "1", label: "World Unlocked" },
@@ -187,10 +206,10 @@ export default function DemoUniversePage() {
         <section>
           <div className="flex items-center gap-3 mb-6">
             <div className="w-1 h-7 bg-gold rounded-full" />
-            <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl">Powers Earned Forever</h2>
+            <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl">Powers &amp; Gear Earned Forever</h2>
           </div>
           <p className="text-ink-muted text-sm mb-6 max-w-2xl">
-            Every power Arjun earns is remembered across all future episodes. The universe keeps building.
+            Every power and every item Arjun earns is remembered across all future episodes. The universe keeps building.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             {POWERS.map((p) => (
@@ -224,10 +243,10 @@ export default function DemoUniversePage() {
               🤖
             </div>
             <div>
-              <p className="text-cyan-400 text-xs font-bold tracking-widest uppercase mb-1">PERMANENT COMPANION · SINCE EPISODE 5</p>
+              <p className="text-cyan-400 text-xs font-bold tracking-widest uppercase mb-1">PERMANENT COMPANION · SINCE EPISODE 1</p>
               <h3 className="font-[family-name:var(--font-display)] text-white text-2xl mb-2">Nova the Robotic Star Guardian</h3>
               <p className="text-white/60 text-sm leading-relaxed max-w-2xl">
-                Nova was discovered in a crashed star-ship during Episode 5. Built by an ancient civilization to protect the galaxy&apos;s youngest heroes, Nova bonded with Arjun permanently.
+                Nova appeared at Arjun&apos;s window in Episode 1, asking for help on a mission. Built by an ancient civilization to protect the galaxy&apos;s youngest heroes, Nova bonded with Arjun permanently.
                 She appears in every future episode, remembers every adventure, and her memory banks grow with the universe — including the secrets she&apos;s keeping about The Crystal Realm.
               </p>
               <div className="flex flex-wrap gap-2 mt-4">
@@ -280,11 +299,11 @@ export default function DemoUniversePage() {
                 🌍
               </div>
               <div>
-                <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-1">NEXT ARC TEASED · EPISODE 10</p>
+                <p className="text-emerald-400 text-xs font-bold tracking-widest uppercase mb-1">NEXT ARC TEASED · EPISODE 9</p>
                 <h3 className="font-[family-name:var(--font-display)] text-white text-2xl mb-2">The Crystal Realm Awaits</h3>
                 <p className="text-white/60 text-sm leading-relaxed max-w-2xl">
-                  The door to the Crystal Realm cracked open at the end of Episode 7. A world made entirely of resonant crystal — no hero has ever entered it.
-                  Nova holds the coordinates. The Shadow Swirl&apos;s last words mentioned it. And now, in Episode 10, Arjun must decide: step through the door, or let the universe forget.
+                  The door to the Crystal Realm cracked open at the end of Episode 8. A world made entirely of resonant crystal — no hero has ever entered it.
+                  Nova holds the coordinates. The Shadow Swirl&apos;s last words mentioned it. And now, in Episode 9, Arjun must decide: step through the door, or let the universe forget.
                 </p>
               </div>
             </div>
@@ -357,7 +376,7 @@ export default function DemoUniversePage() {
               Every universe is unique.<br />Every hero is real.
             </h2>
             <p className="text-white/55 text-base max-w-xl mx-auto mb-8">
-              Arjun&apos;s universe took 9 episodes to build. Yours starts with one. Create your child&apos;s personalised hero universe — it grows with them forever.
+              Arjun&apos;s universe took 8 episodes to build. Yours starts with one. Create your child&apos;s personalised hero universe — it grows with them forever.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link

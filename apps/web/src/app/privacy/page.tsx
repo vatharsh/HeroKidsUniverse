@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Hero Kids Universe",
+  title: "Privacy Policy",
   description: "Privacy Policy for Hero Kids Universe by Accurate IT Solution.",
 };
 
@@ -19,7 +19,7 @@ export default function PrivacyPage() {
           title: "Who we are",
           body: [
             "Hero Kids Universe is operated by Accurate IT Solution, 136 Industrial Area Phase-2, Panchkula, Haryana, 134113, India (\"we\", \"us\").",
-            "For anything about privacy, your data, or this policy, write to support@accurateitsolution.in. This address also reaches our Grievance Officer (see \"Questions and complaints\" below).",
+            "For anything about privacy, your data, or this policy, write to support@herokidsuniverse.com. This address also reaches our Grievance Officer (see \"Questions and complaints\" below).",
           ],
         },
         {
@@ -87,7 +87,7 @@ export default function PrivacyPage() {
           title: "Your rights",
           body: [
             "As the parent or guardian you can ask us to show you the information we hold, correct it, delete it, or withdraw your consent. Withdrawing consent means we will delete your children's information and you will no longer be able to create stories for them.",
-            "Write to support@accurateitsolution.in from your account's email address. We will reply within 30 days.",
+            "Write to support@herokidsuniverse.com from your account's email address. We will reply within 30 days.",
           ],
         },
         {
@@ -100,7 +100,7 @@ export default function PrivacyPage() {
         {
           title: "Questions and complaints",
           body: [
-            "Grievance Officer, Accurate IT Solution, 136 Industrial Area Phase-2, Panchkula, Haryana, 134113, India. Email: support@accurateitsolution.in. We acknowledge complaints within 2 working days and aim to resolve them within 30 days.",
+            "Grievance Officer, Accurate IT Solution, 136 Industrial Area Phase-2, Panchkula, Haryana, 134113, India. Email: support@herokidsuniverse.com. We acknowledge complaints within 2 working days and aim to resolve them within 30 days.",
             "If you are not satisfied with our answer, you may approach the Data Protection Board of India.",
           ],
         },

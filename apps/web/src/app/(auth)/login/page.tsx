@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, type FormEvent, useState } from "react";
+import { Suspense, type FormEvent, useState, useSyncExternalStore } from "react";
 
 import Logo from "@/components/shared/Logo";
 import { ApiError, useAuth } from "@/contexts/AuthContext";
@@ -16,6 +16,8 @@ function LoginPageInner() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // False in the server HTML, true once the page is interactive — stops an early Enter from just reloading the page.
+  const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -119,7 +121,7 @@ function LoginPageInner() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !ready}
             className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all hover:scale-[1.02] shadow-brand"
           >
             {loading ? "Signing in…" : "Sign In →"}

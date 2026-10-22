@@ -92,7 +92,7 @@ export default function TrustSection() {
             <span className="text-3xl">💬</span>
             <div>
               <p className="text-white font-semibold text-sm">Questions? We answer.</p>
-              <p className="text-white/45 text-xs">hello@herokidsuniverse.com</p>
+              <p className="text-white/45 text-xs">support@herokidsuniverse.com</p>
             </div>
           </div>
         </div>

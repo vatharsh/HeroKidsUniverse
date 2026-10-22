@@ -30,7 +30,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://herokidsuniverse.c
 export const metadata: Metadata = {
   // Makes share-preview images absolute URLs (WhatsApp/Instagram need them).
   metadataBase: new URL(SITE_URL),
-  title: "Hero Kids Universe — Your Child, The Hero",
+  title: { default: "Hero Kids Universe — Your Child, The Hero", template: "%s · Hero Kids Universe" },
   description:
     "Create a personalized illustrated storybook where your child is the hero. Upload a photo, choose an adventure, and receive a comic with narration and printable PDF.",
   keywords: ["personalized storybook", "kids stories", "AI storybook", "children books", "hero story"],

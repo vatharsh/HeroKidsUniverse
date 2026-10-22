@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const image = picture ? absolute(picture).replace(/\.(png|jpe?g)$/i, ".preview.webp") : undefined;
 
   return {
-    title,
+    title: { absolute: title }, // already includes the brand; skip the site-wide " · Hero Kids Universe" suffix
     description,
     robots: { index: false, follow: true },
     openGraph: { title, description, type: "article", ...(image ? { images: [{ url: image, width: 640 }] } : {}) },

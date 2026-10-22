@@ -53,7 +53,7 @@ export default function AccountCharactersPage() {
   }, []);
 
   async function deleteChar(id: string) {
-    if (!confirm("Delete this character? This cannot be undone.")) return;
+    if (!confirm("Delete this character? This cannot be undone, and the character slot stays used — deleting doesn't give the slot back.")) return;
     const token = getAccessToken();
     await fetch(`${BASE}/characters/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
     setCharacters(prev => prev.filter(c => c.id !== id));
