@@ -105,7 +105,7 @@ export default function DemoUniversePage() {
 
         <div className="relative max-w-5xl mx-auto">
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-gold text-xs font-bold tracking-widest uppercase">REAL EXAMPLE · DEMO UNIVERSE</span>
+            <span className="text-gold text-xs font-bold tracking-widest uppercase">SAMPLE UNIVERSE · DEMO</span>
             <span className="bg-brand/20 text-brand text-[10px] font-black px-2 py-0.5 rounded-full border border-brand/30 uppercase tracking-wide">Live Preview</span>
           </div>
 

@@ -100,7 +100,7 @@ export default function StoryBook() {
             <div className="min-w-0">
               <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-gold/35 bg-gold/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-gold-light shadow-[0_0_22px_rgba(245,158,11,0.14)]">
                 <Sparkles className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate">Real Story</span>
+                <span className="truncate">Sample Story</span>
               </div>
               <p className="mt-2 truncate font-[family-name:var(--font-display)] text-xl leading-none text-white sm:text-2xl">
                 Arjun's Universe

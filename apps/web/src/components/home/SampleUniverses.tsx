@@ -251,7 +251,7 @@ export default function SampleUniverses() {
                   </span>
                   {u.isReal && (
                     <span className="bg-gold/80 text-black text-[10px] font-black px-2 py-0.5 rounded-full">
-                      REAL STORY
+                      SAMPLE STORY
                     </span>
                   )}
                 </div>
