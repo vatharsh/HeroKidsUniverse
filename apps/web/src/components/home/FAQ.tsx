@@ -11,7 +11,7 @@ const faqs = [
   },
   {
     q: "How long does it take to generate a story?",
-    a: "Most stories are ready in 2–4 minutes. Our AI generates the text, creates illustrated pages, records the narration, and assembles your PDF — all automatically.",
+    a: "Usually about 3–7 minutes. Our AI writes the story, illustrates every page, checks it for child safety and records the narration. You don't need to wait on the page — we email you the moment it's ready.",
   },
   {
     q: "Is my child's photo stored on your servers?",
@@ -19,11 +19,15 @@ const faqs = [
   },
   {
     q: "Can I print the storybook?",
-    a: "Absolutely — every story comes as a print-ready PDF. You can print it at home or at any print shop. The pages are sized for A4 and US Letter.",
+    a: "Yes. Open any story and tap PDF to save all its pages as a PDF, then print it at home or at a print shop. You can also make a video of the story to share on WhatsApp.",
   },
   {
     q: "What are credits and do they expire?",
-    a: "1 credit = 1 complete story (cover, 8 illustrated pages, narration, PDF). Credits never expire — use them whenever you like.",
+    a: "1 credit = 1 complete story: illustrated pages, narration, and PDF and video downloads. Credits never expire — use them whenever you like. If a story ever fails, the credit comes back automatically.",
+  },
+  {
+    q: "Do the stories continue from one to the next?",
+    a: "Yes — that's what makes Hero Kids Universe different. Your child's universe remembers everything: powers and gear they've earned, friends they've met, quests still open, and villains who escaped. Each new episode picks up from there, so the adventure keeps growing.",
   },
   {
     q: "Can I add family members or pets to the stories?",
@@ -31,7 +35,7 @@ const faqs = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. You can generate one sample story page completely free — no account or credit card required. If you love it (you will), create a full story from ₹149.",
+    a: "Yes. Every new account gets a free 3-page preview story — no credit card needed. If you love it (you will), full stories start at ₹149.",
   },
 ];
 
