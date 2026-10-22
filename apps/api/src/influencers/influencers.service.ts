@@ -24,6 +24,7 @@ import { InfluencerPayout, PayoutStatus } from './influencer-payout.entity';
 import { InfluencerWallet } from './influencer-wallet.entity';
 import { Influencer, InfluencerStatus } from './influencer.entity';
 import { isInfluencerProgramEnabled } from './influencer-program';
+import { isGlobalSandbox } from '../common/sandbox';
 
 export interface CouponValidationResult {
   valid: boolean;
@@ -538,6 +539,7 @@ export class InfluencersService implements OnModuleInit {
           name: dto.name,
           role: UserRole.Influencer,
           credits: 0,
+          isTestAccount: await isGlobalSandbox(this.dataSource), // pre-launch accounts are test accounts
         }));
         linkedUserId = user.id;
       }
@@ -760,6 +762,7 @@ export class InfluencersService implements OnModuleInit {
           name: influencer.name,
           role: UserRole.Influencer,
           credits: 0,
+          isTestAccount: await isGlobalSandbox(this.dataSource), // pre-launch accounts are test accounts
         }));
         influencer.userId = user.id;
       } else {

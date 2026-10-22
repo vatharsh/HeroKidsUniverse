@@ -28,7 +28,8 @@ const GROUPS: SettingGroup[] = [
     title: "Mode",
     description: "Pre-launch vs live. Decides whether new orders, stories and AI usage are counted as test data or real business.",
     items: [
-      { key: "SANDBOX_MODE", label: "Sandbox Mode", description: "Launch switch. ON = everything created from now on is test data (pre-launch). Turn OFF at launch — then only users marked as Test account create test data. Never relabels existing records.", type: "boolean" },
+      { key: "SANDBOX_MODE", label: "Sandbox Mode", description: "Launch switch. ON = everything created from now on is test data, and every new account is a Test account (pre-launch). Turn OFF at launch — new accounts are then real, and only users marked as Test account create test data. Never relabels existing records or accounts.", type: "boolean" },
+      { key: "TEST_ACCOUNT_STORY_LIMIT", label: "Test Account Story Limit", description: "Most stories a Test account can create. Failed stories are refunded and don't count; deleting a story doesn't free a slot. Admin accounts are exempt. Default: 2.", type: "number" },
     ],
   },
   {

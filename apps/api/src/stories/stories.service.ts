@@ -1,8 +1,8 @@
 import { BadRequestException, ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 
-import { PlatformSetting } from '../admin/platform-setting.entity';
+import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
 import { Character } from '../characters/entities/character.entity';
 import { CompanionsService } from '../companions/companions.service';
 import { CompanionType } from '../companions/entities/universe-companion.entity';
@@ -14,7 +14,7 @@ import { Quest } from '../quests/quest.entity';
 import { UniverseMemory } from '../universes/universe-memory.entity';
 import { Universe } from '../universes/universe.entity';
 import { UploadService } from '../upload/upload.service';
-import { User } from '../users/user.entity';
+import { User, UserRole } from '../users/user.entity';
 import { CreateStoryDto } from './dto/create-story.dto';
 import { storyAssetUrls } from './story-assets';
 import { Story, StoryMode, StoryStatus } from './story.entity';
@@ -46,6 +46,31 @@ export class StoriesService {
     private readonly uploadService: UploadService,
     private readonly safety: ContentSafetyService,
   ) {}
+
+  /**
+   * Test accounts (pre-launch) may create only TEST_ACCOUNT_STORY_LIMIT stories, to keep AI spend down.
+   * Counted from the credit history, so deleting a story doesn't free a slot; failed (refunded) stories
+   * don't count. Runs under the user-row lock, so parallel requests can't slip past it.
+   */
+  private async assertTestAccountAllowance(manager: EntityManager, user: User): Promise<void> {
+    if (!user.isTestAccount || user.role === UserRole.Admin) return;
+    const row = await manager.findOne(PlatformSetting, { where: { key: 'TEST_ACCOUNT_STORY_LIMIT' } });
+    const limit = Number(row?.value ?? SETTING_DEFAULTS.TEST_ACCOUNT_STORY_LIMIT.value);
+    if (!Number.isFinite(limit)) return;
+    const [{ used }] = await manager.query(
+      `SELECT COUNT(*)::int AS used FROM credit_transactions g
+        WHERE g."userId" = $1 AND g.reason = $2
+          AND NOT EXISTS (SELECT 1 FROM credit_transactions r
+                           WHERE r."userId" = $1 AND r.reason = $3 AND r."referenceId" = g."referenceId")`,
+      [user.id, CreditTransactionReason.StoryGeneration, CreditTransactionReason.Refund],
+    );
+    if (used >= limit) {
+      throw new HttpException(
+        `This is a test account — test accounts can create only ${limit} ${limit === 1 ? 'story' : 'stories'}, and this one has already made ${used}.`,
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
 
   async create(userId: string, createStoryDto: CreateStoryDto): Promise<Story> {
     await this.safety.assertSafeInput({ storyContext: createStoryDto.storyContext, companionName: createStoryDto.companionName }, userId);
@@ -120,6 +145,7 @@ export class StoriesService {
         where: { id: userId },
         lock: { mode: 'pessimistic_write' },
       });
+      await this.assertTestAccountAllowance(manager, user);
 
       // Paid credits are always used first; the free preview (a shorter story) only when none are left.
       const isPreview = user.credits < 1 && user.previewCredits > 0;

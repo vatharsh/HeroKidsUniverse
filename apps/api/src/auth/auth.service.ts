@@ -136,6 +136,8 @@ export class AuthService {
         previewCredits: freePreviewStories,
         referredBy,
         isSandbox,
+        // Before launch (Sandbox Mode on) every new account is a test account; real accounts start at go-live.
+        isTestAccount: isSandbox,
         termsAcceptedAt: new Date(),
         termsVersion: TERMS_VERSION,
       }),
