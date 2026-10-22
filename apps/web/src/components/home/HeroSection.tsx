@@ -15,7 +15,7 @@ export default function HeroSection() {
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-gold/10 rounded-full blur-[100px] pointer-events-none" />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 pt-44 pb-24 w-full flex flex-col lg:flex-row items-center gap-16">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 pt-32 md:pt-40 pb-24 w-full flex flex-col lg:flex-row items-center lg:items-start gap-16">
         {/* Left — text */}
         <div className="flex-1 flex flex-col gap-7">
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur border border-gold/30 text-gold text-sm font-semibold px-4 py-1.5 rounded-full w-fit">
