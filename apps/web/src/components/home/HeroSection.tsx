@@ -57,6 +57,7 @@ export default function HeroSection() {
               "✓ Powers earned across episodes",
               "✓ Universe memory — never forgets",
               "✓ Photo deleted instantly after avatar",
+              "🔒 Built for India's DPDP Act",
             ].map((pill) => (
               <span
                 key={pill}

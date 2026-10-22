@@ -77,15 +77,15 @@ export default function TrustSection() {
           <div className="flex items-center gap-3">
             <span className="text-3xl">🔐</span>
             <div>
-              <p className="text-white font-semibold text-sm">Data never leaves India</p>
-              <p className="text-white/45 text-xs">Hosted on Indian servers · DPDP Act compliant</p>
+              <p className="text-white font-semibold text-sm">Built for India&apos;s DPDP Act</p>
+              <p className="text-white/45 text-xs">Parent consent at sign-up · Delete stories any time · No ads, no data selling</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-3xl">👶</span>
+            <span className="text-3xl">👪</span>
             <div>
-              <p className="text-white font-semibold text-sm">COPPA-aware design</p>
-              <p className="text-white/45 text-xs">No child data collected beyond what&apos;s essential</p>
+              <p className="text-white font-semibold text-sm">Parents-only accounts</p>
+              <p className="text-white/45 text-xs">Children never sign up or log in — we keep only what the story needs</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
