@@ -49,7 +49,6 @@ export default function AccountProfilePage() {
 
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-7 h-7 animate-spin text-brand" /></div>;
 
-  const planLabel = profile?.plan ? profile.plan.charAt(0).toUpperCase() + profile.plan.slice(1) : "Basic";
   const memberSince = profile ? new Date(profile.createdAt).toLocaleDateString("en-IN", { month: "long", year: "numeric" }) : "";
 
   return (
@@ -146,8 +145,6 @@ export default function AccountProfilePage() {
                 { label: "Full Name", value: profile?.name },
                 { label: "Email", value: profile?.email },
                 { label: "Phone", value: profile?.phone ?? "—" },
-                { label: "Plan", value: planLabel },
-                { label: "Referral Code", value: profile?.referralCode ?? "—" },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between py-2 border-b border-ink/6 last:border-0">
                   <span className="text-ink-muted text-sm">{row.label}</span>
@@ -160,12 +157,11 @@ export default function AccountProfilePage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         {[
           { icon: "⚡", label: "Credits", value: profile?.credits ?? 0 },
           { icon: "👥", label: "Char Slots", value: `${profile?.characterSlotsUsed ?? 0}/${profile?.characterSlotsTotal ?? 3}` },
           { icon: "🔄", label: "Avatar Refreshes", value: profile?.avatarRefreshTokens ?? 0 },
-          { icon: "🌟", label: "Plan", value: planLabel },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-ink/10 p-4 text-center shadow-sm">
             <p className="text-2xl mb-1">{s.icon}</p>

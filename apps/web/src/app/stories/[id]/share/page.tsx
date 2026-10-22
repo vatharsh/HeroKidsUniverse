@@ -3,6 +3,8 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { resolveMediaUrl } from "@/lib/media-url";
+
 interface StoryPage {
   pageNumber: number;
   text: string;
@@ -76,7 +78,7 @@ export default function StorySharePage() {
   const isLastPage = page === totalPages - 1;
 
   const panelIdx = Math.min(currentPage?.pageNumber ?? page + 1, 8);
-  const src = currentPage?.imageUrl ?? `/story-panels/page_${panelIdx}.png`;
+  const src = currentPage?.imageUrl ? resolveMediaUrl(currentPage.imageUrl) : `/story-panels/page_${panelIdx}.png`;
 
   return (
     <div className="min-h-screen bg-space-gradient flex flex-col">
@@ -84,7 +86,7 @@ export default function StorySharePage() {
       <header className="flex items-center justify-between px-6 py-4 bg-space/80 backdrop-blur border-b border-white/10">
         <a href="/"
           className="font-[family-name:var(--font-display)] text-white text-base hover:text-gold transition">
-          HeroVerse ✨
+          Hero Kids Universe ✨
         </a>
         <div className="flex items-center gap-3">
           <span className="text-white/40 text-sm">{page + 1} / {totalPages}</span>
@@ -181,7 +183,7 @@ export default function StorySharePage() {
         <div className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-center mt-2">
           <p className="text-white/60 text-sm mb-1">Want your child to be the hero?</p>
           <p className="font-[family-name:var(--font-display)] text-white text-lg mb-4">
-            Create a free personalised story in 60 seconds
+            Make them the hero of their own story series
           </p>
           <a
             href="/register"
@@ -189,7 +191,7 @@ export default function StorySharePage() {
           >
             Start Free →
           </a>
-          <p className="text-white/30 text-xs mt-3">No credit card · First story free</p>
+          <p className="text-white/30 text-xs mt-3">Free preview story · No credit card</p>
         </div>
       </main>
     </div>

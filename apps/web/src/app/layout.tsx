@@ -25,7 +25,11 @@ const bangers = Bangers({
   display: "swap",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://herokidsuniverse.com";
+
 export const metadata: Metadata = {
+  // Makes share-preview images absolute URLs (WhatsApp/Instagram need them).
+  metadataBase: new URL(SITE_URL),
   title: "Hero Kids Universe — Your Child, The Hero",
   description:
     "Create a personalized illustrated storybook where your child is the hero. Upload a photo, choose an adventure, and receive a comic with narration and printable PDF.",
@@ -35,7 +39,9 @@ export const metadata: Metadata = {
     description:
       "Upload your child's photo and watch them become the hero of their own illustrated adventure story.",
     type: "website",
+    siteName: "Hero Kids Universe",
   },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({

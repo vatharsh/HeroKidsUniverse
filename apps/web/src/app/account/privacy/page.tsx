@@ -117,8 +117,8 @@ export default function PrivacyPage() {
                 <p className="text-sm font-semibold text-red-600">Request Account Deletion</p>
                 <p className="text-xs text-ink-muted mt-0.5">
                   To delete your account and all associated data, email us at{" "}
-                  <a href="mailto:privacy@herokidsuniverse.com" className="text-brand underline">
-                    privacy@herokidsuniverse.com
+                  <a href="mailto:support@herokidsuniverse.com" className="text-brand underline">
+                    support@herokidsuniverse.com
                   </a>
                   . We will process your request within 30 days.
                 </p>
@@ -130,8 +130,8 @@ export default function PrivacyPage() {
 
       <p className="text-ink-muted text-xs leading-relaxed">
         For questions about privacy, contact us at{" "}
-        <a href="mailto:privacy@herokidsuniverse.com" className="text-brand underline">
-          privacy@herokidsuniverse.com
+        <a href="mailto:support@herokidsuniverse.com" className="text-brand underline">
+          support@herokidsuniverse.com
         </a>
         . We are committed to protecting your family&apos;s privacy.
       </p>

@@ -51,6 +51,7 @@ import { layoutBubbles } from './bubble-layout';
 import { GenerationJob, JobStatus } from './generation-job.entity';
 import { MailService } from '../mail/mail.service';
 import { storyReadyEmail } from '../mail/story-ready-email';
+import { UserNotificationPreferences } from '../users/user-notification-preferences.entity';
 
 const THEME_LABELS: Record<StoryTheme, string> = {
   [StoryTheme.SpaceAdventure]: 'an exciting space adventure with rockets, planets, and alien friends',
@@ -666,6 +667,9 @@ export class GenerationService implements OnModuleInit {
       if (!story) return;
       const user = await this.usersRepo.findOne({ where: { id: story.userId } });
       if (!user?.email) return;
+      // Respect Account → Notifications → "Story Generation Updates" (on unless switched off).
+      const prefs = await this.usersRepo.manager.findOne(UserNotificationPreferences, { where: { userId: user.id } });
+      if (prefs && prefs.storyUpdates === false) return;
       await this.mail.send(storyReadyEmail({
         to: user.email,
         parentName: user.name || 'there',

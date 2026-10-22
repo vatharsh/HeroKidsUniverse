@@ -6,6 +6,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
+import PreviewImg from "@/components/shared/PreviewImg";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
@@ -678,7 +679,7 @@ export default function StoryReaderPage() {
               const hasAnything = recapData.memoriesEarned?.length > 0 ||
                 recapData.powersEarned?.length > 0 ||
                 recapData.questsOpened?.length > 0 ||
-                recapData.cliffhanger;
+                (recapData.cliffhanger && data.universeId); // one-off stories don't show the cliffhanger
               if (hasAnything) {
                 setRecap(recapData as Recap);
                 setShowRecap(true);
@@ -915,7 +916,14 @@ export default function StoryReaderPage() {
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="text-5xl mb-3 animate-bounce">🎉</div>
+            {story.coverImageUrl ? (
+              <div className="relative w-36 mx-auto mb-4">
+                <PreviewImg src={story.coverImageUrl} alt={story.title ?? "Story cover"} className="w-36 aspect-[376/499] object-cover rounded-2xl border border-white/20 shadow-2xl" />
+                <span className="absolute -top-3 -right-3 text-3xl animate-bounce">🎉</span>
+              </div>
+            ) : (
+              <div className="text-5xl mb-3 animate-bounce">🎉</div>
+            )}
             <p className="text-gold text-xs font-bold tracking-widest uppercase mb-2">{inUniverse ? "Episode Complete" : "Story Complete"}</p>
             <h1 className="font-[family-name:var(--font-display)] text-white text-3xl mb-1">
               {story.title ?? (inUniverse ? "Episode Complete!" : "Story Complete!")}
@@ -1254,40 +1262,28 @@ export default function StoryReaderPage() {
         </div>
       </header>
 
-      {/* Story Visual State — costume/companion/weapon locked for this story */}
-      {story.storyVisualState && (
-        <div className="no-print bg-space/60 border-b border-white/8 px-4 py-2">
-          <div className="max-w-lg mx-auto flex items-center gap-3 overflow-x-auto scrollbar-none">
-            {story.storyVisualState.costume && (
-              <span className="flex items-center gap-1.5 text-xs text-white/60 whitespace-nowrap">
-                <span className="text-base">🦸</span> {story.storyVisualState.costume}
-              </span>
-            )}
-            {story.storyVisualState.companion && (
-              <>
-                <span className="text-white/20">·</span>
-                <span className="flex items-center gap-1.5 text-xs text-white/60 whitespace-nowrap">
-                  <span className="text-base">🐾</span> {story.storyVisualState.companion}
+      {/* What the hero brings into this story. (The costume line is the image-prompt text, so it isn't shown.) */}
+      {story.storyVisualState && (() => {
+        const vs = story.storyVisualState;
+        const chips = [
+          ...(vs.companion ? [{ icon: "🐾", label: vs.companion, accent: false }] : []),
+          ...(vs.weapon ? [{ icon: "⚔️", label: vs.weapon, accent: false }] : []),
+          ...vs.powers.map((p) => ({ icon: "⚡", label: p, accent: true })),
+        ];
+        if (chips.length === 0) return null;
+        return (
+          <div className="no-print bg-space/60 border-b border-white/8 px-4 py-2">
+            <div className="max-w-lg mx-auto flex items-center gap-2 overflow-x-auto scrollbar-none">
+              {chips.map((c, i) => (
+                <span key={`${c.icon}-${c.label}`} className={`flex items-center gap-1.5 text-xs whitespace-nowrap ${c.accent ? "text-brand-light/70" : "text-white/60"}`}>
+                  {i > 0 && <span className="text-white/20 mr-1">·</span>}
+                  <span className="text-base">{c.icon}</span> {c.label}
                 </span>
-              </>
-            )}
-            {story.storyVisualState.weapon && (
-              <>
-                <span className="text-white/20">·</span>
-                <span className="flex items-center gap-1.5 text-xs text-white/60 whitespace-nowrap">
-                  <span className="text-base">⚔️</span> {story.storyVisualState.weapon}
-                </span>
-              </>
-            )}
-            {story.storyVisualState.powers.map((p) => (
-              <span key={p} className="flex items-center gap-1 text-xs text-brand-light/70 whitespace-nowrap">
-                <span className="text-white/20 ml-1">·</span>
-                <span className="text-base">⚡</span> {p}
-              </span>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Page content */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-8 gap-6 max-w-lg mx-auto w-full">
