@@ -13,6 +13,7 @@ import { getAccessToken } from "@/lib/api";
 import { prepareImageUpload } from "@/lib/image-upload";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
+import CostumeField from "@/components/shared/CostumeField";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -393,7 +394,6 @@ interface HeroEditModalProps {
   onAvatarGenerated: (url: string) => void;
 }
 
-const COSTUME_PLACEHOLDER = "e.g. A glowing blue armored suit with a lightning bolt emblem — inspired by a space explorer look";
 
 function HeroEditModal({
   hero, avatarStats, customAvatars, onSave, onClose, onAvatarGenerated,
@@ -571,22 +571,7 @@ function HeroEditModal({
               </div>
             </div>
 
-            <div>
-              <label className="text-ink-mid text-sm font-medium block mb-1">
-                Hero&apos;s signature outfit
-                <span className="text-ink-muted font-normal text-xs ml-1">— used in universe adventures</span>
-              </label>
-              <textarea
-                value={costumeDescription}
-                onChange={(e) => setCostumeDescription(e.target.value)}
-                placeholder={COSTUME_PLACEHOLDER}
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none"
-              />
-              <p className="text-ink-muted text-[11px] mt-1">
-                Describe the style — we&apos;ll create an original design. One-off stories won&apos;t use this.
-              </p>
-            </div>
+            <CostumeField value={costumeDescription} onChange={setCostumeDescription} rows={3} />
 
             <button type="button" disabled={!canSave} onClick={handleSubmit}
               className="w-full bg-brand disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all enabled:hover:scale-[1.02] shadow-brand flex items-center justify-center gap-2">

@@ -7,6 +7,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Navbar from "@/components/layout/Navbar";
 import AvatarGenerateModal from "@/components/shared/AvatarGenerateModal";
 import AvatarPicker from "@/components/shared/AvatarPicker";
+import CostumeField from "@/components/shared/CostumeField";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { prepareImageUpload } from "@/lib/image-upload";
@@ -902,19 +903,7 @@ function CreatePageInner() {
                   })}
                 </div>
               </div>
-              <div>
-                <label className="text-ink-mid text-sm font-medium block mb-1.5">
-                  Hero&apos;s signature outfit <span className="text-ink-muted font-normal text-xs">— optional</span>
-                </label>
-                <textarea
-                  value={heroCostumeDescription}
-                  onChange={(e) => setHeroCostumeDescription(e.target.value)}
-                  rows={2}
-                  maxLength={200}
-                  placeholder="e.g. Red cape, blue mask, golden shield — or their favourite t-shirt"
-                  className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none text-sm"
-                />
-              </div>
+              <CostumeField value={heroCostumeDescription} onChange={setHeroCostumeDescription} />
             </div>
           </section>
         )}
