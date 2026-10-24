@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
 import MemoryMatch, { type MemoryFace } from "./MemoryMatch";
 import PotionMixer from "./PotionMixer";
 import TicTacToe from "./TicTacToe";
+import { themePack } from "./theme-packs";
 import UniverseQuiz, { type QuizQuestion } from "./UniverseQuiz";
 
 /**
  * Mini-games for the child while a story is being made (all on the device — no ads, no links out,
  * nothing saved). Memory cards and quiz questions come from the child's own universe; one-off
- * stories and brand-new accounts use Arjun's sample universe instead.
+ * stories and brand-new accounts get cards and a quiz matching the story's theme instead.
  */
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
@@ -23,9 +24,6 @@ interface UniverseData {
   memories?: Array<{ type: string; title: string }>;
 }
 interface CastMember { name: string; avatarUrl?: string | null }
-
-const SAMPLE_FACES: MemoryFace[] = [1, 2, 3, 4, 5, 7].map((n) => ({ key: `arjun-${n}`, label: "Arjun's adventure", image: `/story-panels/page_${n}.png` }));
-const EMOJI_FACES: MemoryFace[] = ["⚡", "🛡️", "🐉", "🚀", "🔮", "🌟"].map((e) => ({ key: `emoji-${e}`, label: e, emoji: e }));
 
 const DECOYS = {
   power: ["Ice Breath", "Invisible Shoes", "Thunder Clap", "Rubber Arms", "Laser Sneeze"],
@@ -60,14 +58,6 @@ function buildQuiz(hero: string, u: UniverseData | null, cast: CastMember[]): Qu
   ].filter((x): x is QuizQuestion => !!x);
 }
 
-const SAMPLE_QUIZ: QuizQuestion[] = [
-  { q: "In the sample universe, which power did Arjun earn?", answer: "Zero-G Speed", options: ["Ice Breath", "Zero-G Speed", "Rubber Arms"] },
-  { q: "Who stole the Galaxy's starlight?", answer: "The Shadow Swirl", options: ["Captain Grumble", "Professor Fog", "The Shadow Swirl"] },
-  { q: "What is the name of Arjun's robot friend?", answer: "Nova", options: ["Nova", "Bobo", "Zippy"] },
-  { q: "Which world did Arjun discover?", answer: "Glimma Meadows", options: ["Candy Volcano", "Glimma Meadows", "Cloud Castle"] },
-  { q: "Which legendary item did Arjun find?", answer: "Starlight Crystal", options: ["Starlight Crystal", "Golden Umbrella", "Rocket Skates"] },
-];
-
 const TABS = [
   { id: "ttt", label: "⭕ X-O" },
   { id: "memory", label: "🧠 Memory" },
@@ -76,8 +66,8 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-export default function WaitingGames({ heroName, heroAvatar, universeId, onPlay }: {
-  heroName: string; heroAvatar: string | null; universeId: string | null; onPlay?: () => void;
+export default function WaitingGames({ heroName, heroAvatar, universeId, theme, onPlay }: {
+  heroName: string; heroAvatar: string | null; universeId: string | null; theme?: string | null; onPlay?: () => void;
 }) {
   const [tab, setTab] = useState<TabId>("ttt");
   const [universe, setUniverse] = useState<UniverseData | null>(null);
@@ -113,10 +103,18 @@ export default function WaitingGames({ heroName, heroAvatar, universeId, onPlay 
   cast.forEach((c, i) => add(`cast-${i}`, c.name, c.avatarUrl));
   universe?.villains?.forEach((v, i) => add(`villain-${i}`, v.name, v.thumbnailUrl));
   universe?.powers?.forEach((p, i) => add(`power-${i}`, p.name, p.thumbnailUrl));
-  const faces = personal.length >= 3 ? [...personal, ...EMOJI_FACES].slice(0, 6) : SAMPLE_FACES;
+  // Not enough of their own pictures yet (first story, one-off): themed cards for this story, plus the hero.
+  const pack = themePack(theme);
+  const themeFaces: MemoryFace[] = pack.emojis.map((e) => ({ key: `theme-${e}`, label: e, emoji: e }));
+  const usePersonal = personal.length >= 3;
+  const faces = usePersonal ? [...personal, ...themeFaces].slice(0, 6) : [...personal.slice(0, 1), ...themeFaces].slice(0, 6);
 
-  const personalQuiz = buildQuiz(heroName, universe, cast);
-  const quiz = personalQuiz.length >= 3 ? personalQuiz : SAMPLE_QUIZ;
+  // Quiz about their own universe once there's enough history; until then, a fun quiz on this story's theme.
+  // Built once per data change, so answers don't reshuffle mid-question when the panel redraws.
+  const quiz = useMemo(() => {
+    const personalQuiz = buildQuiz(heroName, universe, cast);
+    return personalQuiz.length >= 3 ? personalQuiz : themePack(theme).quiz.map((x) => ({ ...x, options: shuffle(x.options) }));
+  }, [heroName, universe, cast, theme]);
   const companion = "Nova";
 
   return (
@@ -136,7 +134,7 @@ export default function WaitingGames({ heroName, heroAvatar, universeId, onPlay 
       ) : tab === "ttt" ? (
         <TicTacToe heroName={heroName} heroAvatar={heroAvatar} botName={companion} />
       ) : tab === "memory" ? (
-        <MemoryMatch key={faces.map((f) => f.key).join()} faces={faces} />
+        <MemoryMatch key={faces.map((f) => f.key).join()} faces={faces} title={usePersonal ? "Find the pairs from your universe" : "Find the matching pairs"} />
       ) : tab === "potion" ? (
         <PotionMixer />
       ) : (

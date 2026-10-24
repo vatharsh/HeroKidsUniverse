@@ -825,7 +825,9 @@ export default function StoryReaderPage() {
           <div className="text-center">
             <h1 className="font-[family-name:var(--font-display)] text-white text-2xl mb-2">{label}</h1>
             <p className="text-white/50 text-sm">
-              Building a new episode for <strong className="text-gold">{heroName}</strong>&apos;s universe
+              {story && !story.universeId
+                ? <>Creating <strong className="text-gold">{heroName}</strong>&apos;s new story</>
+                : <>Building a new episode for <strong className="text-gold">{heroName}</strong>&apos;s universe</>}
             </p>
           </div>
 
@@ -894,6 +896,7 @@ export default function StoryReaderPage() {
             heroName={heroName === "your hero" ? "Hero" : heroName}
             heroAvatar={story?.hero?.avatarUrl ?? null}
             universeId={story?.universeId ?? null}
+            theme={story?.theme ?? null}
             onPlay={() => setPlayingGame(true)}
           />
 

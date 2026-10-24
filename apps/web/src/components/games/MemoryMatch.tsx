@@ -15,7 +15,7 @@ function deal(faces: MemoryFace[]): Card[] {
 }
 
 /** Flip two cards, find the pairs — faces are the child's own villains, powers, gear and cast. */
-export default function MemoryMatch({ faces }: { faces: MemoryFace[] }) {
+export default function MemoryMatch({ faces, title = "Find the matching pairs" }: { faces: MemoryFace[]; title?: string }) {
   const [cards, setCards] = useState<Card[]>(() => deal(faces));
   const [open, setOpen] = useState<number[]>([]);
   const [matched, setMatched] = useState<Set<string>>(new Set());
@@ -42,7 +42,7 @@ export default function MemoryMatch({ faces }: { faces: MemoryFace[] }) {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <p className="text-white/70 text-sm">Find the pairs from your universe · {moves} moves</p>
+      <p className="text-white/70 text-sm">{title} · {moves} moves</p>
       <div className="grid grid-cols-4 gap-2 w-full max-w-xs">
         {cards.map((card) => {
           const shown = open.includes(card.id) || matched.has(card.face.key);
