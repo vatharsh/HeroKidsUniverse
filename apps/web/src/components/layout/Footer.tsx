@@ -30,7 +30,13 @@ export default function Footer() {
 
         <div className="flex justify-between items-center flex-wrap gap-4 pt-5 text-sm text-white/40">
           <p>Made with ✨ for magical childhoods · Stories, pictures and narration are AI-generated</p>
-          <p>© {new Date().getFullYear()} Accurate IT Solution. All rights reserved.</p>
+          <p>
+            © {new Date().getFullYear()}{" "}
+            <a href="https://accurateitsolution.in/" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white underline-offset-2 hover:underline transition">
+              Accurate IT Solution
+            </a>
+            . All rights reserved.
+          </p>
         </div>
       </div>
     </footer>
