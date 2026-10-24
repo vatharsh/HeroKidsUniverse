@@ -178,6 +178,62 @@ export class AdminService {
 
   // ── Dashboard ──────────────────────────────────────────────────────────────
 
+  /**
+   * Sign-up → paid funnel for the dashboard. Cohorts are parent accounts that signed up in the window;
+   * "live" leaves out sandbox users and accounts marked as Test, so our own testing never inflates it.
+   */
+  async getConversion(sandboxFilter?: boolean) {
+    const userFilter = sandboxFilter === undefined ? 'TRUE'
+      : sandboxFilter ? '(u."isSandbox" OR u."isTestAccount")' : '(NOT u."isSandbox" AND NOT u."isTestAccount")';
+    const funnel = async (days: number | null) => {
+      const [row] = await this.dataSource.query(
+        `WITH cohort AS (
+           SELECT u.id, u."emailVerifiedAt" FROM users u
+            WHERE u.role = 'parent' AND u."deletedAt" IS NULL AND ${userFilter}
+              AND ($1::int IS NULL OR u."createdAt" >= now() - make_interval(days => $1::int))),
+         previewed AS (SELECT DISTINCT "userId" FROM stories WHERE "isPreview" = true AND status <> 'failed'),
+         buys AS (SELECT "userId", COUNT(*)::int AS n, SUM("pricePaid")::numeric AS amount
+                    FROM credit_transactions WHERE reason = 'purchase' AND "pricePaid" > 0 GROUP BY "userId")
+         SELECT COUNT(*)::int AS signups,
+                COUNT(*) FILTER (WHERE c."emailVerifiedAt" IS NOT NULL)::int AS verified,
+                COUNT(*) FILTER (WHERE c.id IN (SELECT "userId" FROM previewed))::int AS previewed,
+                COUNT(b."userId")::int AS paid,
+                COUNT(*) FILTER (WHERE b.n >= 2)::int AS repeat,
+                COALESCE(SUM(b.n), 0)::int AS orders,
+                COALESCE(SUM(b.amount), 0)::float AS revenue
+           FROM cohort c LEFT JOIN buys b ON b."userId" = c.id`,
+        [days],
+      );
+      const pct = (n: number) => (row.signups ? Math.round((n / row.signups) * 1000) / 10 : 0);
+      return {
+        ...row,
+        verifiedPct: pct(row.verified), previewedPct: pct(row.previewed), paidPct: pct(row.paid), repeatPct: pct(row.repeat),
+        revenuePerSignup: row.signups ? Math.round(row.revenue / row.signups) : 0,
+      };
+    };
+    const [last7, last30, allTime] = await Promise.all([funnel(7), funnel(30), funnel(null)]);
+
+    const influencers = await this.dataSource.query(
+      `SELECT i.name, COUNT(c.id)::int AS orders, COUNT(DISTINCT c."userId")::int AS buyers,
+              COALESCE(SUM(c."orderTotal"), 0)::float AS revenue
+         FROM influencer_commissions c JOIN influencers i ON i.id = c."influencerId"
+         JOIN users u ON u.id = c."userId"
+        WHERE c."isDeleted" = false AND c.status <> 'cancelled' AND c."createdAt" >= now() - interval '30 days'
+          AND ${userFilter}
+        GROUP BY i.name ORDER BY revenue DESC LIMIT 10`,
+    );
+
+    const IST_TODAY = `(date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')`;
+    const [quota] = await this.dataSource.query(
+      `SELECT (SELECT COUNT(*)::int FROM stories WHERE "isPreview" = true AND status <> 'failed' AND "createdAt" >= ${IST_TODAY}) AS "previewsToday",
+              (SELECT COUNT(*)::int FROM preview_waitlist WHERE "notifiedAt" IS NULL) AS waiting,
+              (SELECT COUNT(*)::int FROM preview_waitlist WHERE "createdAt" >= ${IST_TODAY}) AS "turnedAwayToday"`,
+    );
+    const dailyLimit = await this.getSetting('FREE_PREVIEW_DAILY_LIMIT', 0);
+
+    return { last7, last30, allTime, influencers, previewQuota: { ...quota, dailyLimit } };
+  }
+
   async getDashboard(sandboxFilter?: boolean) {
     const [todayStart, monthStart] = this.getDateBounds();
     const [usdToInr, dailyWarning, monthlyWarning, dailyHardLimit, monthlyHardLimit, displayCurrency, sandboxMode] = await Promise.all([

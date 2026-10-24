@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { JwtSignOptions } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +17,7 @@ import { RegisterDto } from './dto/register.dto';
 import { EmailCodeService } from './email-code.service';
 import { isEmailVerificationRequired, needsEmailVerification } from './email-verification-policy';
 import { MailService } from '../mail/mail.service';
+import { isDisposableEmail } from './disposable-email';
 
 /** Bump when the Terms or Privacy Policy change materially (matches the date on those pages). */
 const TERMS_VERSION = '2026-10-21';
@@ -105,6 +106,9 @@ export class AuthService {
 
   async register(registerDto: RegisterDto): Promise<AuthTokensResponse> {
     const email = registerDto.email.toLowerCase();
+    if (isDisposableEmail(email)) {
+      throw new BadRequestException("Please sign up with your regular email address — temporary email addresses can't be used.");
+    }
     const existingUser = await this.usersRepository.findOne({ where: { email }, withDeleted: true });
 
     if (existingUser) {

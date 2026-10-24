@@ -88,6 +88,7 @@ import { UserAddress } from './users/user-address.entity';
 import { UserNotificationPreferences } from './users/user-notification-preferences.entity';
 import { User } from './users/user.entity';
 import { UsersModule } from './users/users.module';
+import { PreviewWaitlist } from './stories/preview-waitlist.entity';
 
 @Module({
   imports: [
@@ -116,6 +117,7 @@ import { UsersModule } from './users/users.module';
           UniverseMemory,
           UniverseVillain,
           EmailCode,
+          PreviewWaitlist,
           Quest,
           HeroPower,
           StoryArc,

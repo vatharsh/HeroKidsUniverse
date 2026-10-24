@@ -37,6 +37,11 @@ export class AdminController {
     @InjectRepository(HeroPower) private readonly powersRepo: Repository<HeroPower>,
   ) {}
 
+  @Get('conversion')
+  conversion(@Query('sandbox') sandbox?: string) {
+    return this.adminService.getConversion(sandbox === 'true' ? true : sandbox === 'false' ? false : undefined);
+  }
+
   @Get('dashboard')
   dashboard(@Query('sandbox') sandbox?: string) {
     const sandboxFilter = sandbox === 'true' ? true : sandbox === 'false' ? false : undefined;

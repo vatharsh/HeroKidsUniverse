@@ -17,6 +17,8 @@ import { UploadModule } from '../upload/upload.module';
 import { User } from '../users/user.entity';
 import { Story } from './story.entity';
 import { StoriesController } from './stories.controller';
+import { PreviewQuotaService } from './preview-quota.service';
+import { PreviewWaitlist } from './preview-waitlist.entity';
 import { StoriesService } from './stories.service';
 
 @Module({
@@ -32,6 +34,7 @@ import { StoriesService } from './stories.service';
       HeroPower,
       Quest,
       PlatformSetting,
+      PreviewWaitlist,
     ]),
     CharactersModule,
     CompanionsModule,
@@ -39,6 +42,7 @@ import { StoriesService } from './stories.service';
     UploadModule,
   ],
   controllers: [StoriesController],
-  providers: [StoriesService, VideoGenerationService],
+  providers: [StoriesService, VideoGenerationService, PreviewQuotaService],
+  exports: [PreviewQuotaService],
 })
 export class StoriesModule {}

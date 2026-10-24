@@ -7,6 +7,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import ConversionPanel from "@/components/admin/ConversionPanel";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -277,6 +278,8 @@ export default function AdminDashboardPage() {
           ))}
         </div>
       </div>
+
+      <ConversionPanel filter={sandboxFilter} />
 
       {/* Profitability widget */}
       <div className="mb-4">

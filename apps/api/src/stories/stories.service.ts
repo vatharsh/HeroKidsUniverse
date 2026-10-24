@@ -20,6 +20,7 @@ import { storyAssetUrls } from './story-assets';
 import { Story, StoryMode, StoryStatus } from './story.entity';
 import { ContentSafetyService } from '../ai/content-safety.service';
 import { isSandboxFor } from '../common/sandbox';
+import { PreviewQuotaService } from './preview-quota.service';
 
 @Injectable()
 export class StoriesService {
@@ -45,6 +46,7 @@ export class StoriesService {
     private readonly companionsService: CompanionsService,
     private readonly uploadService: UploadService,
     private readonly safety: ContentSafetyService,
+    private readonly previewQuota: PreviewQuotaService,
   ) {}
 
   /**
@@ -151,6 +153,10 @@ export class StoriesService {
       const isPreview = user.credits < 1 && user.previewCredits > 0;
       if (user.credits < 1 && !isPreview) {
         throw new HttpException('Not enough credits', HttpStatus.PAYMENT_REQUIRED);
+      }
+      if (isPreview) {
+        await this.previewQuota.assertPreviewAvailable(manager, user);
+        await this.previewQuota.clearWaitlist(manager, user.id);
       }
 
       if (isPreview) user.previewCredits -= 1;
