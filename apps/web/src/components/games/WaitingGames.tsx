@@ -109,11 +109,18 @@ export default function WaitingGames({ heroName, heroAvatar, universeId, theme, 
   const usePersonal = personal.length >= 3;
   const faces = usePersonal ? [...personal, ...themeFaces].slice(0, 6) : [...personal.slice(0, 1), ...themeFaces].slice(0, 6);
 
-  // Quiz about their own universe once there's enough history; until then, a fun quiz on this story's theme.
-  // Built once per data change, so answers don't reshuffle mid-question when the panel redraws.
+  // 5 questions for everyone: up to 3 about their own universe (whatever exists so far) and the rest
+  // about this story's theme. Built once per data change, so answers don't reshuffle mid-question.
   const quiz = useMemo(() => {
-    const personalQuiz = buildQuiz(heroName, universe, cast);
-    return personalQuiz.length >= 3 ? personalQuiz : themePack(theme).quiz.map((x) => ({ ...x, options: shuffle(x.options) }));
+    const personal = shuffle(buildQuiz(heroName, universe, cast)).slice(0, 3);
+    const generic = shuffle(themePack(theme).quiz).slice(0, 5 - personal.length)
+      .map((x) => ({ ...x, options: shuffle(x.options) }));
+    const mixed: QuizQuestion[] = [];
+    while (generic.length || personal.length) {
+      if (generic.length) mixed.push(generic.shift()!);
+      if (personal.length) mixed.push(personal.shift()!);
+    }
+    return mixed;
   }, [heroName, universe, cast, theme]);
   const companion = "Nova";
 
