@@ -54,6 +54,10 @@ export class CreditTransaction {
   @Column({ type: 'text', nullable: true })
   razorpayPaymentId!: string | null;
 
+  /** Where in the app the purchase was made, e.g. 'quota_card' (null = Top Up / pricing). */
+  @Column({ type: 'text', nullable: true })
+  source!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

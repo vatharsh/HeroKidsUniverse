@@ -13,7 +13,10 @@ interface Funnel {
 interface ConversionData {
   last7: Funnel; last30: Funnel; allTime: Funnel;
   influencers: Array<{ name: string; orders: number; buyers: number; revenue: number }>;
-  previewQuota: { previewsToday: number; waiting: number; turnedAwayToday: number; dailyLimit: number };
+  previewQuota: {
+    previewsToday: number; waiting: number; turnedAwayToday: number; dailyLimit: number;
+    turnedAway30?: number; bought30?: number; revenue30?: number;
+  };
 }
 
 const WINDOWS = [
@@ -103,6 +106,11 @@ export default function ConversionPanel({ filter }: { filter: "sandbox" | "live"
           </p>
           <p className="text-xs text-gray-500 mt-1">
             Turned away today: <strong>{q.turnedAwayToday}</strong> · On the waiting list: <strong>{q.waiting}</strong>
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            Bought from the &ldquo;free stories given out&rdquo; card (30 days): <strong>{q.bought30 ?? 0}</strong>
+            {q.turnedAway30 ? ` of ${q.turnedAway30} turned away (${Math.round(((q.bought30 ?? 0) / q.turnedAway30) * 100)}%)` : ""}
+            {q.revenue30 ? ` · ${inr(q.revenue30)}` : ""}
           </p>
           <p className="text-[11px] text-gray-400 mt-1">Set the daily limit in Settings → Free Previews per Day.</p>
         </div>

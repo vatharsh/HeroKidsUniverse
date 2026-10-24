@@ -45,6 +45,13 @@ export interface PackPricing {
 /** Razorpay's smallest chargeable amount. */
 const MIN_CHARGE_INR = 1;
 
+
+/** Purchase sources we track on the admin dashboard; anything else is stored as null. */
+const PURCHASE_SOURCES = new Set(['quota_card']);
+function purchaseSource(source: string | undefined): string | null {
+  return source && PURCHASE_SOURCES.has(source) ? source : null;
+}
+
 @Injectable()
 export class CreditPacksService {
   private readonly logger = new Logger(CreditPacksService.name);
@@ -199,6 +206,7 @@ export class CreditPacksService {
     userId: string,
     packId: string,
     couponCode?: string,
+    source?: string,
   ): Promise<{ razorpayOrderId: string; amount: number; subtotal: number; discount: number; currency: string; keyId: string }> {
     const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isActive: true, isDeleted: false } });
     if (!pack) throw new NotFoundException('Credit pack not found');
@@ -216,6 +224,7 @@ export class CreditPacksService {
         subtotal: String(pricing.subtotal),
         discount: String(pricing.discount),
         couponCodeId: pricing.coupon?.couponCodeId ?? '',
+        source: purchaseSource(source) ?? '',
       },
     });
 
@@ -268,7 +277,8 @@ export class CreditPacksService {
     const discount = Number(notes.discount ?? 0);
     const couponCodeId = typeof notes.couponCodeId === 'string' && notes.couponCodeId ? notes.couponCodeId : null;
 
-    const result = await this.creditUser(userId, pack, total, razorpayOrderId, razorpayPaymentId);
+    const source = purchaseSource(typeof notes.source === 'string' ? notes.source : undefined);
+    const result = await this.creditUser(userId, pack, total, razorpayOrderId, razorpayPaymentId, source);
     await this.recordCreditOrder(userId, pack, { subtotal, discount, total }, couponCodeId, razorpayOrderId, razorpayPaymentId, result.user);
     return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
   }
@@ -289,6 +299,7 @@ export class CreditPacksService {
     packId: string,
     paymentMethod = 'mock',
     couponCode?: string,
+    source?: string,
   ): Promise<{ newBalance: number; characterSlotsTotal: number; avatarRefreshTokens: number }> {
     const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isActive: true, isDeleted: false } });
     if (!pack) throw new NotFoundException('Credit pack not found');
@@ -297,12 +308,12 @@ export class CreditPacksService {
     const mockPaymentId = `${paymentMethod}_mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const mockOrderId = `mock_order_${Date.now()}`;
 
-    const result = await this.creditUser(userId, pack, pricing.total, mockOrderId, mockPaymentId);
+    const result = await this.creditUser(userId, pack, pricing.total, mockOrderId, mockPaymentId, purchaseSource(source));
     await this.recordCreditOrder(userId, pack, pricing, pricing.coupon?.couponCodeId ?? null, mockOrderId, mockPaymentId, result.user);
     return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
   }
 
-  private async creditUser(userId: string, pack: CreditPack, pricePaid: number, razorpayOrderId: string, razorpayPaymentId: string) {
+  private async creditUser(userId: string, pack: CreditPack, pricePaid: number, razorpayOrderId: string, razorpayPaymentId: string, source: string | null = null) {
     return this.dataSource.transaction(async (manager) => {
       const user = await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
       if (!user) throw new NotFoundException('User not found');
@@ -331,6 +342,7 @@ export class CreditPacksService {
           pricePaid,
           razorpayOrderId,
           razorpayPaymentId,
+          source,
         }),
       );
 

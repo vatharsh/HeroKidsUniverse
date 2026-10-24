@@ -49,8 +49,9 @@ export class CreditsController {
     @CurrentUser() currentUser: CurrentUserPayload,
     @Param('id') id: string,
     @Body('couponCode') couponCode?: string,
+    @Body('source') source?: string,
   ) {
-    return this.creditPacksService.initiatePurchase(currentUser.id, id, couponCode);
+    return this.creditPacksService.initiatePurchase(currentUser.id, id, couponCode, source);
   }
 
   @Post('packs/:id/purchase/mock')
@@ -59,9 +60,10 @@ export class CreditsController {
     @Param('id') id: string,
     @Body('paymentMethod') paymentMethod?: string,
     @Body('couponCode') couponCode?: string,
+    @Body('source') source?: string,
   ) {
     await this.creditPacksService.assertTestPurchaseAllowed(currentUser);
-    return this.creditPacksService.mockPurchase(currentUser.id, id, paymentMethod, couponCode);
+    return this.creditPacksService.mockPurchase(currentUser.id, id, paymentMethod, couponCode, source);
   }
 
   @Post('packs/:id/purchase/verify')

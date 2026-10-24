@@ -186,9 +186,11 @@ function PackGroup({ icon: Icon, title, description, packs, payingPackId, coupon
 
 interface BuyCreditsSectionProps {
   onPurchased?: (newBalance: number) => void;
+  /** Tags the purchase for the admin dashboard, e.g. "quota_card". */
+  source?: string;
 }
 
-export default function BuyCreditsSection({ onPurchased }: BuyCreditsSectionProps) {
+export default function BuyCreditsSection({ onPurchased, source }: BuyCreditsSectionProps) {
   const [packs, setPacks] = useState<CreditPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingPackId, setPayingPackId] = useState<string | null>(null);
@@ -256,7 +258,7 @@ export default function BuyCreditsSection({ onPurchased }: BuyCreditsSectionProp
       const initRes = await fetch(`${BASE}/credits/packs/${pack.id}/purchase/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ couponCode }),
+        body: JSON.stringify({ couponCode, source }),
       });
       if (!initRes.ok) {
         const err = await initRes.json().catch(() => ({})) as { message?: string };

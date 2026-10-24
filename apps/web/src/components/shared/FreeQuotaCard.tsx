@@ -42,7 +42,7 @@ export default function FreeQuotaCard({ onPurchased, onWait }: { onPurchased: ()
 
       {buying ? (
         <div className="text-left bg-white rounded-2xl border border-ink/10 p-4">
-          <BuyCreditsSection onPurchased={() => onPurchased()} />
+          <BuyCreditsSection source="quota_card" onPurchased={() => onPurchased()} />
           <button type="button" onClick={() => setBuying(false)} className="mt-3 w-full text-ink-muted text-xs hover:text-ink">
             ← Back
           </button>

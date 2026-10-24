@@ -231,7 +231,18 @@ export class AdminService {
     );
     const dailyLimit = await this.getSetting('FREE_PREVIEW_DAILY_LIMIT', 0);
 
-    return { last7, last30, allTime, influencers, previewQuota: { ...quota, dailyLimit } };
+    // "Free stories are all given out" card: parents turned away vs. those who bought from it.
+    const [quotaCard] = await this.dataSource.query(
+      `SELECT (SELECT COUNT(*)::int FROM preview_waitlist w JOIN users u ON u.id = w."userId"
+                WHERE w."createdAt" >= now() - interval '30 days' AND ${userFilter}) AS "turnedAway30",
+              COUNT(t.id)::int AS "bought30",
+              COALESCE(SUM(t."pricePaid"), 0)::float AS "revenue30"
+         FROM credit_transactions t JOIN users u ON u.id = t."userId"
+        WHERE t.reason = 'purchase' AND t.source = 'quota_card' AND t."pricePaid" > 0
+          AND t."createdAt" >= now() - interval '30 days' AND ${userFilter}`,
+    );
+
+    return { last7, last30, allTime, influencers, previewQuota: { ...quota, dailyLimit, ...quotaCard } };
   }
 
   async getDashboard(sandboxFilter?: boolean) {
