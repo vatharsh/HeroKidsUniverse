@@ -80,7 +80,8 @@ export default function StoryDebugPage() {
       .then(async (r) => {
         const j = await r.json();
         if (!r.ok) { setError(j.message ?? "Failed to load"); return; }
-        setData(j.data ?? j);
+        const payload = j.data?.data ?? j.data ?? j; // tolerate the old double-wrapped response
+        setData({ ...payload, pages: payload.pages ?? [] });
       })
       .catch(() => setError("Network error"))
       .finally(() => setLoading(false));
@@ -90,6 +91,7 @@ export default function StoryDebugPage() {
   if (error) return <div className="p-8 text-red-500">{error}</div>;
   if (!data) return null;
 
+  if (data.pages.length === 0) return <div className="p-8 text-gray-500">This story has no pages yet (it may still be generating, or it failed).</div>;
   const pg = data.pages[selectedPage];
 
   return (

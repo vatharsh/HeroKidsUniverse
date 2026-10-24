@@ -116,12 +116,10 @@ export class AdminController {
   @Get('stories/:id/debug')
   async storyDebug(@Param('id') id: string) {
     const story = await this.storiesRepo.findOne({ where: { id } });
-    return {
-      data: {
-        pages: story?.pages ?? [],
-        storyVisualState: story?.storyVisualState ?? null,
-      },
-    };
+    if (!story) throw new NotFoundException('Story not found');
+    // Plain object — the global response wrapper adds { success, data }. (Wrapping it here too
+    // broke the debug page: it got { data: { data: … } } and found no pages.)
+    return { pages: story.pages ?? [], storyVisualState: story.storyVisualState ?? null };
   }
 
   /** Re-places speech bubbles from the story's current images (no image regeneration). */
