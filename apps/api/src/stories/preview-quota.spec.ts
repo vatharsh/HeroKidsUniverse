@@ -29,7 +29,7 @@ describe('free-preview daily quota', () => {
   it('refuses with a try-tomorrow message and waitlists the parent once the limit is reached', async () => {
     const { svc, manager, inserted } = setup('300', 300);
     await expect(svc.assertPreviewAvailable(manager as never, parent)).rejects.toThrow(HttpException);
-    await expect(svc.assertPreviewAvailable(manager as never, parent)).rejects.toThrow(/try again tomorrow/);
+    await expect(svc.assertPreviewAvailable(manager as never, parent)).rejects.toThrow(/come back tomorrow/);
     expect(inserted).toContain('u1');
   });
 

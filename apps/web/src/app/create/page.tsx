@@ -8,6 +8,7 @@ import Navbar from "@/components/layout/Navbar";
 import AvatarGenerateModal from "@/components/shared/AvatarGenerateModal";
 import AvatarPicker from "@/components/shared/AvatarPicker";
 import CostumeField from "@/components/shared/CostumeField";
+import FreeQuotaCard from "@/components/shared/FreeQuotaCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
 import { prepareImageUpload } from "@/lib/image-upload";
@@ -327,6 +328,8 @@ function CreatePageInner() {
 
   // UI state
   const [generating, setGenerating] = useState(false);
+  // Today's free previews are used up (HTTP 429): show the "come back tomorrow / buy now" card.
+  const [freeQuotaFull, setFreeQuotaFull] = useState(false);
   const [error, setError]           = useState("");
 
   // Load existing hero + characters on mount
@@ -665,7 +668,8 @@ function CreatePageInner() {
 
       router.push(`/stories/${story.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      if (err instanceof ApiError && err.status === 429) setFreeQuotaFull(true);
+      else setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
       setGenerating(false);
     }
   }
@@ -1666,13 +1670,20 @@ function CreatePageInner() {
               </div>
             )}
 
-            <button type="button" onClick={handleGenerate} disabled={generating}
+            {freeQuotaFull && (
+              <FreeQuotaCard
+                onPurchased={() => { setFreeQuotaFull(false); void handleGenerate(); }}
+                onWait={() => router.push("/dashboard")}
+              />
+            )}
+
+            {!freeQuotaFull && <button type="button" onClick={handleGenerate} disabled={generating}
               className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-full text-lg shadow-brand transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
               {generating
                 ? <><Loader2 className="w-5 h-5 animate-spin" /> Creating your episode…</>
                 : <><Sparkles className="w-5 h-5" /> {storyMode === "standalone" ? "Generate Story" : "Generate Episode"}</>
               }
-            </button>
+            </button>}
             <p className="text-ink-muted text-xs text-center mt-3">Generation runs in the background — you can close this tab and come back.</p>
             <p className="text-ink-muted text-[11px] text-center mt-2 leading-relaxed">
               Stories, pictures and narration are made by AI and checked for child safety. AI can make mistakes, so please read each story before sharing it.

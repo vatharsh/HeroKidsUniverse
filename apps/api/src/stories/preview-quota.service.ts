@@ -65,7 +65,7 @@ export class PreviewQuotaService implements OnModuleInit, OnModuleDestroy {
       [user.id],
     );
     throw new HttpException(
-      "So many young heroes joined today that today's free stories are all taken! 🌙 Your free story is saved — please try again tomorrow. We'll email you as soon as it's ready to create.",
+      "Today's free stories are all given out. We're a small, independent team and every story costs us real money to make, so we can only give away a few each day. Your free story is saved — come back tomorrow and we'll email you when it's ready. Can't wait? Make a full story now from your Top Up.",
       HttpStatus.TOO_MANY_REQUESTS,
     );
   }
