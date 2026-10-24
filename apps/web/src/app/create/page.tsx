@@ -13,6 +13,7 @@ import { ApiError } from "@/lib/api";
 import { prepareImageUpload } from "@/lib/image-upload";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
+import MicButton from "@/components/shared/MicButton";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1359,6 +1360,7 @@ function CreatePageInner() {
                         <input type="text" value={charAlwaysWears} onChange={(e) => setCharAlwaysWears(e.target.value)}
                           placeholder="e.g. rectangular glasses, black hoodie"
                           className="w-full px-3 py-2 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                        <div className="mt-1.5"><MicButton value={charAlwaysWears} onChange={setCharAlwaysWears} compact /></div>
                       </div>
                       <div>
                         <label className="text-ink-mid text-[11px] font-medium block mb-1">Hair</label>
@@ -1548,7 +1550,10 @@ function CreatePageInner() {
               }
               className="w-full px-4 py-3 rounded-2xl border border-ink/15 bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none text-sm mb-2"
             />
-            <p className="text-ink-muted text-xs text-right mb-6">{storyContext.length}/500</p>
+            <div className="flex items-start justify-between gap-3 mb-6">
+              <MicButton value={storyContext} onChange={setStoryContext} maxLength={500} />
+              <p className="text-ink-muted text-xs pt-2">{storyContext.length}/500</p>
+            </div>
 
             <div className="mb-2">
               <p className="text-ink-mid text-xs font-semibold mb-3 uppercase tracking-wide">Quick ideas</p>

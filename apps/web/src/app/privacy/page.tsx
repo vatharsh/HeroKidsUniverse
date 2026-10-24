@@ -54,6 +54,7 @@ export default function PrivacyPage() {
           body: [
             "Stories, pictures, avatars and narration, reading a character's appearance from the uploaded photo, and our quality and child-safety checks are all done by Google's Gemini artificial-intelligence services. We do not send your photos or your children's details to any other AI provider. If we add or change an AI provider, we will update this list.",
             "Google processes this data under its Gemini API terms for paid business use, which do not allow it to use the data to train or improve its models. Its servers may be located outside India.",
+            "Voice typing: if you tap the 🎤 Speak button, your own browser's built-in speech service (Google in Chrome, Apple in Safari) turns your words into text. We receive only the text you see in the box — never the audio.",
           ],
         },
         {

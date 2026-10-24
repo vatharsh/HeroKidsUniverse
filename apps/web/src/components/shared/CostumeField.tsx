@@ -1,5 +1,7 @@
 "use client";
 
+import MicButton from "@/components/shared/MicButton";
+
 /**
  * The hero's costume (hero.costumeDescription). In universe episodes it overrides the AI's own choice,
  * which keeps the hero recognisable from episode to episode; one-off stories ignore it.
@@ -47,6 +49,7 @@ export default function CostumeField({ value, onChange, rows = 2 }: { value: str
         placeholder="Or describe your own — e.g. red cape, blue mask and a golden shield, or their favourite t-shirt"
         className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none text-sm"
       />
+      <div className="mt-1.5"><MicButton value={value} onChange={onChange} maxLength={200} compact /></div>
     </div>
   );
 }

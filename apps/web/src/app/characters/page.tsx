@@ -14,6 +14,7 @@ import { prepareImageUpload } from "@/lib/image-upload";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 import CostumeField from "@/components/shared/CostumeField";
+import MicButton from "@/components/shared/MicButton";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -332,6 +333,7 @@ function CharacterFormModal({
                     <input type="text" value={alwaysWears} onChange={(e) => setAlwaysWears(e.target.value)}
                       placeholder="e.g. rectangular glasses, black hoodie"
                       className="w-full px-3 py-2.5 rounded-xl border border-ink/15 bg-cream text-ink text-sm placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition" />
+                    <div className="mt-1.5"><MicButton value={alwaysWears} onChange={setAlwaysWears} compact /></div>
                   </div>
                   <div>
                     <label className="text-ink-mid text-xs font-medium block mb-1">Hair</label>
