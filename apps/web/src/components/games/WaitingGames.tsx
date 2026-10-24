@@ -6,7 +6,7 @@ import { getAccessToken } from "@/lib/api";
 import MemoryMatch, { type MemoryFace } from "./MemoryMatch";
 import PotionMixer from "./PotionMixer";
 import TicTacToe from "./TicTacToe";
-import { themePack } from "./theme-packs";
+import { pickQuizQuestions, themePack } from "./theme-packs";
 import UniverseQuiz, { type QuizQuestion } from "./UniverseQuiz";
 
 /**
@@ -19,7 +19,8 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
 interface UniverseData {
   id: string;
-  villains?: Array<{ name: string; thumbnailUrl?: string | null }>;
+  villains?: Array<{ name: string; status?: string; thumbnailUrl?: string | null }>;
+  quests?: Array<{ title: string; status?: string }>;
   powers?: Array<{ name: string; kind?: string; emoji?: string | null; thumbnailUrl?: string | null }>;
   memories?: Array<{ type: string; title: string }>;
 }
@@ -31,6 +32,7 @@ const DECOYS = {
   gear: ["Golden Umbrella", "Talking Backpack", "Rocket Skates", "Jelly Shield"],
   friend: ["Bobo the Bear", "Zara the Zebra", "Mr. Pickles", "Tiny Tornado"],
   world: ["Candy Volcano", "Underwater Library", "Upside-Down Forest", "Cloud Castle"],
+  quest: ["Find the Lost Sock Kingdom", "Teach a Dragon to Dance", "Count Every Star in the Sky", "Build a Cloud Bridge"],
 };
 
 const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
@@ -49,12 +51,22 @@ function buildQuiz(hero: string, u: UniverseData | null, cast: CastMember[]): Qu
   const villains = (u?.villains ?? []).map((v) => v.name);
   const worlds = (u?.memories ?? []).filter((m) => m.type === "location_discovered").map((m) => m.title);
   const friends = cast.map((c) => c.name).filter((n) => n && n !== hero);
+  const escaped = (u?.villains ?? []).filter((v) => v.status === "escaped").map((v) => v.name);
+  const defeated = (u?.villains ?? []).filter((v) => v.status === "defeated" || v.status === "captured").map((v) => v.name);
+  const befriended = (u?.villains ?? []).filter((v) => v.status === "befriended").map((v) => v.name);
+  const openQuests = (u?.quests ?? []).filter((x) => x.status !== "completed").map((x) => x.title);
+  const doneQuests = (u?.quests ?? []).filter((x) => x.status === "completed").map((x) => x.title);
   return [
     question(`Which of these is a power ${hero} has earned?`, powers, DECOYS.power),
     question(`Who has tried to stop ${hero}?`, villains, DECOYS.villain),
     question(`Which of these does ${hero} carry on adventures?`, gear, DECOYS.gear),
     question(`Who is on ${hero}'s team?`, friends, DECOYS.friend),
     question(`Which world has ${hero} discovered?`, worlds, DECOYS.world),
+    question(`Which villain escaped and might come back?`, escaped, [...DECOYS.villain, ...defeated]),
+    question(`Which villain did ${hero} defeat?`, defeated, [...DECOYS.villain, ...escaped]),
+    question(`Which villain became ${hero}'s friend?`, befriended, [...DECOYS.villain, ...defeated]),
+    question(`Which quest is ${hero} still working on?`, openQuests, [...DECOYS.quest, ...doneQuests]),
+    question(`Which quest has ${hero} already finished?`, doneQuests, [...DECOYS.quest, ...openQuests]),
   ].filter((x): x is QuizQuestion => !!x);
 }
 
@@ -109,19 +121,22 @@ export default function WaitingGames({ heroName, heroAvatar, universeId, theme, 
   const usePersonal = personal.length >= 3;
   const faces = usePersonal ? [...personal, ...themeFaces].slice(0, 6) : [...personal.slice(0, 1), ...themeFaces].slice(0, 6);
 
-  // 5 questions for everyone: up to 3 about their own universe (whatever exists so far) and the rest
-  // about this story's theme. Built once per data change, so answers don't reshuffle mid-question.
+  // 5 questions for everyone: up to 3 about their own universe (whatever exists so far), the rest from a
+  // large theme + general bank that skips recently asked questions. A new set each round ("Play again").
+  const [quizRound, setQuizRound] = useState(0);
+  const showingQuiz = tab === "quiz" && loaded;
   const quiz = useMemo(() => {
+    if (!showingQuiz) return [];
     const personal = shuffle(buildQuiz(heroName, universe, cast)).slice(0, 3);
-    const generic = shuffle(themePack(theme).quiz).slice(0, 5 - personal.length)
-      .map((x) => ({ ...x, options: shuffle(x.options) }));
+    const generic = pickQuizQuestions(theme, 5 - personal.length);
     const mixed: QuizQuestion[] = [];
     while (generic.length || personal.length) {
       if (generic.length) mixed.push(generic.shift()!);
       if (personal.length) mixed.push(personal.shift()!);
     }
     return mixed;
-  }, [heroName, universe, cast, theme]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- quizRound deliberately forces a fresh set
+  }, [showingQuiz, quizRound, heroName, universe, cast, theme]);
   const companion = "Nova";
 
   return (
@@ -145,7 +160,7 @@ export default function WaitingGames({ heroName, heroAvatar, universeId, theme, 
       ) : tab === "potion" ? (
         <PotionMixer />
       ) : (
-        <UniverseQuiz key={quiz.map((q) => q.q).join()} questions={quiz} />
+        <UniverseQuiz key={quiz.map((q) => q.q).join()} questions={quiz} onPlayAgain={() => setQuizRound((r) => r + 1)} />
       )}
     </div>
   );

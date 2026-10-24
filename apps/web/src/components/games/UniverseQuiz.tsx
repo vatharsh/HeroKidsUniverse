@@ -5,7 +5,7 @@ import { useState } from "react";
 export interface QuizQuestion { q: string; options: string[]; answer: string }
 
 /** A short quiz about the child's own universe — their powers, villains, gear and friends. */
-export default function UniverseQuiz({ questions }: { questions: QuizQuestion[] }) {
+export default function UniverseQuiz({ questions, onPlayAgain }: { questions: QuizQuestion[]; onPlayAgain?: () => void }) {
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
   const [score, setScore] = useState(0);
@@ -25,7 +25,7 @@ export default function UniverseQuiz({ questions }: { questions: QuizQuestion[] 
         <span className="text-5xl">{score === questions.length ? "🏆" : score >= questions.length / 2 ? "🌟" : "💪"}</span>
         <p className="font-[family-name:var(--font-display)] text-white text-2xl">{score} / {questions.length} correct!</p>
         <p className="text-white/60 text-sm">{score === questions.length ? "You know your universe perfectly!" : "Great try — your universe has so many secrets!"}</p>
-        <button type="button" onClick={() => { setIndex(0); setScore(0); }} className="bg-brand hover:bg-brand-dark text-white text-sm font-bold px-4 py-2 rounded-full">Play again</button>
+        <button type="button" onClick={() => { if (onPlayAgain) onPlayAgain(); else { setIndex(0); setScore(0); } }} className="bg-brand hover:bg-brand-dark text-white text-sm font-bold px-4 py-2 rounded-full">New questions</button>
       </div>
     );
   }
