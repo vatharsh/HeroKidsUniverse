@@ -6,6 +6,7 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
+import WaitingGames from "@/components/games/WaitingGames";
 import PreviewImg from "@/components/shared/PreviewImg";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
@@ -568,6 +569,10 @@ export default function StoryReaderPage() {
   const [showRecap, setShowRecap] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [recapChecked, setRecapChecked] = useState(false);
+  // Waiting-room games: if the child is mid-game when the story finishes, show a "ready" banner
+  // instead of switching away; the story opens when they tap "Read now".
+  const [playingGame, setPlayingGame] = useState(false);
+  const [leftGames, setLeftGames] = useState(false);
   const [videoStatus, setVideoStatus]           = useState<string | null>(null);
   const [videoUrl, setVideoUrl]                 = useState<string | null>(null);
   const [landscapeVideo, setLandscapeVideo]     = useState<{ status: string | null; url: string | null }>({ status: null, url: null });
@@ -786,7 +791,7 @@ export default function StoryReaderPage() {
     );
   }
 
-  if (!story || !TERMINAL.has(story.status)) {
+  if (!story || !TERMINAL.has(story.status) || (playingGame && story.status === "completed" && !leftGames)) {
     const label = story ? (STATUS_LABEL[story.status] ?? "Generating…") : "Loading…";
     const heroName = story?.hero?.name ?? "your hero";
 
@@ -853,6 +858,16 @@ export default function StoryReaderPage() {
             </div>
           )}
 
+          {story?.status === "completed" && (
+            <div className="w-full rounded-2xl bg-gold text-black px-5 py-4 text-center shadow-xl animate-[fadeInUp_0.5s_ease-out_both]">
+              <p className="font-[family-name:var(--font-display)] text-xl">🎉 {heroName}&apos;s new story is ready!</p>
+              <button type="button" onClick={() => setLeftGames(true)}
+                className="mt-2 bg-black text-white font-bold text-sm px-6 py-2.5 rounded-full hover:scale-105 transition">
+                Read now →
+              </button>
+            </div>
+          )}
+
           {/* Honest wait time + permission to leave — generation keeps running on our servers */}
           <div className="w-full rounded-2xl border border-gold/25 bg-white/5 px-5 py-4 text-center">
             <p className="text-white text-sm font-semibold">
@@ -874,6 +889,13 @@ export default function StoryReaderPage() {
               </a>
             </div>
           </div>
+
+          <WaitingGames
+            heroName={heroName === "your hero" ? "Hero" : heroName}
+            heroAvatar={story?.hero?.avatarUrl ?? null}
+            universeId={story?.universeId ?? null}
+            onPlay={() => setPlayingGame(true)}
+          />
 
           <div className="text-center">
             <a
