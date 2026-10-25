@@ -62,19 +62,40 @@ export function usePublicPlatformSettings() {
 
 let publicSettingsOnce: Promise<PlatformSettingsMap> | null = null;
 
-/** Pages in the free preview story (FREE_PREVIEW_PAGES), for marketing copy. One shared request per page load. */
-export function usePreviewPages(): number {
-  const [pages, setPages] = useState(3);
+/** Public settings fetched once per page load and shared by every component that asks. */
+function usePublicSettingsShared(): PlatformSettingsMap | null {
+  const [map, setMap] = useState<PlatformSettingsMap | null>(null);
   useEffect(() => {
     let active = true;
     publicSettingsOnce ??= fetchPublicPlatformSettings().catch(() => ({}));
-    void publicSettingsOnce.then((map) => {
-      const n = Number(map.FREE_PREVIEW_PAGES);
-      if (active && n > 0) setPages(n);
+    void publicSettingsOnce.then((m) => {
+      if (active) setMap(m);
     });
     return () => {
       active = false;
     };
   }, []);
-  return pages;
+  return map;
+}
+
+/** Pages in the free preview story (FREE_PREVIEW_PAGES), for marketing copy. */
+export function usePreviewPages(): number {
+  const n = Number(usePublicSettingsShared()?.FREE_PREVIEW_PAGES);
+  return n > 0 ? n : 3;
+}
+
+export interface MaintenanceInfo {
+  message: string;
+  backBy: string;
+  /** Message plus "We'll be back by …" when a time is set. */
+  full: string;
+}
+
+/** Non-null while maintenance mode is on (MAINTENANCE_MODE). */
+export function useMaintenance(): MaintenanceInfo | null {
+  const map = usePublicSettingsShared();
+  if (!map || map.MAINTENANCE_MODE !== true) return null;
+  const message = String(map.MAINTENANCE_MESSAGE ?? "").trim() || "We're making a few improvements and will be back shortly.";
+  const backBy = String(map.MAINTENANCE_BACK_BY ?? "").trim();
+  return { message, backBy, full: backBy ? `${message} We'll be back by ${backBy}.` : message };
 }

@@ -78,6 +78,7 @@ import { UniverseMemory } from './universes/universe-memory.entity';
 import { UniverseVillain } from './universes/universe-villain.entity';
 import { ContentSafetyModule } from './ai/content-safety.service';
 import { MailModule } from './mail/mail.service';
+import { MaintenanceGuard } from './common/maintenance.guard';
 import { AiUsageModule } from './ai/ai-usage-recorder.service';
 import { EmailCode } from './auth/email-code.entity';
 import { EmailVerifiedGuard } from './auth/guards/email-verified.guard';
@@ -202,6 +203,11 @@ import { PreviewWaitlist } from './stories/preview-waitlist.entity';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      // Last: knows who is asking, so admins keep working while maintenance mode pauses everyone else.
+      provide: APP_GUARD,
+      useClass: MaintenanceGuard,
     },
     {
       provide: APP_FILTER,

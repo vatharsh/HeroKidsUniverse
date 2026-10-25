@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, LessThan, Repository } from 'typeorm';
 
 import { PlatformSetting, SETTING_DEFAULTS } from '../admin/platform-setting.entity';
+import { maintenanceState } from '../common/maintenance';
 import { MailService } from '../mail/mail.service';
 import { previewWaitlistEmail } from '../mail/preview-waitlist-email';
 import { User } from '../users/user.entity';
@@ -91,6 +92,8 @@ export class PreviewQuotaService implements OnModuleInit, OnModuleDestroy {
   async notifyWaitlist(): Promise<void> {
     if (!this.mail) return;
     try {
+      // Don't invite people back to create a story while creating is paused.
+      if ((await maintenanceState(this.dataSource)).on) return;
       const limit = await this.dailyLimit();
       const room = limit ? limit - (await this.previewsToday()) : 500;
       if (room <= 0) return;

@@ -15,6 +15,7 @@ import { prepareImageUpload } from "@/lib/image-upload";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 import MicButton from "@/components/shared/MicButton";
+import MaintenanceNotice from "@/components/shared/MaintenanceNotice";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1698,13 +1699,15 @@ function CreatePageInner() {
               />
             )}
 
-            {!freeQuotaFull && <button type="button" onClick={handleGenerate} disabled={generating}
-              className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-full text-lg shadow-brand transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
-              {generating
-                ? <><Loader2 className="w-5 h-5 animate-spin" /> Creating your episode…</>
-                : <><Sparkles className="w-5 h-5" /> {storyMode === "standalone" ? "Generate Story" : "Generate Episode"}</>
-              }
-            </button>}
+            {!freeQuotaFull && <MaintenanceNotice what="Making new stories">
+              <button type="button" onClick={handleGenerate} disabled={generating}
+                className="w-full bg-brand hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-4 rounded-full text-lg shadow-brand transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
+                {generating
+                  ? <><Loader2 className="w-5 h-5 animate-spin" /> Creating your episode…</>
+                  : <><Sparkles className="w-5 h-5" /> {storyMode === "standalone" ? "Generate Story" : "Generate Episode"}</>
+                }
+              </button>
+            </MaintenanceNotice>}
             <p className="text-ink-muted text-xs text-center mt-3">Generation runs in the background — you can close this tab and come back.</p>
             <p className="text-ink-muted text-[11px] text-center mt-2 leading-relaxed">
               Stories, pictures and narration are made by AI and checked for child safety. AI can make mistakes, so please read each story before sharing it.

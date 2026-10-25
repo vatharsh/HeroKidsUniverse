@@ -11,7 +11,7 @@ import { useEffect, useState, type ElementType, type ReactNode } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
-import { usePublicPlatformSettings } from "@/lib/platform-settings";
+import { useMaintenance, usePublicPlatformSettings } from "@/lib/platform-settings";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -77,6 +77,7 @@ function HealthBar() {
     Critical: "text-red-600 bg-red-50 border-red-200",
   }[data?.healthStatus ?? "Good"];
 
+  const maintenance = useMaintenance();
   const dot = {
     Good:     "bg-emerald-500",
     Warning:  "bg-amber-500",
@@ -86,6 +87,12 @@ function HealthBar() {
   return (
     <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-6 py-2.5 flex items-center gap-6 shadow-sm">
       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mr-2 whitespace-nowrap">HeroKids Health</span>
+
+      {maintenance && (
+        <a href="/admin/settings" className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-600 text-white whitespace-nowrap hover:bg-rose-700">
+          🛠️ MAINTENANCE ON
+        </a>
+      )}
 
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] text-gray-400 uppercase tracking-wide">Revenue Today</span>

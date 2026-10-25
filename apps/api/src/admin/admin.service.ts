@@ -34,6 +34,7 @@ import { UploadService } from '../upload/upload.service';
 import { User, UserPlan, UserRole } from '../users/user.entity';
 import { PlatformSetting, PUBLIC_SETTING_KEYS, SETTING_DEFAULTS, normalizeSettingValue } from './platform-setting.entity';
 import { razorpayKeyMode } from '../common/sandbox';
+import { clearMaintenanceCache } from '../common/maintenance';
 
 const ACTIVE_JOB_STATUSES = [
   JobStatus.Queued,
@@ -120,6 +121,7 @@ export class AdminService {
     const description = def?.description ?? null;
     this.validateSettingValue(key, type, value);
     await this.settingsRepo.upsert({ key, value: normalizeSettingValue(type, value), type, description }, ['key']);
+    if (key.startsWith('MAINTENANCE_')) clearMaintenanceCache();
     const row = await this.settingsRepo.findOne({ where: { key } });
     return row ?? { key, value: normalizeSettingValue(type, value), type, description, updatedAt: new Date() };
   }

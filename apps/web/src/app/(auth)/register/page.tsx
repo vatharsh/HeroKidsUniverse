@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 
 import Logo from "@/components/shared/Logo";
 import { ApiError, useAuth } from "@/contexts/AuthContext";
+import MaintenanceNotice from "@/components/shared/MaintenanceNotice";
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -64,6 +65,7 @@ export default function RegisterPage() {
           </div>
         )}
 
+        <MaintenanceNotice what="Signing up">
         <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
           <div>
             <label className="text-ink-mid text-sm font-medium block mb-1.5" htmlFor="name">
@@ -150,6 +152,7 @@ export default function RegisterPage() {
             {loading ? "Creating account…" : "Create Free Account →"}
           </button>
         </form>
+        </MaintenanceNotice>
 
         <p className="text-center text-sm text-ink-mid mt-6">
           Already have an account?{" "}

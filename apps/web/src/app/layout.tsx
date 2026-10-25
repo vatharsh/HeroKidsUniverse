@@ -3,6 +3,7 @@ import { Bangers, Boogaloo, Nunito } from "next/font/google";
 import CouponCapture from "@/components/shared/CouponCapture";
 import { AuthProvider } from "@/contexts/AuthContext";
 import "./globals.css";
+import MaintenanceBanner from "@/components/shared/MaintenanceBanner";
 
 const boogaloo = Boogaloo({
   variable: "--font-display",
@@ -53,6 +54,7 @@ export default function RootLayout({
         <CouponCapture />
         <AuthProvider>
           {children}
+          <MaintenanceBanner />
         </AuthProvider>
       </body>
     </html>

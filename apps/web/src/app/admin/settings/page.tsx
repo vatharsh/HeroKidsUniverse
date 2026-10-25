@@ -15,6 +15,7 @@ interface SettingDefinition {
   label: string;
   description: string;
   type: SettingType;
+  multiline?: boolean;
 }
 
 interface SettingGroup {
@@ -25,6 +26,15 @@ interface SettingGroup {
 }
 
 const GROUPS: SettingGroup[] = [
+  {
+    title: "Maintenance",
+    description: "One switch to pause the whole site for parents — for fixes, outages or anything unexpected.",
+    items: [
+      { key: "MAINTENANCE_MODE", label: "Maintenance Mode", description: "ON = new stories, avatars, characters, purchases and sign-ups are paused, and every page shows the message below. Parents can still sign in and read, listen to and download their stories; stories already being made finish, and payments already in progress complete. You (admin) can still do everything.", type: "boolean" },
+      { key: "MAINTENANCE_MESSAGE", label: "Message", description: "Shown on every page and wherever something is paused. Keep it short and calm.", type: "string", multiline: true },
+      { key: "MAINTENANCE_BACK_BY", label: "Back By (optional)", description: "e.g. \"6:00 pm\" or \"Monday morning\" — shown as \"We'll be back by …\". Leave empty to not promise a time.", type: "string" },
+    ],
+  },
   {
     title: "Launch & limits",
     description: "Pre-launch vs live, and the daily caps that keep a busy day affordable.",
@@ -180,6 +190,13 @@ function SettingRow({
               onChange={(e) => onChange(e.target.value)}
               className={inputClass}
             />
+          ) : item.multiline ? (
+            <textarea
+              rows={3}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className={`${inputClass} resize-y`}
+            />
           ) : (
             <input
               type="text"
@@ -311,9 +328,20 @@ export default function AdminSettingsPage() {
       <p className="text-[11px] text-gray-500 mt-2">Razorpay keys on the server: <strong>{keyMode === "live" ? "LIVE" : keyMode === "test" ? "TEST" : "none"}</strong></p>
     ) : null;
 
+  const maintenanceNote = savedValues.MAINTENANCE_MODE === "true" ? (
+    <p className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mt-2">
+      🛠️ Maintenance mode is ON — parents can only read their stories right now.
+    </p>
+  ) : null;
+
   async function saveSetting(key: string, type: SettingType) {
     const token = getAccessToken();
     if (!token) return;
+
+    if (key === "MAINTENANCE_MODE" && values[key] === "true" && savedValues[key] !== "true") {
+      const ok = window.confirm("Turn maintenance mode ON? Parents won't be able to create stories, buy credits or sign up until you turn it off. Reading stories keeps working.");
+      if (!ok) return;
+    }
 
     // The launch switch and the payment keys must agree — confirm before going live on test keys.
     if (key === "SANDBOX_MODE" && values[key] === "false" && keyMode && keyMode !== "live") {
@@ -390,7 +418,7 @@ export default function AdminSettingsPage() {
             savingKey={savingKey}
             savedKey={savedKey}
             savedValues={savedValues}
-            notes={{ SANDBOX_MODE: sandboxNote }}
+            notes={{ SANDBOX_MODE: sandboxNote, MAINTENANCE_MODE: maintenanceNote }}
             updatedAt={updatedAt}
           />
         ))}

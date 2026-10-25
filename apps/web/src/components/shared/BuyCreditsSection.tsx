@@ -7,6 +7,9 @@ import { getAccessToken } from "@/lib/api";
 import { fetchActivePacks, type CreditPack } from "@/lib/credits";
 import { cn } from "@/lib/utils";
 import { COUPON_STORAGE_KEY } from "@/lib/coupon-link";
+import { useAuth } from "@/contexts/AuthContext";
+import MaintenanceNotice from "@/components/shared/MaintenanceNotice";
+import { useMaintenance } from "@/lib/platform-settings";
 
 declare global {
   interface Window {
@@ -191,6 +194,8 @@ interface BuyCreditsSectionProps {
 }
 
 export default function BuyCreditsSection({ onPurchased, source }: BuyCreditsSectionProps) {
+  const maintenance = useMaintenance();
+  const { user: viewer } = useAuth();
   const [packs, setPacks] = useState<CreditPack[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingPackId, setPayingPackId] = useState<string | null>(null);
@@ -314,6 +319,10 @@ export default function BuyCreditsSection({ onPurchased, source }: BuyCreditsSec
       setPayError(err instanceof Error ? err.message : "Payment failed");
       setPayingPackId(null);
     }
+  }
+
+  if (maintenance && viewer?.role !== "admin") {
+    return <MaintenanceNotice what="Buying credits">{null}</MaintenanceNotice>;
   }
 
   if (loading) {

@@ -41,9 +41,15 @@ export const PUBLIC_SETTING_KEYS = [
   'FULL_STORY_PAGES',
   'CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT',
   'INFLUENCER_MAX_COMMISSION_PCT',
+  'MAINTENANCE_MODE',
+  'MAINTENANCE_MESSAGE',
+  'MAINTENANCE_BACK_BY',
 ] as const;
 
 export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
+  MAINTENANCE_MODE:               { value: 'false', type: 'boolean', description: 'Pause all new activity (stories, avatars, purchases, sign-ups) with a message on every page. Reading stories, signing in and payments already in progress keep working. Admins are never blocked.' },
+  MAINTENANCE_MESSAGE:            { value: "We're making a few improvements and will be back shortly. Your stories are safe, and you can keep reading them.", type: 'string', description: 'Message shown on every page and when something is paused during maintenance.' },
+  MAINTENANCE_BACK_BY:            { value: '', type: 'string', description: 'Optional, e.g. "6:00 pm" — shown as "We\'ll be back by …". Leave empty to not promise a time.' },
   AI_DAILY_COST_WARNING_USD:      { value: '10',  type: 'number',  description: 'Daily AI spend (USD, live only) that sends you a warning email' },
   AI_MONTHLY_COST_WARNING_USD:    { value: '200', type: 'number',  description: 'Monthly AI spend (USD, live only) that sends you a warning email' },
   AI_DAILY_COST_HARD_LIMIT_USD:   { value: '60',  type: 'number',  description: 'Daily AI spend limit (USD, live only, resets at midnight IST). Once reached, new stories are paused for the day with a friendly message — nobody is charged — and you get an email. 0 = no limit.' },
