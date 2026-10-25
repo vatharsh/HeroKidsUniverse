@@ -163,6 +163,20 @@ export interface OrderV2Detail {
   couponDiscountAmount: number | null;
   /** Pack name for credit-pack orders. */
   title?: string | null;
+  /** GST tax invoice details, or null for orders from before GST invoicing. */
+  invoice?: {
+    number: string;
+    supplier: { legalName: string; address: string; gstin: string | null; state: string; stateCode: string | null };
+    placeOfSupply: string | null;
+    placeOfSupplyCode: string | null;
+    sac: string;
+    rate: number;
+    taxable: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    total: number;
+  } | null;
   customerName?: string | null;
   customerEmail?: string | null;
   items: Array<Record<string, unknown>>;

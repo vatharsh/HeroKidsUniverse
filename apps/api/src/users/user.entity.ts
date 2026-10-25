@@ -85,6 +85,10 @@ export class User {
   @Column({ type: 'text', nullable: true })
   phone!: string | null;
 
+  /** State for GST invoices (place of supply); asked once when buying credits. */
+  @Column({ type: 'text', nullable: true })
+  billingState!: string | null;
+
   @Column({ type: 'text', nullable: true })
   profileImageUrl!: string | null;
 

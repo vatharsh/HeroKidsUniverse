@@ -135,6 +135,33 @@ export class Order extends SoftDeleteColumns {
   @Column({ type: 'boolean', default: false })
   isSandbox!: boolean;
 
+  // ── GST tax invoice (set at purchase when GST_ENABLED; prices include GST) ──
+  /** e.g. HKU/2026-27/000001 — sequential per financial year; test orders use a separate TEST series. */
+  @Column({ type: 'text', nullable: true })
+  invoiceNumber!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  supplierGstin!: string | null;
+
+  /** State the service was supplied to (the parent's billing state, or ours when unknown). */
+  @Column({ type: 'text', nullable: true })
+  placeOfSupply!: string | null;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  gstRate!: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  taxableAmount!: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  cgstAmount!: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  sgstAmount!: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  igstAmount!: number | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

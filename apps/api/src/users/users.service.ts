@@ -59,6 +59,7 @@ export class UsersService {
       characterSlotsUsed: user.characterSlotsUsed,
       avatarRefreshTokens: user.avatarRefreshTokens,
       previewCredits: user.previewCredits,
+      billingState: user.billingState ?? null,
       freeHeroAvatarsLeft: Math.max(0, freeHeroAvatars - user.heroAvatarGenerationsUsed),
       referralCode: user.referralCode,
       createdAt: user.createdAt,

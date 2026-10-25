@@ -37,6 +37,7 @@ export default function ReceiptPage() {
   const paidAt = new Date(order.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" });
   const paid = order.status === "digital_ready" || order.status === "paid" || order.status === "delivered";
   const discount = Number(order.discountAmount ?? 0);
+  const inv = order.invoice ?? null;
 
   return (
     <main className="min-h-screen bg-cream py-10 px-4 print:bg-white print:py-0">
@@ -52,12 +53,22 @@ export default function ReceiptPage() {
         <header className="flex items-start justify-between gap-4 pb-6 border-b border-ink/10">
           <div>
             <p className="font-[family-name:var(--font-display)] text-brand text-2xl">HeroKids Universe</p>
-            <p className="text-ink-muted text-xs mt-1">by Accurate IT Solution · herokidsuniverse.com</p>
+            {inv ? (
+              <>
+                <p className="text-ink text-xs font-semibold mt-1">{inv.supplier.legalName}</p>
+                <p className="text-ink-muted text-xs max-w-[220px]">{inv.supplier.address}</p>
+                <p className="text-ink text-xs mt-1">GSTIN: <span className="font-mono font-semibold">{inv.supplier.gstin}</span></p>
+                <p className="text-ink-muted text-xs">State: {inv.supplier.state}{inv.supplier.stateCode ? ` (${inv.supplier.stateCode})` : ""}</p>
+              </>
+            ) : (
+              <p className="text-ink-muted text-xs mt-1">by Accurate IT Solution · herokidsuniverse.com</p>
+            )}
             <p className="text-ink-muted text-xs">support@herokidsuniverse.com</p>
           </div>
           <div className="text-right">
-            <p className="text-ink text-lg font-bold">Payment receipt</p>
-            <p className="text-ink-muted text-xs font-mono mt-1">{order.orderNumber}</p>
+            <p className="text-ink text-lg font-bold">{inv ? "Tax invoice" : "Payment receipt"}</p>
+            <p className="text-ink-muted text-xs font-mono mt-1">{inv ? inv.number : order.orderNumber}</p>
+            {inv && <p className="text-ink-muted text-[11px] font-mono">Order {order.orderNumber}</p>}
             <p className="text-ink-muted text-xs">{paidAt}</p>
           </div>
         </header>
@@ -66,6 +77,9 @@ export default function ReceiptPage() {
           <p className="text-ink-muted text-xs uppercase tracking-wider font-bold mb-1">Billed to</p>
           <p className="text-ink font-semibold">{order.customerName || user?.name}</p>
           <p className="text-ink-mid">{order.customerEmail || user?.email}</p>
+          {inv?.placeOfSupply && (
+            <p className="text-ink-muted text-xs mt-1">Place of supply: {inv.placeOfSupply}{inv.placeOfSupplyCode ? ` (${inv.placeOfSupplyCode})` : ""}</p>
+          )}
         </section>
 
         <table className="w-full text-sm">
@@ -81,18 +95,55 @@ export default function ReceiptPage() {
               </tr>
             )}
             <tr className="border-t-2 border-ink">
-              <td className="py-3 font-bold text-ink">Total {paid ? "paid" : ""}</td>
+              <td className="py-3 font-bold text-ink">Total {paid ? "paid" : ""}{inv ? " (incl. GST)" : ""}</td>
               <td className="py-3 text-right font-bold text-ink">{formatInr(Number(order.totalAmount))}</td>
             </tr>
           </tbody>
         </table>
+
+        {inv && (
+          <table className="w-full text-xs mt-4 border border-ink/10 rounded-xl overflow-hidden">
+            <thead className="bg-ink/[0.03] text-ink-muted">
+              <tr>
+                <th className="text-left font-semibold px-3 py-2">SAC</th>
+                <th className="text-right font-semibold px-3 py-2">Taxable value</th>
+                {inv.igst > 0 ? (
+                  <th className="text-right font-semibold px-3 py-2">IGST {inv.rate}%</th>
+                ) : (
+                  <>
+                    <th className="text-right font-semibold px-3 py-2">CGST {inv.rate / 2}%</th>
+                    <th className="text-right font-semibold px-3 py-2">SGST {inv.rate / 2}%</th>
+                  </>
+                )}
+                <th className="text-right font-semibold px-3 py-2">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-t border-ink/10 text-ink">
+                <td className="px-3 py-2 font-mono">{inv.sac}</td>
+                <td className="px-3 py-2 text-right">{formatInr(inv.taxable)}</td>
+                {inv.igst > 0 ? (
+                  <td className="px-3 py-2 text-right">{formatInr(inv.igst)}</td>
+                ) : (
+                  <>
+                    <td className="px-3 py-2 text-right">{formatInr(inv.cgst)}</td>
+                    <td className="px-3 py-2 text-right">{formatInr(inv.sgst)}</td>
+                  </>
+                )}
+                <td className="px-3 py-2 text-right font-semibold">{formatInr(inv.total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
 
         <p className={`mt-4 inline-block text-xs font-bold px-3 py-1 rounded-full ${paid ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
           {paid ? "Paid ✓ · Online payment via Razorpay" : `Status: ${order.status.replace(/_/g, " ")}`}
         </p>
 
         <p className="text-ink-muted text-[11px] mt-8 leading-relaxed">
-          This is a payment receipt, not a GST tax invoice. Questions about this payment? Write to support@herokidsuniverse.com with the receipt number above.
+          {inv
+            ? "Prices include GST. This is a computer-generated tax invoice and needs no signature. Questions? Write to support@herokidsuniverse.com with the invoice number above."
+            : "This is a payment receipt, not a GST tax invoice. Questions about this payment? Write to support@herokidsuniverse.com with the receipt number above."}
         </p>
       </article>
     </main>

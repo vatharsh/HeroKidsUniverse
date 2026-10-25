@@ -90,6 +90,7 @@ interface StatusHistoryEntry {
 }
 
 interface OrderDetail {
+  invoice?: { number: string; placeOfSupply: string | null; rate: number; taxable: number; cgst: number; sgst: number; igst: number } | null;
   id: string;
   orderNumber: string;
   orderType: string;
@@ -427,7 +428,7 @@ function ViewDrawer({ orderId, orderNumber, onClose }: { orderId: string; orderN
                   } value={<span className="text-emerald-600 font-semibold">−₹{Number(detail.discountAmount).toLocaleString()}</span>} />
                 )}
                 {detail.shippingAmount > 0  && <Row label="Shipping"  value={`₹${Number(detail.shippingAmount).toLocaleString()}`} />}
-                {detail.taxAmount > 0       && <Row label="GST (18%)" value={`₹${Number(detail.taxAmount).toFixed(2)}`} />}
+                {detail.taxAmount > 0 && !detail.invoice && <Row label="GST (18%)" value={`₹${Number(detail.taxAmount).toFixed(2)}`} />}
                 <div className="flex justify-between text-xs font-black pt-1 mt-1 border-t border-gray-200">
                   <span className="text-gray-700">Total</span>
                   <span className="text-emerald-600">₹{Number(detail.totalAmount).toLocaleString()}</span>
@@ -470,6 +471,23 @@ function ViewDrawer({ orderId, orderNumber, onClose }: { orderId: string; orderN
                       ))}
                     </div>
                   )}
+                </>
+              )}
+
+              {detail.invoice && (
+                <>
+                  <SectionHeader>Tax invoice</SectionHeader>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 space-y-0">
+                    <Row label="Invoice no." value={<a href={`/receipt/${detail.id}`} target="_blank" className="font-mono text-violet-700 underline">{detail.invoice.number}</a>} />
+                    <Row label="Place of supply" value={detail.invoice.placeOfSupply ?? "—"} />
+                    <Row label="Taxable value" value={`₹${detail.invoice.taxable.toFixed(2)}`} />
+                    {detail.invoice.igst > 0
+                      ? <Row label={`IGST ${detail.invoice.rate}%`} value={`₹${detail.invoice.igst.toFixed(2)}`} />
+                      : <>
+                          <Row label={`CGST ${detail.invoice.rate / 2}%`} value={`₹${detail.invoice.cgst.toFixed(2)}`} />
+                          <Row label={`SGST ${detail.invoice.rate / 2}%`} value={`₹${detail.invoice.sgst.toFixed(2)}`} />
+                        </>}
+                  </div>
                 </>
               )}
 

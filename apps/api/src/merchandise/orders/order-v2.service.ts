@@ -17,6 +17,7 @@ import { PaymentMethod } from '../order.entity';
 import { OrderPaymentDetail, OrderPaymentTransactionType } from '../payments/order-payment-detail.entity';
 import { OrderPaymentState, OrderPaymentSummary } from '../payments/order-payment-summary.entity';
 import { CreateOrderV2Dto } from './dto/create-order-v2.dto';
+import { gstConfig, stateCode } from '../../common/gst';
 import { CommerceOrderStatus, CommerceOrderType, Order } from './order.entity';
 import { OrderItemAttribute } from './order-item-attribute.entity';
 import { OrderItemAttributeValue } from './order-item-attribute-value.entity';
@@ -335,7 +336,7 @@ export class OrderV2Service {
     const detail = await this.getOrderDetail(orderId, userId, false);
     // Parents see their own order, not our internal notes or the influencer's commission.
     const { adminNotes: _notes, influencerId: _inf, influencerCommissionRate: _rate, influencerCommissionAmount: _amount, ...visible } = detail;
-    return { ...visible, title: creditPackName(detail) };
+    return { ...visible, title: creditPackName(detail), invoice: await this.invoiceBlock(detail) };
   }
 
   async adminListOrders(filters?: { status?: string; userId?: string; includeDeleted?: boolean; page?: number; limit?: number }) {
@@ -343,7 +344,28 @@ export class OrderV2Service {
   }
 
   async adminGetOrder(orderId: string, includeDeleted = false) {
-    return this.getOrderDetail(orderId, undefined, includeDeleted);
+    const detail = await this.getOrderDetail(orderId, undefined, includeDeleted);
+    return { ...detail, invoice: await this.invoiceBlock(detail) };
+  }
+
+  /** Everything a GST tax invoice prints, or null for orders bought before GST invoicing was on. */
+  private async invoiceBlock(order: Order) {
+    if (!order.invoiceNumber) return null;
+    const gst = await gstConfig(this.dataSource);
+    const num = (v: unknown) => (v === null || v === undefined ? 0 : Number(v));
+    return {
+      number: order.invoiceNumber,
+      supplier: { legalName: gst.legalName, address: gst.address, gstin: order.supplierGstin, state: gst.state, stateCode: stateCode(gst.state) },
+      placeOfSupply: order.placeOfSupply,
+      placeOfSupplyCode: stateCode(order.placeOfSupply),
+      sac: gst.sac,
+      rate: num(order.gstRate),
+      taxable: num(order.taxableAmount),
+      cgst: num(order.cgstAmount),
+      sgst: num(order.sgstAmount),
+      igst: num(order.igstAmount),
+      total: num(order.totalAmount),
+    };
   }
 
   async adminUpdateStatus(orderId: string, newStatus: string, note?: string, adminId?: string) {

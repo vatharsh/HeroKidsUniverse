@@ -58,6 +58,20 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: "GST & invoices",
+    description: "Turns purchase receipts into GST tax invoices. Pack prices include GST; turning this on doesn't change what parents pay.",
+    items: [
+      { key: "GST_ENABLED", label: "Issue GST Tax Invoices", description: "ON = every paid pack gets a numbered tax invoice (PREFIX/2026-27/000001) with CGST + SGST or IGST worked out and saved on the order, and parents are asked their state at checkout. Only works once a valid 15-character GSTIN is filled in below. Test purchases use a separate TEST- series so your real series has no gaps.", type: "boolean" },
+      { key: "GSTIN", label: "GSTIN", description: "Your 15-character GSTIN, printed on every invoice.", type: "string" },
+      { key: "GST_LEGAL_NAME", label: "Legal Name", description: "Exactly as on your GST registration.", type: "string" },
+      { key: "GST_ADDRESS", label: "Registered Address", description: "Exactly as on your GST registration.", type: "string", multiline: true },
+      { key: "GST_STATE", label: "Registered State", description: "Parents in this state get CGST + SGST; other states get IGST. Parents who don't pick a state are treated as this state.", type: "string" },
+      { key: "GST_RATE_PCT", label: "GST Rate (%)", description: "Included in pack prices. Default 18.", type: "number" },
+      { key: "GST_SAC", label: "SAC Code", description: "Printed on invoices. 998431 = online content (check with your CA).", type: "string" },
+      { key: "INVOICE_PREFIX", label: "Invoice Prefix", description: "Invoice numbers look like PREFIX/2026-27/000001. Don't change it mid-year.", type: "string" },
+    ],
+  },
+  {
     title: "Cost safety",
     description: "AI spend limits and alert emails. Only live (non-test) usage counts; days reset at midnight India time.",
     items: [

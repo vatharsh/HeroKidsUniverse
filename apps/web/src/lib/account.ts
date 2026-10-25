@@ -33,6 +33,7 @@ export interface UserProfile {
   avatarRefreshTokens: number;
   previewCredits: number;
   freeHeroAvatarsLeft: number;
+  billingState: string | null;
   referralCode: string | null;
   createdAt: string;
 }

@@ -22,6 +22,7 @@ import { CommerceOrderStatus, CommerceOrderType, Order } from '../merchandise/or
 import { User } from '../users/user.entity';
 import { CreditPack, CreditPackType } from './credit-pack.entity';
 import { CreditTransaction, CreditTransactionReason } from './credit-transaction.entity';
+import { gstConfig, isIndianState, nextInvoiceNumber, splitInclusiveGst } from '../common/gst';
 import { isSandboxFor } from '../common/sandbox';
 import { MailService } from '../mail/mail.service';
 import { packContents, paymentReceiptEmail } from '../mail/payment-receipt-email';
@@ -211,10 +212,12 @@ export class CreditPacksService {
     packId: string,
     couponCode?: string,
     source?: string,
+    billingState?: string,
   ): Promise<{ razorpayOrderId: string; amount: number; subtotal: number; discount: number; currency: string; keyId: string }> {
     const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isActive: true, isDeleted: false } });
     if (!pack) throw new NotFoundException('Credit pack not found');
 
+    await this.saveBillingState(userId, billingState);
     const pricing = await this.priceWithCoupon(userId, pack, couponCode);
     // Everything needed to credit the purchase travels with the Razorpay order, so verify
     // trusts what was priced here rather than what the client sends back.
@@ -304,9 +307,11 @@ export class CreditPacksService {
     paymentMethod = 'mock',
     couponCode?: string,
     source?: string,
+    billingState?: string,
   ): Promise<{ newBalance: number; characterSlotsTotal: number; avatarRefreshTokens: number }> {
     const pack = await this.creditPacksRepository.findOne({ where: { id: packId, isActive: true, isDeleted: false } });
     if (!pack) throw new NotFoundException('Credit pack not found');
+    await this.saveBillingState(userId, billingState);
 
     const pricing = await this.priceWithCoupon(userId, pack, couponCode);
     const mockPaymentId = `${paymentMethod}_mock_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -415,6 +420,11 @@ export class CreditPacksService {
   }
 
   /** Writes the purchase into Orders (so it shows in admin/reports) and settles the coupon: usage + influencer commission. */
+  /** The parent's state for GST invoices (place of supply) — remembered for next time. */
+  private async saveBillingState(userId: string, billingState?: string) {
+    if (isIndianState(billingState)) await this.usersRepository.update(userId, { billingState });
+  }
+
   private async recordCreditOrder(
     userId: string,
     pack: CreditPack,
@@ -430,6 +440,11 @@ export class CreditPacksService {
         ? await this.dataSource.getRepository(InfluencerCouponCode).findOne({ where: { id: couponCodeId } })
         : null;
       const isInfluencerCoupon = !!coupon?.influencerId && coupon.couponType !== CouponType.Platform;
+      const gst = await gstConfig(this.dataSource);
+      const split = gst.enabled && pricing.total > 0
+        ? splitInclusiveGst(pricing.total, gst.ratePct, gst.state, user.billingState ?? null)
+        : null;
+      const invoiceNumber = split ? await nextInvoiceNumber(this.dataSource.manager, gst.prefix, isSandbox) : null;
 
       const order = await this.ordersRepository.save(this.ordersRepository.create({
         userId,
@@ -446,8 +461,16 @@ export class CreditPacksService {
         couponDiscountValue: coupon ? Number(coupon.discountValue) : null,
         couponDiscountAmount: coupon ? pricing.discount : null,
         shippingAmount: 0,
-        taxAmount: 0,
+        taxAmount: split?.tax ?? 0,
         totalAmount: pricing.total,
+        invoiceNumber,
+        supplierGstin: split ? gst.gstin : null,
+        placeOfSupply: split?.placeOfSupply ?? null,
+        gstRate: split ? gst.ratePct : null,
+        taxableAmount: split?.taxable ?? null,
+        cgstAmount: split?.cgst ?? null,
+        sgstAmount: split?.sgst ?? null,
+        igstAmount: split?.igst ?? null,
         currency: pack.currency ?? 'INR',
         customerName: user.name ?? null,
         customerEmail: user.email ?? null,
@@ -478,6 +501,9 @@ export class CreditPacksService {
           couponCode: coupon?.code ?? null,
           total: pricing.total,
           paidAt: order.createdAt ?? new Date(),
+          gst: split && invoiceNumber
+            ? { invoiceNumber, gstin: gst.gstin, rate: gst.ratePct, taxable: split.taxable, cgst: split.cgst, sgst: split.sgst, igst: split.igst }
+            : null,
         })).catch((err: unknown) => this.logger.warn(`Receipt email for ${order.orderNumber} failed: ${err instanceof Error ? err.message : String(err)}`));
       }
 
@@ -493,7 +519,7 @@ export class CreditPacksService {
           orderTotal: pricing.total,
           discountAmount: pricing.discount,
           shippingAmount: 0,
-          taxAmount: 0,
+          taxAmount: split?.tax ?? 0,
         });
         const commission = await this.dataSource.getRepository(InfluencerCommission).findOne({ where: { orderId: order.id } });
         if (commission) {

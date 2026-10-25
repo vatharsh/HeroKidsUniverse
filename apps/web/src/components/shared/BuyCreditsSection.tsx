@@ -9,7 +9,9 @@ import { cn } from "@/lib/utils";
 import { COUPON_STORAGE_KEY } from "@/lib/coupon-link";
 import { useAuth } from "@/contexts/AuthContext";
 import MaintenanceNotice from "@/components/shared/MaintenanceNotice";
-import { useMaintenance } from "@/lib/platform-settings";
+import { useMaintenance, usePublicPlatformSettings } from "@/lib/platform-settings";
+import { profileApi } from "@/lib/account";
+import { INDIAN_STATES } from "@/lib/indian-states";
 
 declare global {
   interface Window {
@@ -201,6 +203,14 @@ export default function BuyCreditsSection({ onPurchased, source }: BuyCreditsSec
   const [payingPackId, setPayingPackId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
   const [couponInput, setCouponInput] = useState("");
+  // GST invoices need the parent's state (place of supply); asked once, remembered on the account.
+  const { flags } = usePublicPlatformSettings();
+  const gstOn = flags.GST_ENABLED === true;
+  const [billingState, setBillingState] = useState("");
+  useEffect(() => {
+    if (!gstOn) return;
+    profileApi.get().then((p) => { if (p.billingState) setBillingState(p.billingState); }).catch(() => {});
+  }, [gstOn]);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
@@ -263,7 +273,7 @@ export default function BuyCreditsSection({ onPurchased, source }: BuyCreditsSec
       const initRes = await fetch(`${BASE}/credits/packs/${pack.id}/purchase/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ couponCode, source }),
+        body: JSON.stringify({ couponCode, source, billingState: billingState || undefined }),
       });
       if (!initRes.ok) {
         const err = await initRes.json().catch(() => ({})) as { message?: string };
@@ -351,7 +361,19 @@ export default function BuyCreditsSection({ onPurchased, source }: BuyCreditsSec
       <p className="-mt-6 text-xs text-ink-muted leading-relaxed">
         Credits are added instantly, never expire, and can&apos;t be refunded for cash. If a story goes wrong, we&apos;ll give the credit back.{" "}
         <a href="/refunds" className="underline hover:text-brand">Refund policy</a>
+        {gstOn && <> · Prices include GST.</>}
       </p>
+
+      {gstOn && (
+        <label className="-mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-mid">
+          Your state <span className="text-ink-muted">(for your GST invoice)</span>
+          <select value={billingState} onChange={(e) => setBillingState(e.target.value)}
+            className="rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs text-ink focus:outline-none focus:border-brand">
+            <option value="">Select state</option>
+            {INDIAN_STATES.map((st) => <option key={st} value={st}>{st}</option>)}
+          </select>
+        </label>
+      )}
 
       <div className="bg-white rounded-2xl border border-ink/10 p-4 shadow-card">
         {coupon ? (
