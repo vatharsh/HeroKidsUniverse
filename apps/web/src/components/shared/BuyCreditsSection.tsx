@@ -4,7 +4,7 @@ import { Loader2, RefreshCw, Sparkles, Tag, Users, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
-import { fetchActivePacks, type CreditPack } from "@/lib/credits";
+import { fetchActivePacks, promotionLabel, type CreditPack } from "@/lib/credits";
 import { cn } from "@/lib/utils";
 import { COUPON_STORAGE_KEY } from "@/lib/coupon-link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -126,8 +126,8 @@ function PackCard({ pack, quote, couponCode, onBuy }: { pack: CreditPack; quote?
         </div>
       </div>
 
-      {pack.promotionName && (
-        <p className="text-amber-600 text-xs font-bold">🔥 {pack.promotionName}</p>
+      {promotionLabel(pack) && (
+        <p className="text-amber-600 text-xs font-bold">🔥 {promotionLabel(pack)}</p>
       )}
 
       <button

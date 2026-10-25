@@ -73,6 +73,8 @@ export interface CreateCommissionParams {
   discountAmount: number;
   shippingAmount: number;
   taxAmount: number;
+  /** GST already inside subtotal − discount (credit packs are priced GST-inclusive); commission is paid on the rest. */
+  taxIncluded?: number;
 }
 
 /** Used only if every global tier has been deleted. Matches the seeded defaults. */
@@ -263,7 +265,8 @@ export class InfluencersService implements OnModuleInit {
 
   async createCommissionForOrder(params: CreateCommissionParams): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
-      const commissionableAmount = Math.max(0, round2(params.subtotalAmount - params.discountAmount));
+      // GST isn't our income, so it isn't commissionable.
+      const commissionableAmount = Math.max(0, round2(params.subtotalAmount - params.discountAmount - (params.taxIncluded ?? 0)));
       const commissionRate = await this.calculateCommissionRate(params.influencerId);
       const commissionAmount = round2((commissionableAmount * commissionRate) / 100);
 

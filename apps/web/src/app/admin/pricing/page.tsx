@@ -25,6 +25,8 @@ type PackFormData = {
   promotionValue: string;
   promotionStart: string;
   promotionEnd: string;
+  afterPromotionPrice: string;
+  endsDaysAfterLaunch: string;
   badge: string;
   isFeatured: boolean;
   isMostPopular: boolean;
@@ -40,7 +42,7 @@ const EMPTY_FORM: PackFormData = {
   credits: "", bonusCredits: "0",
   characterSlots: "0", avatarRefreshTokens: "0",
   promotionName: "", promotionType: "", promotionValue: "",
-  promotionStart: "", promotionEnd: "",
+  promotionStart: "", promotionEnd: "", afterPromotionPrice: "", endsDaysAfterLaunch: "",
   badge: "",
   isFeatured: false, isMostPopular: false, isBestValue: false,
   sortOrder: "0", isActive: true,
@@ -69,6 +71,8 @@ function packToForm(pack: CreditPack): PackFormData {
     promotionValue: pack.promotionValue != null ? String(pack.promotionValue) : "",
     promotionStart: pack.promotionStart ? pack.promotionStart.slice(0, 16) : "",
     promotionEnd: pack.promotionEnd ? pack.promotionEnd.slice(0, 16) : "",
+    afterPromotionPrice: pack.afterPromotionPrice != null ? String(pack.afterPromotionPrice) : "",
+    endsDaysAfterLaunch: pack.endsDaysAfterLaunch != null ? String(pack.endsDaysAfterLaunch) : "",
     badge: pack.badge ?? "",
     isFeatured: pack.isFeatured,
     isMostPopular: pack.isMostPopular,
@@ -96,6 +100,8 @@ function formToPayload(form: PackFormData) {
     promotionValue: form.promotionValue ? Number(form.promotionValue) : null,
     promotionStart: form.promotionStart || null,
     promotionEnd: form.promotionEnd || null,
+    afterPromotionPrice: form.afterPromotionPrice ? Number(form.afterPromotionPrice) : null,
+    endsDaysAfterLaunch: form.endsDaysAfterLaunch ? Number(form.endsDaysAfterLaunch) : null,
     badge: form.badge || null,
     isFeatured: form.isFeatured,
     isMostPopular: form.isMostPopular,
@@ -289,6 +295,17 @@ function PackModal({
                   <input type="datetime-local" value={form.promotionEnd} onChange={e => set("promotionEnd", e.target.value)} />
                 </Field>
               </div>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <Field label="Price after promo ends (₹)">
+                  <input type="number" min="1" value={form.afterPromotionPrice} onChange={e => set("afterPromotionPrice", e.target.value)} placeholder="599 — empty = base price" />
+                </Field>
+                <Field label="Ends N days after launch">
+                  <input type="number" min="1" max="365" value={form.endsDaysAfterLaunch} onChange={e => set("endsDaysAfterLaunch", e.target.value)} placeholder="30" />
+                </Field>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">
+                &ldquo;Ends N days after launch&rdquo; sets Promo End automatically the moment Sandbox Mode is turned off (if Promo End is empty).
+              </p>
             </div>
 
             <div className="border-t border-gray-100 pt-4">

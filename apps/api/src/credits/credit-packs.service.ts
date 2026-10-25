@@ -93,17 +93,20 @@ export class CreditPacksService {
     @Optional() private readonly mail?: MailService,
   ) {}
 
-  computeEffectivePrice(pack: CreditPack): { effectivePrice: number; isOnSale: boolean; savingsAmount: number; savingsPct: number } {
+  computeEffectivePrice(pack: CreditPack): { effectivePrice: number; isOnSale: boolean; promotionActive: boolean; savingsAmount: number; savingsPct: number } {
     const now = new Date();
     const inWindow = (!pack.promotionStart || pack.promotionStart <= now) && (!pack.promotionEnd || pack.promotionEnd >= now);
+    const ended = !!pack.promotionEnd && pack.promotionEnd < now;
     const basePrice = Number(pack.basePrice);
     const salePrice = pack.salePrice === null ? null : Number(pack.salePrice);
-    const effectivePrice = inWindow && salePrice !== null ? salePrice : basePrice;
-    const isOnSale = inWindow && salePrice !== null;
+    const afterPrice = pack.afterPromotionPrice === null || pack.afterPromotionPrice === undefined ? null : Number(pack.afterPromotionPrice);
+    const effectivePrice = inWindow && salePrice !== null ? salePrice : ended && afterPrice !== null ? afterPrice : basePrice;
+    const isOnSale = effectivePrice < basePrice;
     const savingsAmount = Math.max(0, round2(basePrice - effectivePrice));
     const savingsPct = basePrice > 0 ? Math.round((savingsAmount / basePrice) * 100) : 0;
 
-    return { effectivePrice, isOnSale, savingsAmount, savingsPct };
+    // The promotion's name ("Launch offer") is shown only while its sale price applies.
+    return { effectivePrice, isOnSale, promotionActive: inWindow && salePrice !== null, savingsAmount, savingsPct };
   }
 
   async listActivePacks() {
@@ -141,6 +144,8 @@ export class CreditPacksService {
       promotionValue: dto.promotionValue ?? null,
       promotionStart: dto.promotionStart ? new Date(dto.promotionStart) : null,
       promotionEnd: dto.promotionEnd ? new Date(dto.promotionEnd) : null,
+      afterPromotionPrice: dto.afterPromotionPrice ?? null,
+      endsDaysAfterLaunch: dto.endsDaysAfterLaunch ?? null,
       badge: dto.badge ?? null,
       isFeatured: dto.isFeatured ?? false,
       isMostPopular: dto.isMostPopular ?? false,
@@ -520,6 +525,8 @@ export class CreditPacksService {
           discountAmount: pricing.discount,
           shippingAmount: 0,
           taxAmount: split?.tax ?? 0,
+          // Prices include GST whether or not invoices are switched on — commission is on the pre-GST value.
+          taxIncluded: round2(pricing.total - (pricing.total * 100) / (100 + gst.ratePct)),
         });
         const commission = await this.dataSource.getRepository(InfluencerCommission).findOne({ where: { orderId: order.id } });
         if (commission) {
@@ -561,6 +568,14 @@ export class CreditPacksService {
     if (!(characterSlots >= 0)) throw new BadRequestException('characterSlots must be greater than or equal to 0');
     if (!(avatarRefreshTokens >= 0)) throw new BadRequestException('avatarRefreshTokens must be greater than or equal to 0');
     if (salePrice !== null && salePrice > basePrice) throw new BadRequestException('salePrice must be less than or equal to basePrice');
+    const afterPrice = dto.afterPromotionPrice === null || dto.afterPromotionPrice === undefined ? null : Number(dto.afterPromotionPrice);
+    if (afterPrice !== null && !(afterPrice > 0 && afterPrice <= basePrice)) {
+      throw new BadRequestException('The price after the offer must be more than 0 and at most the base price');
+    }
+    const days = dto.endsDaysAfterLaunch === null || dto.endsDaysAfterLaunch === undefined ? null : Number(dto.endsDaysAfterLaunch);
+    if (days !== null && !(Number.isInteger(days) && days > 0 && days <= 365)) {
+      throw new BadRequestException('Days after launch must be a whole number between 1 and 365');
+    }
     if (promotionStart && promotionEnd && promotionEnd <= promotionStart) {
       throw new BadRequestException('promotionEnd must be after promotionStart');
     }

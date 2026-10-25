@@ -64,6 +64,14 @@ export class CreditPack {
   @Column({ type: 'timestamptz', nullable: true })
   promotionEnd!: Date | null;
 
+  /** Price once the promotion has ended (e.g. ₹599 after a ₹499 launch offer). Empty = back to basePrice. */
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  afterPromotionPrice!: number | null;
+
+  /** Launch offer: when Sandbox Mode is turned off, the promotion is set to end this many days later. */
+  @Column({ type: 'int', nullable: true })
+  endsDaysAfterLaunch!: number | null;
+
   @Column({ type: 'text', nullable: true })
   badge!: string | null;
 

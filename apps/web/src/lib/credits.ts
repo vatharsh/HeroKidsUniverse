@@ -30,8 +30,23 @@ export interface CreditPack {
   // Computed by backend
   effectivePrice: number;
   isOnSale: boolean;
+  /** True only while the promotion's sale price applies — show promotionName only then. */
+  promotionActive?: boolean;
+  /** Price after the promotion ends (e.g. ₹599 after a ₹499 launch offer). */
+  afterPromotionPrice?: number | null;
+  /** Launch offer: promotion ends this many days after go-live. */
+  endsDaysAfterLaunch?: number | null;
   savingsAmount: number;
   savingsPct: number;
+}
+
+/** "🔥 Launch offer · ends 24 Dec" — only while the promotion's price applies. */
+export function promotionLabel(pack: Pick<CreditPack, "promotionName" | "promotionEnd"> & { promotionActive?: boolean }): string | null {
+  if (!pack.promotionName || pack.promotionActive === false) return null;
+  const end = pack.promotionEnd ? new Date(pack.promotionEnd) : null;
+  return end && !Number.isNaN(end.getTime())
+    ? `${pack.promotionName} · ends ${end.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+    : pack.promotionName;
 }
 
 export interface CreditWallet {

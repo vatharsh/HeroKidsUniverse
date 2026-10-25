@@ -120,7 +120,15 @@ export class AdminService {
     const type = def?.type ?? (await this.settingsRepo.findOne({ where: { key } }))?.type ?? 'string';
     const description = def?.description ?? null;
     this.validateSettingValue(key, type, value);
+    const before = key === 'SANDBOX_MODE' ? (await this.settingsRepo.findOne({ where: { key } }))?.value ?? def?.value : null;
     await this.settingsRepo.upsert({ key, value: normalizeSettingValue(type, value), type, description }, ['key']);
+    // Going live starts the launch-offer clock on packs set to end "N days after launch".
+    if (key === 'SANDBOX_MODE' && before === 'true' && normalizeSettingValue(type, value) === 'false') {
+      await this.dataSource.query(
+        `UPDATE credit_packs SET "promotionEnd" = now() + make_interval(days => "endsDaysAfterLaunch")
+          WHERE "endsDaysAfterLaunch" IS NOT NULL AND "promotionEnd" IS NULL AND "isDeleted" = false`,
+      );
+    }
     if (key.startsWith('MAINTENANCE_')) clearMaintenanceCache();
     const row = await this.settingsRepo.findOne({ where: { key } });
     return row ?? { key, value: normalizeSettingValue(type, value), type, description, updatedAt: new Date() };

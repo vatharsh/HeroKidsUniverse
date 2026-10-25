@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { fetchActivePacks, type CreditPack } from "@/lib/credits";
+import { fetchActivePacks, promotionLabel, type CreditPack } from "@/lib/credits";
 import { usePreviewPages } from "@/lib/platform-settings";
 
 /* Static fallback shown before API loads or if API is unavailable */
@@ -56,7 +56,7 @@ const FALLBACK_PACKS = [
     credits: 5,
     bonusCredits: 1,
     totalCredits: 6,
-    promotionName: "Launch Offer",
+    promotionName: "Launch offer",
     promotionType: "flat_amount" as const,
     promotionValue: 200,
     promotionStart: null,
@@ -90,9 +90,9 @@ const FALLBACK_PACKS = [
     salePrice: 999,
     currency: "INR",
     credits: 10,
-    bonusCredits: 3,
-    totalCredits: 13,
-    promotionName: "Best Value",
+    bonusCredits: 2,
+    totalCredits: 12,
+    promotionName: "Launch offer",
     promotionType: "flat_amount" as const,
     promotionValue: 500,
     promotionStart: null,
@@ -205,8 +205,8 @@ export default function PricingSection() {
                     <p className="text-ink-muted text-sm mt-1 mb-1">per credit</p>
                   )}
 
-                  {pack.promotionName && (
-                    <p className="text-amber-600 text-xs font-bold mb-4">🔥 {pack.promotionName}</p>
+                  {promotionLabel(pack) && (
+                    <p className="text-amber-600 text-xs font-bold mb-4">🔥 {promotionLabel(pack)}</p>
                   )}
 
                   <p className="text-ink-muted text-sm mb-6 leading-snug">{pack.description}</p>
