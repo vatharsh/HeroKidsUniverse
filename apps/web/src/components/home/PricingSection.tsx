@@ -149,6 +149,7 @@ export default function PricingSection() {
           </h2>
           <p className="text-ink-mid text-lg mb-6">
             Start free. Pay only for the stories you love.
+            <span className="block text-ink-muted text-sm mt-1">All prices include GST · Credits never expire</span>
           </p>
           <div className="inline-flex items-center gap-2 bg-brand-50 text-brand border border-brand/20 text-sm font-medium px-4 py-2 rounded-full">
             ✨ Try a free {previewPages}-page preview story on signup — no credit card required

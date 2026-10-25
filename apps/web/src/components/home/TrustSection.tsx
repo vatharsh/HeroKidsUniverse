@@ -77,7 +77,7 @@ export default function TrustSection() {
           <div className="flex items-center gap-3">
             <span className="text-3xl">🔐</span>
             <div>
-              <p className="text-white font-semibold text-sm">Built for India&apos;s DPDP Act</p>
+              <p className="text-white font-semibold text-sm">Privacy-first for families</p>
               <p className="text-white/45 text-xs">Parent consent at sign-up · Delete stories any time · No ads, no data selling</p>
             </div>
           </div>
