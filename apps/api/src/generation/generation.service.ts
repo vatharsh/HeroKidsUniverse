@@ -50,6 +50,7 @@ import { wavToMp3 } from './audio-compress';
 import { layoutBubbles } from './bubble-layout';
 import { GenerationJob, JobStatus } from './generation-job.entity';
 import { MailService } from '../mail/mail.service';
+import { AiSpendGuardService, DAILY_LIMIT_MESSAGE } from './ai-spend-guard.service';
 import { storyReadyEmail } from '../mail/story-ready-email';
 import { UserNotificationPreferences } from '../users/user-notification-preferences.entity';
 
@@ -154,6 +155,7 @@ export class GenerationService implements OnModuleInit {
     @InjectRepository(PlatformSetting) private readonly platformSettingsRepo: Repository<PlatformSetting>,
     private readonly characterLocator: GeminiCharacterLocator,
     private readonly safety: ContentSafetyService,
+    private readonly spendGuard: AiSpendGuardService,
     @Optional() private readonly mail?: MailService,
   ) {}
 
@@ -211,28 +213,17 @@ export class GenerationService implements OnModuleInit {
       // Test or live was decided when the story was created (launch switch or test account).
       const isSandbox = aiUsageContext.getStore()?.isSandbox ?? false;
 
-      // Daily AI hard-limit guard — only enforced in live mode to avoid blocking dev work
-      if (!isSandbox) {
-        const dailyHardLimit = await this.getNumberSetting('AI_DAILY_COST_HARD_LIMIT_USD', 25);
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const costRow = await this.aiUsageLogsRepo
-          .createQueryBuilder('log')
-          .select('COALESCE(SUM(log.estimatedCostUsd), 0)', 'total')
-          .where('log.createdAt >= :start AND log.isSandbox = false', { start: todayStart })
-          .getRawOne<{ total: string }>();
-        const aiCostToday = Number(costRow?.total ?? 0);
-        if (aiCostToday >= dailyHardLimit) {
-          this.logger.error(
-            `AI_DAILY_COST_HARD_LIMIT_USD exceeded: $${aiCostToday.toFixed(4)} >= $${dailyHardLimit} — blocking generation for story ${storyId}`,
-          );
-          await updateJob({
-            status: JobStatus.Failed,
-            errorMessage: `Daily AI cost limit ($${dailyHardLimit} USD) exceeded. Generation blocked by admin safety guard. Current spend: $${aiCostToday.toFixed(2)}.`,
-            completedAt: new Date(),
-          });
-          return;
+      // Daily AI limit (live only). New stories are normally turned away before they're charged; this
+      // catches the few already queued when the limit was crossed — fail them cleanly and refund.
+      if (!isSandbox && (await this.spendGuard.isDailyLimitReached())) {
+        this.logger.error(`Daily AI cost limit reached — not generating story ${storyId}; refunding`);
+        const blocked = await this.storiesRepo.findOne({ where: { id: storyId } });
+        if (blocked) {
+          await this.storiesRepo.update(storyId, { status: StoryStatus.Failed, errorMessage: DAILY_LIMIT_MESSAGE });
+          await this.refundStoryCharge(blocked);
         }
+        await updateJob({ status: JobStatus.Failed, currentStep: 'Failed', errorMessage: DAILY_LIMIT_MESSAGE, completedAt: new Date() });
+        return;
       }
 
       await updateJob({
@@ -323,10 +314,9 @@ export class GenerationService implements OnModuleInit {
       const heroName = hero.name ?? 'Hero';
       const heroGender = hero.gender ?? 'child';
 
-      const storyUser = await this.usersRepo.findOne({ where: { id: userId } });
       const pageCount = story.isPreview
         ? await this.getNumberSetting('FREE_PREVIEW_PAGES', Number(SETTING_DEFAULTS.FREE_PREVIEW_PAGES.value))
-        : await this.getPlanPageCount(storyUser?.plan ?? 'basic');
+        : await this.getNumberSetting('FULL_STORY_PAGES', Number(SETTING_DEFAULTS.FULL_STORY_PAGES.value));
 
       const themeDescription = story.theme
         ? (THEME_LABELS[story.theme] ?? 'an exciting adventure')
@@ -764,7 +754,7 @@ export class GenerationService implements OnModuleInit {
 
     const { imageBackend, imageProvider, imageModel, costPerImage } = await this.resolveImageModelCost();
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
-    const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
+    const faceQAThreshold = await this.getNumberSetting('QA_MIN_IDENTITY_SCORE', 7);
     const ageQAEnabled = await this.getBooleanSetting('APPARENT_AGE_QA_ENABLED', true);
     const ageQATolerance = await this.getNumberSetting('APPARENT_AGE_TOLERANCE', 3);
     const ageQARetryCap = await this.getNumberSetting('APPARENT_AGE_RETRY_CAP', 2);
@@ -1074,7 +1064,7 @@ export class GenerationService implements OnModuleInit {
     const scenes = generated.scenes ?? [];
     const { imageBackend, imageProvider, imageModel, costPerImage } = await this.resolveImageModelCost();
     const faceQAEnabled = await this.getBooleanSetting('FACE_CONSISTENCY_QA_ENABLED', true);
-    const faceQAThreshold = await this.getNumberSetting('FACE_CONSISTENCY_THRESHOLD', 7);
+    const faceQAThreshold = await this.getNumberSetting('QA_MIN_IDENTITY_SCORE', 7);
     const imageQuality = await this.getStringSetting('OPENAI_IMAGE_QUALITY', 'medium');
     const allowReferenceless = await this.getBooleanSetting('OPENAI_IMAGE_ALLOW_REFERENCELESS_FALLBACK', false);
     const ageQAEnabled = await this.getBooleanSetting('APPARENT_AGE_QA_ENABLED', true);
@@ -2224,16 +2214,6 @@ export class GenerationService implements OnModuleInit {
     );
   }
 
-  private async getPlanPageCount(plan: string): Promise<number> {
-    const keyMap: Record<string, keyof typeof SETTING_DEFAULTS> = {
-      basic: 'BASIC_PLAN_PAGES',
-      standard: 'STANDARD_PLAN_PAGES',
-      premium: 'PREMIUM_PLAN_PAGES',
-    };
-    const key = keyMap[plan] ?? 'BASIC_PLAN_PAGES';
-    return this.getNumberSetting(key, Number(SETTING_DEFAULTS[key].value));
-  }
-
   private async getBooleanSetting(key: keyof typeof SETTING_DEFAULTS, fallback: boolean): Promise<boolean> {
     const row = await this.platformSettingsRepo.findOne({ where: { key } });
     if (row) return row.value === 'true' || row.value === '1';
@@ -2252,13 +2232,7 @@ export class GenerationService implements OnModuleInit {
     const row = await this.platformSettingsRepo.findOne({ where: { key } });
     if (row) return Number(row.value);
 
-    const envAliases: Record<string, string[]> = {
-      BASIC_PLAN_PAGES: ['BASIC_PLAN_PAGES'],
-      STANDARD_PLAN_PAGES: ['STANDARD_PLAN_PAGES'],
-      PREMIUM_PLAN_PAGES: ['PREMIUM_PLAN_PAGES'],
-    };
-
-    for (const envKey of envAliases[key] ?? [key]) {
+    for (const envKey of [key]) {
       const raw = this.config.get<string>(envKey) ?? process.env[envKey];
       if (raw !== undefined && raw !== null) {
         const num = Number(raw);

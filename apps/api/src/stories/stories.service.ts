@@ -7,6 +7,7 @@ import { Character } from '../characters/entities/character.entity';
 import { CompanionsService } from '../companions/companions.service';
 import { CompanionType } from '../companions/entities/universe-companion.entity';
 import { CreditTransaction, CreditTransactionReason } from '../credits/credit-transaction.entity';
+import { AiSpendGuardService } from '../generation/ai-spend-guard.service';
 import { GenerationService } from '../generation/generation.service';
 import { Hero } from '../heroes/hero.entity';
 import { HeroPower } from '../powers/hero-power.entity';
@@ -47,6 +48,7 @@ export class StoriesService {
     private readonly uploadService: UploadService,
     private readonly safety: ContentSafetyService,
     private readonly previewQuota: PreviewQuotaService,
+    private readonly spendGuard: AiSpendGuardService,
   ) {}
 
   /**
@@ -141,6 +143,7 @@ export class StoriesService {
     }
 
     const isSandbox = await isSandboxFor(this.dataSource, userId);
+    if (!isSandbox) await this.spendGuard.assertCanStartStory();
 
     const story = await this.dataSource.transaction(async (manager) => {
       const user = await manager.findOneOrFail(User, {

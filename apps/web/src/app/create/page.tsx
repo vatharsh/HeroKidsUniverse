@@ -262,6 +262,7 @@ function CreatePageInner() {
   const { user, loading: authLoading } = useAuth();
   const { flags } = usePublicPlatformSettings();
   const previewPages = Number(flags.FREE_PREVIEW_PAGES ?? 3);
+  const fullStoryPages = Number(flags.FULL_STORY_PAGES ?? 6);
 
   // Hero state
   const [hero, setHero]               = useState<ExistingHero | null>(null);
@@ -1671,13 +1672,12 @@ function CreatePageInner() {
                 </div>
                 {/* Plan & page count info */}
                 {(() => {
-                  const plan = (user as any)?.plan ?? "basic";
                   const isPreview = !!user && user.credits < 1 && (user.previewCredits ?? 0) > 0;
-                  const pages = isPreview ? previewPages : plan === "premium" ? 10 : plan === "standard" ? 8 : 6;
-                  const planLabel = isPreview ? "Free preview" : plan === "premium" ? "Premium" : plan === "standard" ? "Standard" : "Basic";
+                  const pages = isPreview ? previewPages : fullStoryPages;
+                  const planLabel = isPreview ? "Free preview" : "Full story";
                   return (
                     <div className="flex items-center justify-between pt-3 border-t border-ink/8">
-                      <span className="text-ink-muted text-xs">Your plan</span>
+                      <span className="text-ink-muted text-xs">Your story</span>
                       <span className="text-xs font-semibold text-ink">{planLabel} · {pages} pages (1 cover + {pages - 1} story pages)</span>
                     </div>
                   );

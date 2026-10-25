@@ -1,8 +1,10 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { usePreviewPages } from "@/lib/platform-settings";
 
 export default function CTABanner() {
+  const previewPages = usePreviewPages();
   const { user } = useAuth();
 
   return (
@@ -33,7 +35,7 @@ export default function CTABanner() {
           }
         </p>
         {!user && (
-          <p className="text-gold/80 text-sm mb-10">Your first story is free — a 3-page preview when you sign up, no credit card needed.</p>
+          <p className="text-gold/80 text-sm mb-10">Your first story is free — a {previewPages}-page preview when you sign up, no credit card needed.</p>
         )}
 
         <div className={`flex flex-col sm:flex-row gap-4 justify-center items-center ${user ? "mt-10" : ""}`}>

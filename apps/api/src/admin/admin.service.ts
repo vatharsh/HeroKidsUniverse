@@ -1483,9 +1483,6 @@ export class AdminService {
       AI_DAILY_COST_HARD_LIMIT_USD: ['AI_DAILY_COST_HARD_LIMIT_USD'],
       AI_MONTHLY_COST_HARD_LIMIT_USD: ['AI_MONTHLY_COST_HARD_LIMIT_USD'],
       FREE_SIGNUP_CREDITS: ['FREE_SIGNUP_CREDITS'],
-      BASIC_PLAN_PAGES: ['BASIC_PLAN_PAGES'],
-      STANDARD_PLAN_PAGES: ['STANDARD_PLAN_PAGES'],
-      PREMIUM_PLAN_PAGES: ['PREMIUM_PLAN_PAGES'],
     };
     const envKeys = envAliases[key] ?? [key];
     for (const envKey of envKeys) {

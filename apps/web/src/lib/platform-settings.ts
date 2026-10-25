@@ -59,3 +59,22 @@ export function usePublicPlatformSettings() {
   const flags = useMemo(() => settings ?? {}, [settings]);
   return { settings, flags, loading, error };
 }
+
+let publicSettingsOnce: Promise<PlatformSettingsMap> | null = null;
+
+/** Pages in the free preview story (FREE_PREVIEW_PAGES), for marketing copy. One shared request per page load. */
+export function usePreviewPages(): number {
+  const [pages, setPages] = useState(3);
+  useEffect(() => {
+    let active = true;
+    publicSettingsOnce ??= fetchPublicPlatformSettings().catch(() => ({}));
+    void publicSettingsOnce.then((map) => {
+      const n = Number(map.FREE_PREVIEW_PAGES);
+      if (active && n > 0) setPages(n);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return pages;
+}

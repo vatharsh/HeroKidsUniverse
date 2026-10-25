@@ -23,6 +23,7 @@ import { User } from '../users/user.entity';
 import { UploadModule } from '../upload/upload.module';
 import { GenerationJob } from './generation-job.entity';
 import { GenerationJobsController } from './generation-jobs.controller';
+import { AiSpendGuardService } from './ai-spend-guard.service';
 import { GenerationService } from './generation.service';
 
 @Module({
@@ -52,7 +53,7 @@ import { GenerationService } from './generation.service';
     ]),
   ],
   controllers: [GenerationJobsController],
-  providers: [GenerationService],
-  exports: [GenerationService],
+  providers: [GenerationService, AiSpendGuardService],
+  exports: [GenerationService, AiSpendGuardService],
 })
 export class GenerationModule {}

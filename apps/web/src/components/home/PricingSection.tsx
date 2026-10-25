@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { fetchActivePacks, type CreditPack } from "@/lib/credits";
+import { usePreviewPages } from "@/lib/platform-settings";
 
 /* Static fallback shown before API loads or if API is unavailable */
 const FALLBACK_PACKS = [
@@ -124,6 +125,7 @@ type DisplayPack = CreditPack & { features?: string[]; cta?: string };
 const TOP_UP_PATH = "/dashboard?topup=1";
 
 export default function PricingSection() {
+  const previewPages = usePreviewPages();
   const { user } = useAuth();
   const buyHref = user ? TOP_UP_PATH : `/login?redirect=${encodeURIComponent(TOP_UP_PATH)}`;
   const [packs, setPacks] = useState<DisplayPack[]>(FALLBACK_PACKS as DisplayPack[]);
@@ -149,7 +151,7 @@ export default function PricingSection() {
             Start free. Pay only for the stories you love.
           </p>
           <div className="inline-flex items-center gap-2 bg-brand-50 text-brand border border-brand/20 text-sm font-medium px-4 py-2 rounded-full">
-            ✨ Try a free 3-page preview story on signup — no credit card required
+            ✨ Try a free {previewPages}-page preview story on signup — no credit card required
           </div>
         </div>
 

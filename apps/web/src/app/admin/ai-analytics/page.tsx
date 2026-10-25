@@ -1462,7 +1462,7 @@ const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",
     QA_WEIGHT_DIALOGUE: "10", QA_WEIGHT_COMPOSITION: "10",
     QA_WEIGHT_NARRATION: "5", QA_WEIGHT_STATE_CONSISTENCY: "5",
-    QA_RETRY_STRATEGY: "page_only", QA_MODE: "debug",
+    QA_RETRY_STRATEGY: "page_only",
   },
   balanced: {
     QA_ENABLED: "true", QA_ENABLE_AUTO_REGENERATION: "true",
@@ -1475,7 +1475,7 @@ const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",
     QA_WEIGHT_DIALOGUE: "10", QA_WEIGHT_COMPOSITION: "10",
     QA_WEIGHT_NARRATION: "5", QA_WEIGHT_STATE_CONSISTENCY: "5",
-    QA_RETRY_STRATEGY: "page_only", QA_MODE: "balanced",
+    QA_RETRY_STRATEGY: "page_only",
   },
   strict: {
     QA_ENABLED: "true", QA_ENABLE_AUTO_REGENERATION: "true",
@@ -1488,7 +1488,7 @@ const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",
     QA_WEIGHT_DIALOGUE: "10", QA_WEIGHT_COMPOSITION: "10",
     QA_WEIGHT_NARRATION: "5", QA_WEIGHT_STATE_CONSISTENCY: "5",
-    QA_RETRY_STRATEGY: "scene", QA_MODE: "strict",
+    QA_RETRY_STRATEGY: "scene",
   },
   cost_optimized: {
     QA_ENABLED: "true", QA_ENABLE_AUTO_REGENERATION: "false",
@@ -1501,7 +1501,7 @@ const PRESETS: Record<Exclude<PresetKey, "custom">, PresetValues> = {
     QA_WEIGHT_IDENTITY: "40", QA_WEIGHT_STORY: "20", QA_WEIGHT_EXPRESSION: "10",
     QA_WEIGHT_DIALOGUE: "10", QA_WEIGHT_COMPOSITION: "10",
     QA_WEIGHT_NARRATION: "5", QA_WEIGHT_STATE_CONSISTENCY: "5",
-    QA_RETRY_STRATEGY: "never", QA_MODE: "fast",
+    QA_RETRY_STRATEGY: "never",
   },
 };
 
@@ -1727,16 +1727,11 @@ const NARRATION_GROUP: SettingGroup = {
 };
 
 const BUDGET_GROUP: SettingGroup = {
-  title: "Budget Protection",
-  description: "Automatically cap AI spend per story and alert when daily/monthly limits are approached.",
+  title: "Redraw Budget",
+  description: "Caps how much automatic QA redraws can add to one story. Daily/monthly spend limits and alert emails are in Settings → Cost safety.",
   items: [
-    { key: "QA_MAX_COST_PER_STORY",    label: "Max Cost Per Story (USD)",  description: "Hard cap on AI cost per story. Default $0.35.", type: "number" },
-    { key: "QA_MAX_COST_PER_AVATAR",   label: "Max Cost Per Avatar (USD)", description: "Hard cap on AI cost per avatar generation. Default $0.10.", type: "number" },
-    { key: "QA_MAX_COST_PER_PAGE",     label: "Max Cost Per Page (USD)",   description: "Hard cap on AI cost per story page. Default $0.05.", type: "number" },
-    { key: "QA_STOP_REGEN_ON_BUDGET",  label: "Stop Regen on Budget Exceeded", description: "If a story exceeds the per-story cap, stop auto-regeneration immediately.", type: "boolean" },
-    { key: "QA_NOTIFY_ADMIN_ON_BUDGET",label: "Notify Admin on Budget Alert",   description: "Send a platform alert when daily budget threshold is reached.", type: "boolean" },
-    { key: "QA_DAILY_BUDGET_ALERT",    label: "Daily Budget Alert (USD)",       description: "AI spend threshold that triggers a daily alert. Default $50.", type: "number" },
-    { key: "QA_MONTHLY_BUDGET_ALERT",  label: "Monthly Budget Alert (USD)",     description: "AI spend threshold that triggers a monthly alert. Default $1000.", type: "number" },
+    { key: "QA_MAX_COST_PER_STORY",    label: "Max Redraw Cost Per Story (USD)", description: "Most extra AI spend on automatic page redraws for one story. Default $0.35.", type: "number" },
+    { key: "QA_STOP_REGEN_ON_BUDGET",  label: "Stop Redraws at the Cap", description: "Once a story's redraws reach the cap above, keep the pages as they are instead of redrawing more.", type: "boolean" },
   ],
 };
 
@@ -1745,13 +1740,7 @@ const ADVANCED_GROUP: SettingGroup = {
   description: "Developer-only options. These can break production behaviour — use with caution.",
   items: [
     { key: "QA_FORCE_REGENERATION",          label: "Force Regeneration",           description: "Regenerate every page regardless of QA score.", type: "boolean" },
-    { key: "QA_DISABLE_CHARACTER_CANON",     label: "Disable Character Canon",      description: "Skip character canon lookup during generation.", type: "boolean" },
-    { key: "QA_DISABLE_STORY_STATE",         label: "Disable Story State Tracker",  description: "Skip per-page state pre-computation.", type: "boolean" },
-    { key: "QA_DISABLE_SPEECH_BUBBLES",      label: "Disable Speech Bubble Engine", description: "Skip speech bubble placement pass.", type: "boolean" },
-    { key: "QA_DISABLE_CONFIDENCE_ENGINE",   label: "Disable Confidence Engine",    description: "Skip confidence scoring entirely.", type: "boolean" },
     { key: "QA_DISABLE_QA_LOGGING",          label: "Disable QA Logging",           description: "Do not write to story_qa_runs / story_qa_pages.", type: "boolean" },
-    { key: "QA_PROMPT_VERSION_OVERRIDE",     label: "Prompt Version Override",      description: "Force a specific prompt version tag for A/B testing. Leave empty to use current.", type: "string" },
-    { key: "QA_MODEL_OVERRIDE",              label: "Model Override",               description: "Override the AI model used for generation. Leave empty to use defaults.", type: "string" },
   ],
 };
 
@@ -1762,7 +1751,7 @@ const ALL_SETTINGS_KEYS = [
   ...NARRATION_GROUP.items.map(i => i.key),
   ...BUDGET_GROUP.items.map(i => i.key),
   ...ADVANCED_GROUP.items.map(i => i.key),
-  "QA_PRESET", "QA_RETRY_STRATEGY", "QA_MODE",
+  "QA_PRESET", "QA_RETRY_STRATEGY",
 ];
 
 function AiSettingRow({
@@ -1955,14 +1944,9 @@ function SettingsTab() {
   async function resetAll() {
     const allDefaults: Record<string, string> = {
       ...PRESETS.balanced,
-      QA_PRESET: "balanced", QA_RETRY_STRATEGY: "page_only", QA_MODE: "balanced",
-      QA_MAX_COST_PER_STORY: "0.35", QA_MAX_COST_PER_AVATAR: "0.10", QA_MAX_COST_PER_PAGE: "0.05",
-      QA_STOP_REGEN_ON_BUDGET: "true", QA_NOTIFY_ADMIN_ON_BUDGET: "true",
-      QA_DAILY_BUDGET_ALERT: "50", QA_MONTHLY_BUDGET_ALERT: "1000",
-      QA_FORCE_REGENERATION: "false", QA_DISABLE_CHARACTER_CANON: "false",
-      QA_DISABLE_STORY_STATE: "false", QA_DISABLE_SPEECH_BUBBLES: "false",
-      QA_DISABLE_CONFIDENCE_ENGINE: "false", QA_DISABLE_QA_LOGGING: "false",
-      QA_PROMPT_VERSION_OVERRIDE: "", QA_MODEL_OVERRIDE: "",
+      QA_PRESET: "balanced", QA_RETRY_STRATEGY: "page_only",
+      QA_MAX_COST_PER_STORY: "0.35", QA_STOP_REGEN_ON_BUDGET: "true",
+      QA_FORCE_REGENERATION: "false", QA_DISABLE_QA_LOGGING: "false",
     };
     await commitMany(allDefaults);
     setDraft({});

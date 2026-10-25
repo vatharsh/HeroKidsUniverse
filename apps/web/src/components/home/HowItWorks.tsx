@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { usePreviewPages } from "@/lib/platform-settings";
 
 function StepIllustration({ step }: { step: number }) {
   if (step === 1) return (
@@ -102,6 +103,7 @@ const steps = [
 ];
 
 export default function HowItWorks() {
+  const previewPages = usePreviewPages();
   const { user } = useAuth();
 
   return (
@@ -159,7 +161,7 @@ export default function HowItWorks() {
           >
             {user ? "Continue Your Universe →" : "Start Your Universe →"}
           </a>
-          <p className="text-ink-muted text-xs mt-3">Free 3-page preview story · No credit card required</p>
+          <p className="text-ink-muted text-xs mt-3">Free {previewPages}-page preview story · No credit card required</p>
         </div>
       </div>
     </section>

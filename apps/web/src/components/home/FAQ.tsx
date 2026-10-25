@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePreviewPages } from "@/lib/platform-settings";
 
 const faqs = [
   {
@@ -35,11 +36,12 @@ const faqs = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. Every new account gets a free 3-page preview story — no credit card needed. If you love it (you will), full stories start at ₹149.",
+    a: "Yes. Every new account gets a free {pages}-page preview story — no credit card needed. If you love it (you will), full stories start at ₹149.",
   },
 ];
 
 export default function FAQ() {
+  const previewPages = usePreviewPages();
   const [open, setOpen] = useState<number | null>(null);
 
   return (
@@ -77,7 +79,7 @@ export default function FAQ() {
               </button>
               {open === i && (
                 <div className="px-6 pb-6 text-ink-mid text-sm leading-relaxed border-t border-ink/5 pt-4">
-                  {faq.a}
+                  {faq.a.replace("{pages}", String(previewPages))}
                 </div>
               )}
             </div>

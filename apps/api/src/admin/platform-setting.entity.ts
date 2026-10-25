@@ -38,23 +38,24 @@ export const PUBLIC_SETTING_KEYS = [
   'ENABLE_VIDEO_EXPORT',
   'ENABLE_INFLUENCER_PROGRAM',
   'FREE_PREVIEW_PAGES',
+  'FULL_STORY_PAGES',
   'CREDIT_PACK_MAX_COUPON_DISCOUNT_PCT',
   'INFLUENCER_MAX_COMMISSION_PCT',
 ] as const;
 
 export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
-  AI_DAILY_COST_WARNING_USD:      { value: '10',  type: 'number',  description: 'Alert threshold for daily AI spend (USD)' },
-  AI_MONTHLY_COST_WARNING_USD:    { value: '200', type: 'number',  description: 'Alert threshold for monthly AI spend (USD)' },
-  AI_DAILY_COST_HARD_LIMIT_USD:   { value: '25',  type: 'number',  description: 'Hard stop threshold for daily AI spend (USD)' },
-  AI_MONTHLY_COST_HARD_LIMIT_USD:  { value: '500', type: 'number',  description: 'Hard stop threshold for monthly AI spend (USD)' },
-  BASIC_PLAN_PAGES:               { value: '6',   type: 'number',  description: 'Default number of pages for the Basic plan' },
+  AI_DAILY_COST_WARNING_USD:      { value: '10',  type: 'number',  description: 'Daily AI spend (USD, live only) that sends you a warning email' },
+  AI_MONTHLY_COST_WARNING_USD:    { value: '200', type: 'number',  description: 'Monthly AI spend (USD, live only) that sends you a warning email' },
+  AI_DAILY_COST_HARD_LIMIT_USD:   { value: '60',  type: 'number',  description: 'Daily AI spend limit (USD, live only, resets at midnight IST). Once reached, new stories are paused for the day with a friendly message — nobody is charged — and you get an email. 0 = no limit.' },
+  AI_MONTHLY_COST_HARD_LIMIT_USD:  { value: '500', type: 'number',  description: 'Monthly AI spend level (USD) that sends an alert email. Does not pause stories.' },
+  ALERT_EMAIL:                    { value: 'support@herokidsuniverse.com', type: 'string', description: 'Where AI cost alerts are emailed (once per day / month each). Leave empty to turn alert emails off.' },
+  FULL_STORY_PAGES:               { value: '6',   type: 'number',  description: 'Pages in a full (paid) story, including the cover' },
   DISPLAY_CURRENCY:               { value: 'INR', type: 'string',  description: 'Primary currency shown in admin dashboards' },
   ENABLE_INDIAN_ENGLISH_NARRATION:{ value: 'true', type: 'boolean', description: 'Enable Indian English narration prompts and voices' },
   ENABLE_INFLUENCER_PROGRAM:      { value: 'false', type: 'boolean', description: 'Show influencer program admin tools' },
   CHARACTER_CANON_ENABLED:        { value: 'true', type: 'boolean', description: 'Use Character Canon system for face consistency in image generation. Falls back to avatarDescription if disabled or canon missing.' },
   CHARACTER_CANON_MIN_QUALITY:    { value: '70',   type: 'number',  description: 'Minimum canon quality score to use for generation. Below this threshold, canon is marked needs_review but still used.' },
   FACE_CONSISTENCY_QA_ENABLED:    { value: 'true', type: 'boolean', description: 'Run a vision-based face identity check after each story illustration; low-scoring images are regenerated once' },
-  FACE_CONSISTENCY_THRESHOLD:     { value: '7',    type: 'number',  description: 'Minimum identity score (1–10) before accepting an illustration without regeneration' },
   FREE_HERO_AVATAR_GENERATIONS:   { value: '3', type: 'number', description: 'Free hero avatar generations per account (shared by all heroes); after that each one uses an Avatar Refresh' },
   OPENAI_AVATAR_COST_PER_IMAGE:   { value: '0.19', type: 'number', description: 'Cost tracking for one OpenAI avatar (gpt-image-1, high quality, photo edit) in USD' },
   GEMINI_AVATAR_COST_PER_IMAGE:   { value: '0.067', type: 'number', description: 'Cost tracking for one Gemini avatar in USD' },
@@ -70,8 +71,6 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   ENABLE_NARRATION:               { value: 'true', type: 'boolean', description: 'Enable narration generation' },
   ENABLE_PHYSICAL_ORDERS:         { value: 'false', type: 'boolean', description: 'Show physical order options' },
   ENABLE_SCENE_GENERATION:        { value: 'true', type: 'boolean', description: 'Use scene-based illustration grouping (Phase 2). Reduces AI image cost by 50-60%.' },
-  ENABLE_STORY_CONTINUATION:      { value: 'true', type: 'boolean', description: 'Allow story continuation from existing arcs' },
-  ENABLE_UNIVERSE_MEMORY:         { value: 'true', type: 'boolean', description: 'Persist and reuse universe memory' },
   ENABLE_VIDEO_EXPORT:            { value: 'true', type: 'boolean', description: 'Show video export controls for stories' },
   FREE_SIGNUP_CREDITS:            { value: '0',   type: 'number',  description: 'Full story credits awarded automatically on signup' },
   FREE_PREVIEW_STORIES:           { value: '1',   type: 'number',  description: 'Free preview stories awarded on signup (used only when the user has no regular credits)' },
@@ -84,8 +83,6 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   MAX_EXPRESSION_VARIANTS:        { value: '2', type: 'number', description: 'Max extra page redraws per story for a changed expression/pose (each costs one image)' },
   CHARACTER_SHEETS_ENABLED:       { value: 'true', type: 'boolean', description: 'Draw one 3D reference of every character in their story outfit before the pages, and use it for every page' },
   STORY_IMAGE_ASPECT_RATIO:       { value: '1:1', type: 'string', description: 'Aspect ratio requested for every story illustration (e.g. 1:1, 4:3, 3:4, 16:9) so all pages match' },
-  PREMIUM_PLAN_PAGES:             { value: '10',  type: 'number',  description: 'Default number of pages for the Premium plan' },
-  STANDARD_PLAN_PAGES:            { value: '8',   type: 'number',  description: 'Default number of pages for the Standard plan' },
   USD_INR_RATE:                   { value: '86',  type: 'number',  description: 'USD to INR conversion rate used for dashboards and pricing' },
   // AI model pricing — update these whenever provider pricing changes
   GEMINI_INPUT_COST_PER_1M_TOKENS:  { value: '0.10',     type: 'number', description: 'Fallback Gemini input price per 1M tokens (USD) for models without a built-in price (gemini-3.8-flash has one).' },
@@ -110,7 +107,7 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   QA_ENABLE_DIALOGUE_QA:            { value: 'true',  type: 'boolean', description: 'Enable dialogue QA (speaker validity, no duplicates).' },
   QA_ENABLE_COMPOSITION_QA:         { value: 'false', type: 'boolean', description: 'Enable AI vision composition QA (costs one vision call per page — off by default).' },
   QA_ENABLE_NARRATION_QA:           { value: 'true',  type: 'boolean', description: 'Enable narration QA (audio presence + text length check).' },
-  QA_MIN_IDENTITY_SCORE:            { value: '6',     type: 'number',  description: 'Minimum identity score (0–10) for a page to pass Identity QA.' },
+  QA_MIN_IDENTITY_SCORE:            { value: '7',     type: 'number',  description: 'How closely a face must match the character (0–10) before a page is accepted; lower-scoring pages are redrawn.' },
   QA_MIN_STORY_SCORE:               { value: '6',     type: 'number',  description: 'Minimum story continuity score (0–10) for a page to pass Story QA.' },
   QA_MIN_EXPRESSION_SCORE:          { value: '5',     type: 'number',  description: 'Minimum expression score (0–10) for a page to pass Expression QA.' },
   QA_MIN_OVERALL_CONFIDENCE:        { value: '70',    type: 'number',  description: 'Minimum overall confidence (0–100) before auto-regeneration is triggered.' },
@@ -144,31 +141,15 @@ export const SETTING_DEFAULTS: Record<string, PlatformSettingDefinition> = {
   // ── Preset & mode ─────────────────────────────────────────────────────────────
   QA_PRESET:                        { value: 'balanced',    type: 'string',  description: 'Active QA configuration preset (development/balanced/strict/cost_optimized/custom).' },
   QA_RETRY_STRATEGY:                { value: 'page_only',   type: 'string',  description: 'Retry strategy: never / page_only / scene / story.' },
-  QA_MODE:                          { value: 'balanced',    type: 'string',  description: 'QA mode: fast / balanced / strict / debug.' },
 
   // ── Budget protection ─────────────────────────────────────────────────────────
-  QA_MAX_COST_PER_STORY:            { value: '0.35',        type: 'number',  description: 'Maximum AI cost per story in USD.' },
-  QA_MAX_COST_PER_AVATAR:           { value: '0.10',        type: 'number',  description: 'Maximum AI cost per avatar in USD.' },
-  QA_MAX_COST_PER_PAGE:             { value: '0.05',        type: 'number',  description: 'Maximum AI cost per story page in USD.' },
-  QA_STOP_REGEN_ON_BUDGET:          { value: 'true',        type: 'boolean', description: 'Stop auto-regeneration if per-story budget is exceeded.' },
-  QA_NOTIFY_ADMIN_ON_BUDGET:        { value: 'true',        type: 'boolean', description: 'Notify admin if daily budget threshold is exceeded.' },
-  QA_DAILY_BUDGET_ALERT:            { value: '50',          type: 'number',  description: 'Daily AI spend threshold (USD) that triggers an admin alert.' },
-  QA_MONTHLY_BUDGET_ALERT:          { value: '1000',        type: 'number',  description: 'Monthly AI spend threshold (USD) that triggers an admin alert.' },
+  QA_MAX_COST_PER_STORY:            { value: '0.35',        type: 'number',  description: 'Most extra AI spend (USD) on automatic QA redraws for one story.' },
+  QA_STOP_REGEN_ON_BUDGET:          { value: 'true',        type: 'boolean', description: 'Stop automatic redraws once a story reaches QA_MAX_COST_PER_STORY.' },
 
   // ── Advanced / developer options ──────────────────────────────────────────────
   QA_FORCE_REGENERATION:            { value: 'false',       type: 'boolean', description: 'Force regeneration of all pages regardless of QA score.' },
-  QA_DISABLE_CHARACTER_CANON:       { value: 'false',       type: 'boolean', description: 'Disable character canon lookups during generation.' },
-  QA_DISABLE_STORY_STATE:           { value: 'false',       type: 'boolean', description: 'Disable story state tracker.' },
-  QA_DISABLE_SPEECH_BUBBLES:        { value: 'false',       type: 'boolean', description: 'Disable speech bubble engine.' },
-  QA_DISABLE_CONFIDENCE_ENGINE:     { value: 'false',       type: 'boolean', description: 'Disable the confidence scoring engine.' },
   QA_DISABLE_QA_LOGGING:            { value: 'false',       type: 'boolean', description: 'Disable writing QA results to story_qa_runs / story_qa_pages.' },
-  QA_PROMPT_VERSION_OVERRIDE:       { value: '',            type: 'string',  description: 'Override active prompt version for A/B testing.' },
-  QA_MODEL_OVERRIDE:                { value: '',            type: 'string',  description: 'Override AI model for generation (leave empty to use defaults).' },
 
-  // ── Audit ─────────────────────────────────────────────────────────────────────
-  QA_LAST_MODIFIED_BY:              { value: '',            type: 'string',  description: 'Email of last admin to save QA settings.' },
-  QA_LAST_MODIFIED_ON:              { value: '',            type: 'string',  description: 'ISO timestamp of last QA settings save.' },
-  QA_SETTINGS_VERSION:              { value: '1.0',         type: 'string',  description: 'QA settings schema version — increment on breaking changes.' },
 };
 
 export function normalizeSettingValue(type: PlatformSettingType, value: unknown): string {
