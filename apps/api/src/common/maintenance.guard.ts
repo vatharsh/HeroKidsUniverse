@@ -12,6 +12,7 @@ import { maintenanceMessage, maintenanceState } from './maintenance';
 const ALWAYS_ALLOWED = [
   /\/auth\/(login|refresh|logout|verify-email|verify-email\/resend|forgot-password|reset-password)$/,
   /\/credits\/packs\/[^/]+\/purchase\/verify$/,
+  /\/payments\/razorpay\/webhook$/,
   /\/users\/me(\/.*)?$/,
 ];
 

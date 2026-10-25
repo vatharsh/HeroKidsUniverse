@@ -348,6 +348,10 @@ export default function BuyCreditsSection({ onPurchased, source }: BuyCreditsSec
         <Sparkles className="w-5 h-5 text-brand" />
         <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl">Top Up Your Account</h2>
       </div>
+      <p className="-mt-6 text-xs text-ink-muted leading-relaxed">
+        Credits are added instantly, never expire, and can&apos;t be refunded for cash. If a story goes wrong, we&apos;ll give the credit back.{" "}
+        <a href="/refunds" className="underline hover:text-brand">Refund policy</a>
+      </p>
 
       <div className="bg-white rounded-2xl border border-ink/10 p-4 shadow-card">
         {coupon ? (

@@ -194,8 +194,12 @@ export class AdminService {
             WHERE u.role = 'parent' AND u."deletedAt" IS NULL AND ${userFilter}
               AND ($1::int IS NULL OR u."createdAt" >= now() - make_interval(days => $1::int))),
          previewed AS (SELECT DISTINCT "userId" FROM stories WHERE "isPreview" = true AND status <> 'failed'),
-         buys AS (SELECT "userId", COUNT(*)::int AS n, SUM("pricePaid")::numeric AS amount
-                    FROM credit_transactions WHERE reason = 'purchase' AND "pricePaid" > 0 GROUP BY "userId")
+         -- Sales net of money refunded through Razorpay; a fully refunded buyer doesn't count as paid.
+         buys AS (SELECT "userId",
+                         COUNT(*) FILTER (WHERE reason = 'purchase')::int AS n,
+                         SUM(CASE WHEN reason = 'purchase' THEN "pricePaid" ELSE -"pricePaid" END)::numeric AS amount
+                    FROM credit_transactions WHERE reason IN ('purchase', 'payment_refund') AND "pricePaid" > 0
+                   GROUP BY "userId" HAVING SUM(CASE WHEN reason = 'purchase' THEN "pricePaid" ELSE -"pricePaid" END) > 0)
          SELECT COUNT(*)::int AS signups,
                 COUNT(*) FILTER (WHERE c."emailVerifiedAt" IS NOT NULL)::int AS verified,
                 COUNT(*) FILTER (WHERE c.id IN (SELECT "userId" FROM previewed))::int AS previewed,

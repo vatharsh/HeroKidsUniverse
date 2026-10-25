@@ -11,14 +11,16 @@ import { CreditPacksService } from './credit-packs.service';
 import { CreditTransaction } from './credit-transaction.entity';
 import { CreditsController } from './credits.controller';
 import { CreditsService } from './credits.service';
+import { AdminPaymentRefundsController, RazorpayWebhookController } from './payment-refunds.controller';
+import { PaymentRefundsService } from './payment-refunds.service';
 
 @Module({
   imports: [
     InfluencersModule,
     TypeOrmModule.forFeature([CreditPack, CreditTransaction, User, Order, OrderStatusHistory, PlatformSetting]),
   ],
-  controllers: [CreditsController],
-  providers: [CreditsService, CreditPacksService],
+  controllers: [CreditsController, AdminPaymentRefundsController, RazorpayWebhookController],
+  providers: [CreditsService, CreditPacksService, PaymentRefundsService],
   exports: [CreditPacksService],
 })
 export class CreditsModule {}

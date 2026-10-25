@@ -37,6 +37,9 @@ export default function Footer() {
             <a href="/terms" className="text-white/50 hover:text-white text-sm transition">
               Terms
             </a>
+            <a href="/refunds" className="text-white/50 hover:text-white text-sm transition">
+              Refunds
+            </a>
             <a href="/contact" className="text-white/50 hover:text-white text-sm transition">
               Contact
             </a>

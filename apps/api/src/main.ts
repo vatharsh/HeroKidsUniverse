@@ -13,7 +13,8 @@ import { CreditPacksService } from './credits/credit-packs.service';
 import { seedDefaultPacks } from './credits/credit-packs.seed';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: Razorpay webhooks are verified against the exact bytes they sent.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({

@@ -13,7 +13,7 @@ export default function TermsPage() {
       eyebrow="Terms"
       title="Terms and Conditions"
       description="The rules for using Hero Kids Universe: AI-generated content, child safety, credits, coupons, orders and refunds."
-      updatedAt="21 October 2026"
+      updatedAt="25 October 2026"
       sections={[
         {
           title: "Agreement",
@@ -67,7 +67,8 @@ export default function TermsPage() {
           title: "Credits, packs and coupons",
           body: [
             "Story Credits are used to create stories; Character Slots and Avatar Refreshes are sold separately. Prices, pack contents, page counts and features may change, and the current details are shown before you pay.",
-            "A credit is used when a story is created. If a story fails to generate or is stopped by our safety checks, the credit is returned automatically. A story that is created successfully but that you simply do not like uses the credit.",
+            "A credit is used when a story is created. If a story fails to generate or is stopped by our safety checks, the credit is returned automatically. If a story comes out wrong (for example the hero does not look like your child, or pictures are broken), tell us within 7 days and we will return the credit. A story that is created correctly but that you simply do not like uses the credit.",
+            "Credits, slots and refreshes do not expire.",
             "Credits, slots and refreshes have no cash value and cannot be transferred or exchanged for money.",
             "Coupon codes (including codes shared by influencers) can be used when buying credit packs and in the store. Only one coupon applies per purchase. Coupon discounts on credit packs are limited to a maximum percentage that is shown at checkout. Coupons may have minimum order amounts, usage limits and expiry dates, and we may withdraw a coupon that is misused.",
           ],
@@ -84,7 +85,7 @@ export default function TermsPage() {
           title: "Payments and refunds",
           body: [
             "Payments are processed by Razorpay. We do not store card, UPI or net-banking details.",
-            "Digital purchases (credits, slots, refreshes) are generally non-refundable once delivered to your account, except where a payment was taken but the purchase did not reach your account, or where the law requires a refund. For help with a payment or refund, contact support@herokidsuniverse.com.",
+            "Digital purchases (credits, slots, refreshes) are delivered instantly and are non-refundable once in your account, except where a payment was taken but the purchase did not reach your account, you were charged twice, or the law requires a refund. Approved refunds go back to the original payment method (usually 5–7 working days), and the matching credits are removed. Full details are in our Refund and Cancellation Policy at herokidsuniverse.com/refunds.",
           ],
         },
         {

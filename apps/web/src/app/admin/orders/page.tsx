@@ -165,8 +165,111 @@ function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode 
   );
 }
 
+interface RefundPreview {
+  paymentId: string | null;
+  refundable: boolean;
+  reason: string | null;
+  paid: number;
+  alreadyRefunded: number;
+  maxRefund: number;
+  granted: { credits: number; refreshes: number; slots: number };
+  unused: { credits: number; refreshes: number; slots: number };
+  suggestedAmount: number;
+}
+
+const packParts = (x: { credits: number; refreshes: number; slots: number }) =>
+  [x.credits && `${x.credits} credit${x.credits === 1 ? "" : "s"}`, x.refreshes && `${x.refreshes} refresh${x.refreshes === 1 ? "" : "es"}`, x.slots && `${x.slots} slot${x.slots === 1 ? "" : "s"}`]
+    .filter(Boolean).join(", ") || "—";
+
+/** Money refund through Razorpay for a credit pack; takes back the pack's unused credits in proportion. */
+function RefundPanel({ orderId, onRefunded }: { orderId: string; onRefunded: () => void }) {
+  const [preview, setPreview] = useState<RefundPreview | null>(null);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    fetch(`${BASE}/admin/orders/${orderId}/refund-preview`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(j => {
+        const p = (j.data ?? null) as RefundPreview | null;
+        setPreview(p);
+        if (p) setAmount(String(p.suggestedAmount));
+      })
+      .catch(() => setPreview(null));
+  }, [orderId]);
+
+  async function refund() {
+    if (!preview) return;
+    const value = Number(amount);
+    if (!(value > 0) || value > preview.maxRefund) { setMessage({ ok: false, text: `Enter an amount between ₹1 and ₹${preview.maxRefund}.` }); return; }
+    if (!window.confirm(`Refund ₹${value} to the parent's original payment method through Razorpay? This can't be undone.`)) return;
+    setBusy(true); setMessage(null);
+    try {
+      const res = await fetch(`${BASE}/admin/orders/${orderId}/refund`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: value, note: note.trim() || undefined }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "Refund failed");
+      const d = j.data;
+      setMessage({ ok: true, text: `Refunded ₹${d.amount}${d.full ? " (full)" : ""}. Took back ${packParts(d.takenBack)}. The parent has been emailed.` });
+      onRefunded();
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : "Refund failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!preview) return null;
+  return (
+    <>
+      <SectionHeader>Refund payment</SectionHeader>
+      <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 space-y-0">
+        <Row label="Paid" value={`₹${preview.paid.toLocaleString()}`} />
+        {preview.alreadyRefunded > 0 && <Row label="Already refunded" value={`₹${preview.alreadyRefunded.toLocaleString()}`} />}
+        <Row label="Pack gave" value={packParts(preview.granted)} />
+        <Row label="Still unused" value={packParts(preview.unused)} />
+        {preview.paymentId && <Row label="Razorpay payment" value={<span className="font-mono text-[11px]">{preview.paymentId}</span>} />}
+      </div>
+      {preview.refundable ? (
+        <div className="mt-3 space-y-2">
+          <div className="flex gap-2">
+            <div className="flex items-center rounded-xl border border-gray-200 bg-white px-3 w-36">
+              <span className="text-sm text-gray-500">₹</span>
+              <input type="number" min={1} max={preview.maxRefund} step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
+                className="w-full py-2 pl-1 text-sm outline-none" />
+            </div>
+            <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason (optional, for the order history)"
+              className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400" />
+          </div>
+          <p className="text-[11px] text-gray-500">
+            Suggested ₹{preview.suggestedAmount} = what&apos;s still unused. Up to ₹{preview.maxRefund}. The matching share of the pack is taken back from the parent;
+            a full refund also cancels the influencer&apos;s commission. Always refund from here or the Razorpay dashboard — both keep credits in sync.
+          </p>
+          <button type="button" onClick={refund} disabled={busy}
+            className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-60 px-4 py-2 text-sm font-semibold text-white">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Refund ₹{Number(amount) || 0}
+          </button>
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-gray-500">{preview.reason}</p>
+      )}
+      {message && (
+        <p className={`mt-2 text-xs font-semibold ${message.ok ? "text-emerald-700" : "text-red-600"}`}>{message.text}</p>
+      )}
+    </>
+  );
+}
+
 function ViewDrawer({ orderId, orderNumber, onClose }: { orderId: string; orderNumber: string; onClose: () => void }) {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -181,7 +284,7 @@ function ViewDrawer({ orderId, orderNumber, onClose }: { orderId: string; orderN
       })
       .catch(() => setError("Network error"))
       .finally(() => setLoading(false));
-  }, [orderId]);
+  }, [orderId, reloadKey]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-end bg-black/30 backdrop-blur-sm" onClick={onClose}>
@@ -351,6 +454,10 @@ function ViewDrawer({ orderId, orderNumber, onClose }: { orderId: string; orderN
                     </div>
                   )}
                 </>
+              )}
+
+              {detail.orderType === "credit_purchase" && (
+                <RefundPanel orderId={detail.id} onRefunded={() => setReloadKey(k => k + 1)} />
               )}
 
               {/* Status History */}

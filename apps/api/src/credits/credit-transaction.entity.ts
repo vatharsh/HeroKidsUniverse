@@ -11,6 +11,8 @@ export enum CreditTransactionReason {
   ReferralBonus = 'referral_bonus',
   Demo = 'demo',
   Signup = 'signup',
+  /** Money refunded through Razorpay; delta takes back the pack's unused credits. */
+  PaymentRefund = 'payment_refund',
 }
 
 @Entity('credit_transactions')
