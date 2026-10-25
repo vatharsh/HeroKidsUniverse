@@ -79,6 +79,9 @@ const CHAR_ROLES: { value: CharRole; label: string }[] = [
   { value: "other",    label: "Other" },
 ];
 
+/** Friends/family per story besides the hero (and companion) — more than this and faces start to blend. */
+const MAX_CAST = 3;
+
 type StepType = "hero" | "mode" | "theme" | "characters" | "companion" | "context" | "generate";
 
 const STEP_LABELS: Record<StepType, string> = {
@@ -501,7 +504,7 @@ function CreatePageInner() {
 
   function toggleCharacter(id: string) {
     setSelectedCharIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter(x => x !== id) : prev.length >= MAX_CAST ? prev : [...prev, id]
     );
   }
 
@@ -549,7 +552,7 @@ function CreatePageInner() {
           avatarUrl: data.avatarUrl ?? null,
         };
         setCharacters(prev => [...prev, newChar]);
-        setSelectedCharIds(prev => [...prev, newChar.id]);
+        setSelectedCharIds(prev => (prev.length >= MAX_CAST ? prev : [...prev, newChar.id]));
 
         // Save visual profile if any bio fields were filled in
         const hasProfile = charAlwaysWears.trim() || charHair.trim() || charSkin.trim() || charOtherTraits.trim();
@@ -1232,18 +1235,36 @@ function CreatePageInner() {
             {/* Existing characters */}
             {characters.length > 0 && (
               <div className="mb-5">
-                <p className="text-ink-muted text-xs font-semibold uppercase tracking-wide mb-2">Your cast · tap to add to this episode</p>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <p className="text-ink-muted text-xs font-semibold uppercase tracking-wide">Your cast · pick up to {MAX_CAST}</p>
+                  <span className={cn(
+                    "text-xs font-bold px-2.5 py-1 rounded-full",
+                    selectedCharIds.length >= MAX_CAST ? "bg-amber-100 text-amber-700" : "bg-brand/10 text-brand",
+                  )}>
+                    {selectedCharIds.length} of {MAX_CAST} picked
+                  </span>
+                </div>
+                {selectedCharIds.length >= MAX_CAST && (
+                  <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs mb-2">
+                    That&apos;s the most for one story — with more, the pictures get crowded and faces less clear. Tap someone picked to swap them out.
+                  </p>
+                )}
                 <div className="flex flex-col gap-2">
                   {characters.map((char) => {
                     const selected = selectedCharIds.includes(char.id);
+                    const full = !selected && selectedCharIds.length >= MAX_CAST;
                     return (
                       <button key={char.id} type="button"
                         onClick={() => toggleCharacter(char.id)}
+                        disabled={full}
+                        aria-disabled={full}
                         className={cn(
                           "flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left",
                           selected
                             ? "border-brand bg-brand/5"
-                            : "border-ink/10 bg-white hover:border-brand/20",
+                            : full
+                              ? "border-ink/5 bg-ink/[0.02] opacity-50 cursor-not-allowed"
+                              : "border-ink/10 bg-white hover:border-brand/20",
                         )}>
                         <div className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-ink/5 flex items-center justify-center">
                           {char.avatarUrl
@@ -1398,7 +1419,7 @@ function CreatePageInner() {
               <button type="button" onClick={() => setShowCharForm(true)}
                 className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-ink/15 hover:border-brand bg-white rounded-2xl p-4 text-ink-mid hover:text-brand text-sm font-semibold transition-all">
                 <Plus className="w-4 h-4" />
-                Add a character to this episode
+                {selectedCharIds.length >= MAX_CAST ? "Add a character to your cast for later" : "Add a character to this episode"}
               </button>
             )}
 

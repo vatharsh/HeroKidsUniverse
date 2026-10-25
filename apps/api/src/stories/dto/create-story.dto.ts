@@ -25,7 +25,7 @@ export class CreateStoryDto {
 
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(4)
+  @ArrayMaxSize(3, { message: 'You can pick up to 3 characters per story' })
   @IsUUID(undefined, { each: true })
   characterIds?: string[];
 
