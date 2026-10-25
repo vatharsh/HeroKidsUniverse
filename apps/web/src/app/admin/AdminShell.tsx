@@ -3,8 +3,7 @@
 import {
   Activity, BarChart3, BookOpen, Bot, Briefcase, ChevronRight, DollarSign, Globe,
   LayoutDashboard, LogOut, Package, Settings, ShieldCheck, ShoppingCart,
-  Tag, Users, Zap, FileText, ScrollText,
-} from "lucide-react";
+  Tag, Users, Zap, FileText, ScrollText, LifeBuoy } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ElementType, type ReactNode } from "react";
@@ -12,6 +11,7 @@ import { useEffect, useState, type ElementType, type ReactNode } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
 import { useMaintenance, usePublicPlatformSettings } from "@/lib/platform-settings";
+import { supportApi } from "@/lib/support";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -29,6 +29,7 @@ const NAV: NavItem[] = [
   { href: "/admin/stories",          icon: BookOpen,        label: "Stories"          },
   { href: "/admin/generation-jobs",  icon: Zap,             label: "Generation Jobs"  },
   { href: "/admin/orders",           icon: ShoppingCart,    label: "Orders"           },
+  { href: "/admin/support",          icon: LifeBuoy,        label: "Help requests"    },
   { href: "/admin/merchandise",      icon: Package,         label: "Merchandise",  flagKey: "ENABLE_MERCHANDISE" },
   { href: "/admin/ai-analytics",     icon: Bot,             label: "AI Analytics"     },
   { href: "/admin/qa",               icon: Activity,        label: "AI Quality"       },
@@ -143,6 +144,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { flags } = usePublicPlatformSettings();
+  // Open help requests, shown as a badge so nothing waits past the 2-working-day promise.
+  const [openHelp, setOpenHelp] = useState(0);
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    const refresh = () => supportApi.adminList("open").then((d) => setOpenHelp(d.open)).catch(() => {});
+    void refresh();
+    window.addEventListener("help-requests-changed", refresh);
+    return () => window.removeEventListener("help-requests-changed", refresh);
+  }, [pathname, user?.role]);
 
   useEffect(() => {
     if (!loading && (!user || user.role !== "admin")) {
@@ -189,7 +199,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               >
                 <Icon className={`w-4 h-4 flex-shrink-0 ${active ? "text-violet-600" : ""}`} />
                 {label}
-                {active && <ChevronRight className="w-3 h-3 ml-auto text-violet-400" />}
+                {href === "/admin/support" && openHelp > 0 && (
+                  <span className="ml-auto text-[10px] font-black bg-amber-500 text-white rounded-full px-1.5 py-0.5 leading-none">{openHelp}</span>
+                )}
+                {active && <ChevronRight className={`w-3 h-3 text-violet-400 ${href === "/admin/support" && openHelp > 0 ? "" : "ml-auto"}`} />}
               </Link>
             );
           })}

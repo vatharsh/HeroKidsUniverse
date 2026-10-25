@@ -90,6 +90,8 @@ import { UserNotificationPreferences } from './users/user-notification-preferenc
 import { User } from './users/user.entity';
 import { UsersModule } from './users/users.module';
 import { PreviewWaitlist } from './stories/preview-waitlist.entity';
+import { SupportRequest } from './support/support-request.entity';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -119,6 +121,7 @@ import { PreviewWaitlist } from './stories/preview-waitlist.entity';
           UniverseVillain,
           EmailCode,
           PreviewWaitlist,
+          SupportRequest,
           Quest,
           HeroPower,
           StoryArc,
@@ -187,6 +190,7 @@ import { PreviewWaitlist } from './stories/preview-waitlist.entity';
     QuestsModule,
     PowersModule,
     StoryArcsModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [

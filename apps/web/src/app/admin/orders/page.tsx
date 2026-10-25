@@ -668,6 +668,13 @@ export default function OrdersPage() {
   const [editing, setEditing] = useState<Order | null>(null);
   const [viewing, setViewing] = useState<{ id: string; orderNumber: string } | null>(null);
 
+  // Linked from Help requests: /admin/orders?open=<orderId>&num=<orderNumber> opens that order's drawer.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const id = q.get("open");
+    if (id) setViewing({ id, orderNumber: q.get("num") ?? "" } as Order);
+  }, []);
+
   function fetchOrders(p = page, s = status) {
     const token = getAccessToken();
     if (!token) return;

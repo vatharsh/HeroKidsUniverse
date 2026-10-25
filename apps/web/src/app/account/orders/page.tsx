@@ -6,6 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchMyOrdersV2, type OrderV2ListResponse } from "@/lib/merchandise";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
+import HelpRequestDialog from "@/components/shared/HelpRequestDialog";
+import { supportApi, type SupportRequest } from "@/lib/support";
 import { cn, formatInr } from "@/lib/utils";
 
 type OrderRow = OrderV2ListResponse["items"][number];
@@ -38,6 +40,12 @@ export default function AccountOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  const [requests, setRequests] = useState<SupportRequest[]>([]);
+  const [helpFor, setHelpFor] = useState<OrderRow | null>(null);
+
+  useEffect(() => {
+    supportApi.mine().then(setRequests).catch(() => setRequests([]));
+  }, []);
 
   useEffect(() => {
     fetchMyOrdersV2()
@@ -57,6 +65,14 @@ export default function AccountOrdersPage() {
 
   return (
     <div className="space-y-6">
+      {helpFor && (
+        <HelpRequestDialog
+          orderId={helpFor.id}
+          title={`Order ${helpFor.orderNumber}${helpFor.title ? ` · ${helpFor.title}` : ""}`}
+          onClose={() => setHelpFor(null)}
+          onSent={(r) => setRequests((prev) => [r, ...prev])}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-[family-name:var(--font-display)] text-ink text-2xl mb-1">My Orders</h2>
@@ -130,6 +146,7 @@ export default function AccountOrdersPage() {
                       {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                     </td>
                     <td className="px-4 py-4">
+                      <div className="flex flex-wrap items-center gap-1.5">
                       {isPaidCreditOrder(order) ? (
                         <Link href={`/receipt/${order.id}`}
                           className="inline-flex items-center gap-1 rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-semibold text-ink hover:border-brand hover:text-brand transition">
@@ -141,6 +158,24 @@ export default function AccountOrdersPage() {
                           <SquareArrowOutUpRight className="w-3 h-3" /> Details
                         </Link>
                       )}
+                      {(() => {
+                        const req = requests.find((r) => r.orderId === order.id);
+                        if (req) {
+                          return (
+                            <span title={req.adminReply ?? req.statusText}
+                              className={cn("rounded-full px-3 py-1.5 text-[11px] font-semibold", req.status === "open" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700")}>
+                              {req.status === "open" ? "Help requested" : req.statusText}
+                            </span>
+                          );
+                        }
+                        return order.orderType === "credit_purchase" ? (
+                          <button type="button" onClick={() => setHelpFor(order)}
+                            className="rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-semibold text-ink-mid hover:border-brand hover:text-brand transition">
+                            Need help?
+                          </button>
+                        ) : null;
+                      })()}
+                      </div>
                     </td>
                   </tr>
                 ))}

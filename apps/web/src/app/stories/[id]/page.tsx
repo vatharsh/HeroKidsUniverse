@@ -1,6 +1,6 @@
 "use client";
 
-import { Clapperboard, FileText, Loader2, Package, Share2, Trash2 } from "lucide-react";
+import { Clapperboard, FileText, LifeBuoy, Loader2, Package, Share2, Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import WaitingGames from "@/components/games/WaitingGames";
 import PreviewImg from "@/components/shared/PreviewImg";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
+import HelpRequestDialog from "@/components/shared/HelpRequestDialog";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -564,6 +565,7 @@ export default function StoryReaderPage() {
   const [page, setPage]           = useState(0);
   const [imageAspect, setImageAspect] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [copied, setCopied]       = useState(false);
   const [recap, setRecap]         = useState<Recap | null>(null);
   const [showRecap, setShowRecap] = useState(false);
@@ -1267,6 +1269,17 @@ export default function StoryReaderPage() {
                 </div>
               )}
             </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="text-white/40 hover:text-gold transition p-1 rounded-lg hover:bg-white/10"
+            title="Report a problem with this story"
+          >
+            <LifeBuoy className="w-4 h-4" />
+          </button>
+          {helpOpen && (
+            <HelpRequestDialog storyId={story.id} title={story.title ?? "This story"} onClose={() => setHelpOpen(false)} />
           )}
           {confirmDelete ? (
             <div className="flex items-center gap-2 bg-red-900/60 rounded-full px-3 py-1">

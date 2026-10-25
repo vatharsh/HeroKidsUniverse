@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import HelpRequestDialog from "@/components/shared/HelpRequestDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchOrderV2Detail, type OrderV2Detail } from "@/lib/merchandise";
 import { formatInr } from "@/lib/utils";
@@ -15,6 +16,7 @@ export default function ReceiptPage() {
   const { user, loading: authLoading } = useAuth();
   const [order, setOrder] = useState<OrderV2Detail | null>(null);
   const [error, setError] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -139,6 +141,15 @@ export default function ReceiptPage() {
         <p className={`mt-4 inline-block text-xs font-bold px-3 py-1 rounded-full ${paid ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
           {paid ? "Paid ✓ · Online payment via Razorpay" : `Status: ${order.status.replace(/_/g, " ")}`}
         </p>
+
+        <div className="mt-6 print:hidden">
+          <button type="button" onClick={() => setHelpOpen(true)} className="text-sm font-semibold text-brand hover:underline">
+            Need help with this order?
+          </button>
+        </div>
+        {helpOpen && (
+          <HelpRequestDialog orderId={order.id} title={`Order ${order.orderNumber}${order.title ? ` · ${order.title}` : ""}`} onClose={() => setHelpOpen(false)} />
+        )}
 
         <p className="text-ink-muted text-[11px] mt-8 leading-relaxed">
           {inv
