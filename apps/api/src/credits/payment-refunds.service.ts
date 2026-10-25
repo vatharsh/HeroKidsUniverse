@@ -100,6 +100,10 @@ export class PaymentRefundsService {
     if (!(value > 0) || value > p.maxRefund) {
       throw new BadRequestException(`Refund must be more than ₹0 and at most ₹${p.maxRefund}`);
     }
+    // More than the unused part pays back stories already made — allowed as goodwill, but say why.
+    if (value > p.suggestedAmount + 0.009 && !note?.trim()) {
+      throw new BadRequestException(`₹${round2(value - p.suggestedAmount)} of this is for credits already used — add a reason for this goodwill refund`);
+    }
     let refund: { id: string; amount: number };
     try {
       refund = (await this.razorpay.payments.refund(p.paymentId!, {

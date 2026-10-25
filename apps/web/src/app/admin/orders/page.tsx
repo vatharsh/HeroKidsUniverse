@@ -206,7 +206,11 @@ function RefundPanel({ orderId, onRefunded }: { orderId: string; onRefunded: () 
     if (!preview) return;
     const value = Number(amount);
     if (!(value > 0) || value > preview.maxRefund) { setMessage({ ok: false, text: `Enter an amount between ₹1 and ₹${preview.maxRefund}.` }); return; }
-    if (!window.confirm(`Refund ₹${value} to the parent's original payment method through Razorpay? This can't be undone.`)) return;
+    if (goodwill && !note.trim()) { setMessage({ ok: false, text: "Add a reason — this refund includes credits the parent has already used." }); return; }
+    const question = goodwill
+      ? `GOODWILL REFUND: ₹${value} includes ₹${extra} for ${usedCredits} credit${usedCredits === 1 ? "" : "s"} already used — the parent keeps those stories. Refund through Razorpay anyway? This can't be undone.`
+      : `Refund ₹${value} to the parent's original payment method through Razorpay? This can't be undone.`;
+    if (!window.confirm(question)) return;
     setBusy(true); setMessage(null);
     try {
       const res = await fetch(`${BASE}/admin/orders/${orderId}/refund`, {
@@ -227,6 +231,9 @@ function RefundPanel({ orderId, onRefunded }: { orderId: string; onRefunded: () 
   }
 
   if (!preview) return null;
+  const goodwill = Number(amount) > preview.suggestedAmount + 0.009;
+  const extra = Math.round((Number(amount) - preview.suggestedAmount) * 100) / 100;
+  const usedCredits = Math.max(0, preview.granted.credits - preview.unused.credits);
   return (
     <>
       <SectionHeader>Refund payment</SectionHeader>
@@ -245,16 +252,26 @@ function RefundPanel({ orderId, onRefunded }: { orderId: string; onRefunded: () 
               <input type="number" min={1} max={preview.maxRefund} step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
                 className="w-full py-2 pl-1 text-sm outline-none" />
             </div>
-            <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="Reason (optional, for the order history)"
-              className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-violet-400" />
+            <input type="text" value={note} onChange={e => setNote(e.target.value)}
+              placeholder={goodwill ? "Reason (required for a goodwill refund)" : "Reason (optional, for the order history)"}
+              className={`flex-1 rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:border-violet-400 ${goodwill && !note.trim() ? "border-amber-400" : "border-gray-200"}`} />
           </div>
+          {goodwill && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <strong>Goodwill refund:</strong> ₹{extra} of this is for {usedCredits} credit{usedCredits === 1 ? "" : "s"} already used — the parent keeps
+              those stories and gets the money back. Only do this for a genuine problem, and add a reason.
+              <button type="button" onClick={() => setAmount(String(preview.suggestedAmount))} className="ml-1 font-semibold underline">
+                Use ₹{preview.suggestedAmount} instead
+              </button>
+            </div>
+          )}
           <p className="text-[11px] text-gray-500">
             Suggested ₹{preview.suggestedAmount} = what&apos;s still unused. Up to ₹{preview.maxRefund}. The matching share of the pack is taken back from the parent;
             a full refund also cancels the influencer&apos;s commission. Always refund from here or the Razorpay dashboard — both keep credits in sync.
           </p>
           <button type="button" onClick={refund} disabled={busy}
             className="inline-flex items-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-60 px-4 py-2 text-sm font-semibold text-white">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Refund ₹{Number(amount) || 0}
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} {goodwill ? "Goodwill refund" : "Refund"} ₹{Number(amount) || 0}
           </button>
         </div>
       ) : (
