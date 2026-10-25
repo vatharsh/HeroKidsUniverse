@@ -24,6 +24,12 @@ import { OrderItem } from './order-item.entity';
 import { StoreAvailabilityService } from '../store-availability.service';
 import { isSandboxFor } from '../../common/sandbox';
 
+/** Pack name for credit-pack orders (they have no order items), from the note written at purchase. */
+function creditPackName(order: Pick<Order, 'orderType' | 'adminNotes'>): string | null {
+  if (order.orderType !== CommerceOrderType.CreditPurchase) return null;
+  return /^Credit pack: (.+?) \|/.exec(order.adminNotes ?? '')?.[1] ?? 'Credit pack';
+}
+
 @Injectable()
 export class OrderV2Service {
   private readonly logger = new Logger(OrderV2Service.name);
@@ -326,7 +332,10 @@ export class OrderV2Service {
   }
 
   async getMyOrder(userId: string, orderId: string) {
-    return this.getOrderDetail(orderId, userId, false);
+    const detail = await this.getOrderDetail(orderId, userId, false);
+    // Parents see their own order, not our internal notes or the influencer's commission.
+    const { adminNotes: _notes, influencerId: _inf, influencerCommissionRate: _rate, influencerCommissionAmount: _amount, ...visible } = detail;
+    return { ...visible, title: creditPackName(detail) };
   }
 
   async adminListOrders(filters?: { status?: string; userId?: string; includeDeleted?: boolean; page?: number; limit?: number }) {
@@ -453,6 +462,7 @@ export class OrderV2Service {
           userName: user?.name ?? null,
           status: order.status,
           orderType: order.orderType,
+          title: creditPackName(order),
           totalAmount: Number(order.totalAmount),
           couponCode: order.couponCode,
           currency: order.currency,

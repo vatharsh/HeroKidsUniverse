@@ -124,7 +124,7 @@ export async function logAvatarUsage(dataSource: DataSource, userId: string): Pr
   }
 }
 
-async function getFreeHeroAvatarLimit(dataSource: DataSource): Promise<number> {
+export async function getFreeHeroAvatarLimit(dataSource: DataSource): Promise<number> {
   const row = await dataSource.getRepository(PlatformSetting).findOne({ where: { key: 'FREE_HERO_AVATAR_GENERATIONS' } });
   const value = Number(row?.value ?? SETTING_DEFAULTS.FREE_HERO_AVATAR_GENERATIONS?.value ?? 3);
   return Number.isFinite(value) ? Math.max(0, value) : 3;

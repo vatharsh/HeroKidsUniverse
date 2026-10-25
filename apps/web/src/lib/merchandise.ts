@@ -161,6 +161,10 @@ export interface OrderV2Detail {
   couponDiscountType: string | null;
   couponDiscountValue: number | null;
   couponDiscountAmount: number | null;
+  /** Pack name for credit-pack orders. */
+  title?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
   items: Array<Record<string, unknown>>;
   paymentSummary: Record<string, unknown> | null;
   statusHistory: Array<Record<string, unknown>>;
@@ -174,6 +178,8 @@ export interface OrderV2ListResponse {
     orderNumber: string;
     status: string;
     orderType: string;
+    /** Pack name for credit-pack orders, which have no items. */
+    title: string | null;
     totalAmount: number;
     currency: string;
     itemCount: number;

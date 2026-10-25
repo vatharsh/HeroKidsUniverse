@@ -4,8 +4,12 @@ import { Check, Loader2, Pencil, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { profileApi, type UserProfile } from "@/lib/account";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 
 export default function AccountProfilePage() {
+  // Phone is only needed for delivering physical orders — don't ask for it while the store is off.
+  const { flags } = usePublicPlatformSettings();
+  const askPhone = flags.ENABLE_MERCHANDISE === true;
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -110,8 +114,9 @@ export default function AccountProfilePage() {
                   className="w-full px-4 py-3 rounded-xl border border-ink/10 bg-ink/4 text-ink-muted cursor-not-allowed"
                 />
               </div>
+              {askPhone && (
               <div>
-                <label className="text-ink-mid text-sm font-medium block mb-1.5">Phone <span className="text-ink-muted font-normal">— optional</span></label>
+                <label className="text-ink-mid text-sm font-medium block mb-1.5">Phone <span className="text-ink-muted font-normal">— optional, for delivery updates</span></label>
                 <input
                   type="tel"
                   value={phone}
@@ -120,6 +125,7 @@ export default function AccountProfilePage() {
                   className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition"
                 />
               </div>
+              )}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
@@ -144,7 +150,7 @@ export default function AccountProfilePage() {
               {[
                 { label: "Full Name", value: profile?.name },
                 { label: "Email", value: profile?.email },
-                { label: "Phone", value: profile?.phone ?? "—" },
+                ...(askPhone ? [{ label: "Phone", value: profile?.phone ?? "—" }] : []),
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between py-2 border-b border-ink/6 last:border-0">
                   <span className="text-ink-muted text-sm">{row.label}</span>
@@ -157,10 +163,12 @@ export default function AccountProfilePage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
-          { icon: "⚡", label: "Credits", value: profile?.credits ?? 0 },
-          { icon: "👥", label: "Char Slots", value: `${profile?.characterSlotsUsed ?? 0}/${profile?.characterSlotsTotal ?? 3}` },
+          { icon: "⚡", label: "Story credits", value: profile?.credits ?? 0 },
+          { icon: "🎁", label: "Free story", value: profile?.previewCredits ? `${profile.previewCredits} left` : "Used" },
+          { icon: "👥", label: "Characters", value: profile && profile.characterSlotsTotal >= 0 ? `${profile.characterSlotsUsed} of ${profile.characterSlotsTotal}` : `${profile?.characterSlotsUsed ?? 0}` },
+          { icon: "🦸", label: "Free avatars left", value: profile?.freeHeroAvatarsLeft ?? 0 },
           { icon: "🔄", label: "Avatar Refreshes", value: profile?.avatarRefreshTokens ?? 0 },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-2xl border border-ink/10 p-4 text-center shadow-sm">

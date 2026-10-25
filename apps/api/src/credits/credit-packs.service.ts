@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
   UnauthorizedException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as crypto from 'crypto';
@@ -22,6 +23,8 @@ import { User } from '../users/user.entity';
 import { CreditPack, CreditPackType } from './credit-pack.entity';
 import { CreditTransaction, CreditTransactionReason } from './credit-transaction.entity';
 import { isSandboxFor } from '../common/sandbox';
+import { MailService } from '../mail/mail.service';
+import { packContents, paymentReceiptEmail } from '../mail/payment-receipt-email';
 
 type CreditPackPayload = Partial<CreditPack>;
 
@@ -86,6 +89,7 @@ export class CreditPacksService {
     private readonly platformSettingsRepository: Repository<PlatformSetting>,
     private readonly dataSource: DataSource,
     private readonly influencersService: InfluencersService,
+    @Optional() private readonly mail?: MailService,
   ) {}
 
   computeEffectivePrice(pack: CreditPack): { effectivePrice: number; isOnSale: boolean; savingsAmount: number; savingsPct: number } {
@@ -461,6 +465,21 @@ export class CreditPacksService {
           changedByUserId: userId,
         }),
       );
+      if (this.mail && user.email && pricing.total > 0) {
+        void this.mail.send(paymentReceiptEmail({
+          to: user.email,
+          parentName: user.name || 'there',
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          packName: pack.name,
+          contents: packContents(pack),
+          subtotal: pricing.subtotal,
+          discount: pricing.discount,
+          couponCode: coupon?.code ?? null,
+          total: pricing.total,
+          paidAt: order.createdAt ?? new Date(),
+        })).catch((err: unknown) => this.logger.warn(`Receipt email for ${order.orderNumber} failed: ${err instanceof Error ? err.message : String(err)}`));
+      }
 
       if (!coupon) return;
       if (isInfluencerCoupon && coupon.influencerId) {

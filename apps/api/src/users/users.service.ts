@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+
+import { getFreeHeroAvatarLimit } from '../avatars/avatar-allowance';
 
 import { User } from './user.entity';
 
@@ -10,6 +12,7 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async getProfile(userId: string) {
@@ -41,7 +44,8 @@ export class UsersService {
     return user;
   }
 
-  private toProfile(user: User) {
+  private async toProfile(user: User) {
+    const freeHeroAvatars = await getFreeHeroAvatarLimit(this.dataSource);
     return {
       id: user.id,
       name: user.name,
@@ -55,6 +59,7 @@ export class UsersService {
       characterSlotsUsed: user.characterSlotsUsed,
       avatarRefreshTokens: user.avatarRefreshTokens,
       previewCredits: user.previewCredits,
+      freeHeroAvatarsLeft: Math.max(0, freeHeroAvatars - user.heroAvatarGenerationsUsed),
       referralCode: user.referralCode,
       createdAt: user.createdAt,
     };

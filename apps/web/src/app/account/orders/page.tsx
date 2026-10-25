@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchMyOrdersV2, type OrderV2ListResponse } from "@/lib/merchandise";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
-import { cn } from "@/lib/utils";
+import { cn, formatInr } from "@/lib/utils";
 
 type OrderRow = OrderV2ListResponse["items"][number];
 
@@ -22,9 +22,14 @@ const STATUS_STYLE: Record<string, string> = {
   printing: "bg-indigo-50 text-indigo-700 border-indigo-200",
 };
 
-function statusLabel(s: string) {
+function statusLabel(s: string, orderType?: string) {
+  // A credit pack is delivered the moment it's paid — "Digital Ready" means nothing to a parent.
+  if (orderType === "credit_purchase" && (s === "digital_ready" || s === "paid")) return "Paid ✓";
   return s.replace(/_/g, " ").replace(/\b\w/g, m => m.toUpperCase());
 }
+
+const isPaidCreditOrder = (o: { orderType: string; status: string }) =>
+  o.orderType === "credit_purchase" && (o.status === "digital_ready" || o.status === "paid");
 
 export default function AccountOrdersPage() {
   const { flags } = usePublicPlatformSettings();
@@ -106,6 +111,7 @@ export default function AccountOrdersPage() {
                       <div className="font-mono text-xs font-bold text-ink">{order.orderNumber}</div>
                     </td>
                     <td className="px-4 py-4 max-w-[200px]">
+                      {order.title && <div className="text-xs text-ink leading-snug font-semibold">{order.title}</div>}
                       {order.items.map((item, i) => (
                         <div key={i} className="text-xs text-ink leading-snug">
                           <span className="font-semibold">{item.productNameSnapshot}</span>
@@ -113,21 +119,28 @@ export default function AccountOrdersPage() {
                         </div>
                       ))}
                     </td>
-                    <td className="px-4 py-4 font-black text-emerald-700 whitespace-nowrap">₹{Number(order.totalAmount).toLocaleString()}</td>
+                    <td className="px-4 py-4 font-black text-emerald-700 whitespace-nowrap">{formatInr(Number(order.totalAmount))}</td>
                     <td className="px-4 py-4">
                       <span className={cn("inline-flex rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em]",
                         STATUS_STYLE[order.status] ?? STATUS_STYLE.pending_payment)}>
-                        {statusLabel(order.status)}
+                        {statusLabel(order.status, order.orderType)}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-ink-muted text-xs whitespace-nowrap">
                       {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                     </td>
                     <td className="px-4 py-4">
-                      <Link href={`/dashboard/orders/${order.id}`}
-                        className="inline-flex items-center gap-1 rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-semibold text-ink hover:border-brand hover:text-brand transition">
-                        <SquareArrowOutUpRight className="w-3 h-3" /> Details
-                      </Link>
+                      {isPaidCreditOrder(order) ? (
+                        <Link href={`/receipt/${order.id}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-semibold text-ink hover:border-brand hover:text-brand transition">
+                          <SquareArrowOutUpRight className="w-3 h-3" /> Receipt
+                        </Link>
+                      ) : (
+                        <Link href={`/dashboard/orders/${order.id}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-semibold text-ink hover:border-brand hover:text-brand transition">
+                          <SquareArrowOutUpRight className="w-3 h-3" /> Details
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}

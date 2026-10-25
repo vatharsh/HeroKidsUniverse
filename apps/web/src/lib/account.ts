@@ -31,6 +31,8 @@ export interface UserProfile {
   characterSlotsTotal: number;
   characterSlotsUsed: number;
   avatarRefreshTokens: number;
+  previewCredits: number;
+  freeHeroAvatarsLeft: number;
   referralCode: string | null;
   createdAt: string;
 }
@@ -99,6 +101,8 @@ export interface CreditTransaction {
   packName: string | null;
   pricePaid: number | null;
   bonusCredits: number;
+  avatarRefreshTokensDelta: number;
+  characterSlotsDelta: number;
   createdAt: string;
 }
 
@@ -111,7 +115,7 @@ export interface CreditTransactionsPage {
 }
 
 export const creditsApi = {
-  getBalance: () => req<{ balance: number; characterSlotsTotal: number; characterSlotsUsed: number; avatarRefreshTokens: number; transactions: CreditTransaction[] }>("/credits"),
+  getBalance: () => req<{ balance: number; characterSlotsTotal: number; characterSlotsUsed: number; avatarRefreshTokens: number; previewCredits: number; transactions: CreditTransaction[] }>("/credits"),
   getTransactions: (page = 1, limit = 20) =>
     req<CreditTransactionsPage>(`/credits/transactions?page=${page}&limit=${limit}`),
 };

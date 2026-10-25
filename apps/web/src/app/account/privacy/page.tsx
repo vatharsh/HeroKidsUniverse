@@ -44,7 +44,7 @@ export default function PrivacyPage() {
             {
               icon: "👶",
               title: "Child data protection",
-              body: "Built for India's DPDP Act. We collect only what the stories need (your child's name, age and the details you add) and never use it for advertising or sell it.",
+              body: "We collect only what the stories need (your child's name, age and the details you add) and never use it for advertising or sell it.",
             },
           ].map((item) => (
             <li key={item.title} className="flex gap-4">

@@ -4,16 +4,23 @@ import { Bell, Check, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { notifApi, type NotificationPrefs } from "@/lib/account";
+import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 
-const PREFS: { key: keyof Omit<NotificationPrefs, "id">; label: string; description: string; icon: string }[] = [
-  { key: "orderUpdates",      icon: "📦", label: "Order Updates",           description: "Shipping, delivery, and fulfilment status changes for your merchandise orders." },
-  { key: "storyUpdates",      icon: "📖", label: "Story Generation Updates", description: "Notifications when your story finishes generating or encounters an issue." },
-  { key: "promotionalEmails", icon: "🎉", label: "Promotional Emails",       description: "Special promotions, new credit packs, limited-time offers." },
-  { key: "specialOffers",     icon: "⭐", label: "Special Offers",           description: "Exclusive deals for returning users, birthday discounts, and loyalty rewards." },
+type PrefKey = keyof Omit<NotificationPrefs, "id">;
+
+const PREFS: { key: PrefKey; label: string; description: string; icon: string; storeOnly?: boolean }[] = [
+  { key: "storyUpdates",      icon: "📖", label: "Story ready",      description: "An email when your story is ready to read, or if something goes wrong." },
+  { key: "orderUpdates",      icon: "📦", label: "Order updates",    description: "Shipping and delivery updates for printed books and merchandise.", storeOnly: true },
+  { key: "promotionalEmails", icon: "🎉", label: "News & offers",    description: "New adventures, special offers and occasional discounts. Off unless you turn it on." },
 ];
 
+/** "News & offers" is one switch for parents; it sets both marketing consents together. */
+const LINKED: Partial<Record<PrefKey, PrefKey[]>> = { promotionalEmails: ["promotionalEmails", "specialOffers"] };
+
 export default function NotificationsPage() {
+  const { flags } = usePublicPlatformSettings();
+  const visiblePrefs = PREFS.filter((p) => !p.storeOnly || flags.ENABLE_MERCHANDISE === true);
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -27,12 +34,12 @@ export default function NotificationsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function toggle(key: keyof Omit<NotificationPrefs, "id">) {
+  async function toggle(key: PrefKey) {
     if (!prefs) return;
     setSaving(key); setSuccess(false);
     const newVal = !prefs[key];
     try {
-      const updated = await notifApi.update({ [key]: newVal });
+      const updated = await notifApi.update(Object.fromEntries((LINKED[key] ?? [key]).map((k) => [k, newVal])));
       setPrefs(updated);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
@@ -65,7 +72,7 @@ export default function NotificationsPage() {
           <h3 className="font-semibold text-ink">Email Notifications</h3>
         </div>
         <div className="divide-y divide-ink/6">
-          {PREFS.map((pref) => {
+          {visiblePrefs.map((pref) => {
             const enabled = prefs ? prefs[pref.key] as boolean : false;
             const isSaving = saving === pref.key;
             return (
@@ -103,7 +110,7 @@ export default function NotificationsPage() {
       </div>
 
       <p className="text-ink-muted text-xs">
-        We never sell your contact information. Transactional emails (e.g., receipts, password resets) are always sent regardless of these settings.
+        We never sell your contact information. Emails you need — payment receipts, sign-in codes and password resets — are always sent.
       </p>
     </div>
   );

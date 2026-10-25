@@ -28,7 +28,7 @@ const NAV = [
   { href: "/account/password",     icon: KeyRound,  label: "Password" },
   { href: "/account/addresses",    icon: MapPin,    label: "Addresses", storeOnly: true },
   { href: "/account/orders",       icon: Package,   label: "My Orders" },
-  { href: "/account/credits",      icon: CreditCard, label: "Credits & Wallet" },
+  { href: "/account/credits",      icon: CreditCard, label: "Credits" },
   { href: "/account/characters",   icon: Users,     label: "My Characters" },
   { href: "/account/universes",    icon: Star,      label: "My Universes" },
   { href: "/account/notifications",icon: Bell,      label: "Notifications" },

@@ -20,7 +20,8 @@ export class UserNotificationPreferences {
   @Column({ type: 'boolean', default: true })
   storyUpdates!: boolean;
 
-  @Column({ type: 'boolean', default: true })
+  /** Marketing email consent — opt-in only, so off until the parent turns it on. */
+  @Column({ type: 'boolean', default: false })
   promotionalEmails!: boolean;
 
   @Column({ type: 'boolean', default: false })
