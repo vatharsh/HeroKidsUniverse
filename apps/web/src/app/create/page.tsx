@@ -333,6 +333,8 @@ function CreatePageInner() {
   /** Hero's look for this story — null = the default (this universe's look if it has one, else the usual). */
   const [lookChoice, setLookChoice] = useState<LookChoice | null>(null);
   const [newLook, setNewLook] = useState("");
+  /** "Plays as…" per picked cast member for this story, by character id ("the Genie"). */
+  const [castRoles, setCastRoles] = useState<Record<string, string>>({});
 
   // Companion state — new companion being created
   const [companionType, setCompanionType]   = useState<string | null>(null);
@@ -685,6 +687,7 @@ function CreatePageInner() {
           storyMode,
           storyContext: storyContext.trim() || undefined,
           ...(heroOutfitParam !== undefined ? { heroOutfit: heroOutfitParam } : {}),
+          ...(pickedRoles.length ? { castRoles: Object.fromEntries(selectedCharIds.filter((cid) => castRoles[cid]?.trim()).map((cid) => [cid, castRoles[cid].trim()])) } : {}),
           characterIds: selectedCharIds.length > 0 ? selectedCharIds : undefined,
           ...(effectiveUniverseId ? { universeId: effectiveUniverseId } : {}),
           ...(companionType ? { companionType, companionName: companionName.trim() || undefined, companionPetId: companionPetId ?? undefined } : {}),
@@ -702,7 +705,8 @@ function CreatePageInner() {
     }
   }
 
-  const ideaKey = `${storyContext.trim()}|${heroLook === "new" ? newLook.trim() : ""}`;
+  const pickedRoles = selectedCharIds.map((cid) => castRoles[cid]?.trim() ?? "").filter(Boolean);
+  const ideaKey = `${storyContext.trim()}|${heroLook === "new" ? newLook.trim() : ""}|${pickedRoles.join("|")}`;
   const shownSafetyWarning = safetyWarning?.key === ideaKey ? safetyWarning.message : null;
 
   async function advance() {
@@ -710,13 +714,14 @@ function CreatePageInner() {
     // Check what the parent typed against the child-safety policy now, before the review step and any credit.
     const look = stepType === "context" && heroLook === "new" ? newLook.trim() : "";
     const idea = (stepType === "theme" && ownIdea) || stepType === "context" ? storyContext.trim() : "";
-    if (idea || look) {
+    const roles = stepType === "characters" ? pickedRoles : [];
+    if (idea || look || roles.length) {
       setCheckingIdea(true);
       try {
         const res = await fetch(`${BASE}/stories/check-idea`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("hvu_access") ?? ""}` },
-          body: JSON.stringify({ storyContext: idea || undefined, heroOutfit: look || undefined }),
+          body: JSON.stringify({ storyContext: idea || undefined, heroOutfit: look || undefined, castRoles: roles.length ? roles : undefined }),
         });
         if (res.status === 400) {
           const body = await res.json().catch(() => ({}));
@@ -1345,12 +1350,13 @@ function CreatePageInner() {
                     const selected = selectedCharIds.includes(char.id);
                     const full = !selected && selectedCharIds.length >= MAX_CAST;
                     return (
-                      <button key={char.id} type="button"
+                      <div key={char.id}>
+                      <button type="button"
                         onClick={() => toggleCharacter(char.id)}
                         disabled={full}
                         aria-disabled={full}
                         className={cn(
-                          "flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left",
+                          "w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left",
                           selected
                             ? "border-brand bg-brand/5"
                             : full
@@ -1373,6 +1379,20 @@ function CreatePageInner() {
                           {selected && <Check className="w-3 h-3 text-white" />}
                         </div>
                       </button>
+                      {selected && (
+                        <div className="mt-1.5 ml-3 mr-1 flex items-center gap-2">
+                          <span className="text-xs text-ink-muted whitespace-nowrap">🎭 Plays as</span>
+                          <input
+                            type="text"
+                            value={castRoles[char.id] ?? ""}
+                            onChange={(e) => setCastRoles((r) => ({ ...r, [char.id]: e.target.value }))}
+                            maxLength={40}
+                            placeholder="optional — e.g. the Genie, a pirate captain"
+                            className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-ink/15 bg-white text-ink text-xs placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+                          />
+                        </div>
+                      )}
+                      </div>
                     );
                   })}
                 </div>
@@ -1766,7 +1786,7 @@ function CreatePageInner() {
                     <span className="font-semibold text-ink text-right text-xs leading-relaxed">
                       {characters
                         .filter(c => selectedCharIds.includes(c.id))
-                        .map(c => c.name)
+                        .map(c => castRoles[c.id]?.trim() ? `${c.name} as ${castRoles[c.id].trim()}` : c.name)
                         .join(", ")}
                     </span>
                   </div>
@@ -1833,7 +1853,7 @@ function CreatePageInner() {
           </section>
         )}
 
-        {shownSafetyWarning && (stepType === "theme" || stepType === "context") && (
+        {shownSafetyWarning && (stepType === "theme" || stepType === "context" || stepType === "characters") && (
           <div role="alert" className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
             <p className="text-amber-900 text-sm font-bold">⚠️ This doesn&apos;t meet our child-safety policy, so we can&apos;t make this story</p>
             <p className="text-amber-800 text-xs mt-1 leading-relaxed">{shownSafetyWarning}</p>

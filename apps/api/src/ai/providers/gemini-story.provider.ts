@@ -217,8 +217,13 @@ export class GeminiStoryProvider implements StoryGenerationProvider {
     const heroRef = hasCustomStory ? input.heroName : (ctx?.heroTitle ?? input.heroName);
     const sceneCount = Math.ceil(n / 2);
 
+    const playsRule = input.supportingCharacters?.some((l) => l.includes('; plays '))
+      ? '\nCAST ROLES: a character marked "plays X in this story" plays that part (e.g. Vedant Bhaiya plays the Genie): give them that role\'s job and outfit, '
+        + 'and in narration and dialogue call them by the role with their name (e.g. "Genie Vedant"), saying who they really are once when they first appear. '
+        + 'In every structured field (speaker, characters, characterOutfits, characterDirections) always write their exact name as it appears before the bracket.'
+      : '';
     const supportingCharactersLine = input.supportingCharacters?.length
-      ? `Supporting characters in this episode: ${input.supportingCharacters.join(', ')}`
+      ? `Supporting characters in this episode: ${input.supportingCharacters.join(', ')}${playsRule}`
       : 'Supporting characters in this episode: none';
 
     const visualIdentityLines = [

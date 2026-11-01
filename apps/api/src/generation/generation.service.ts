@@ -2351,8 +2351,10 @@ export class GenerationService implements OnModuleInit {
     const characters = await this.charactersRepo.find({ where: { id: In(characterIds), userId: story.userId } });
     await this.ensureCharacterAvatarDescriptions(characters);
 
+    // "Plays as…": the part this cast member plays in this story. The name before "(" stays the key that
+    // matches them to their pictures, so the role only ever goes inside the brackets.
     return characters.map((c) => ({
-      label: `${c.name} (${c.role})`,
+      label: story.castRoles?.[c.id] ? `${c.name} (${c.role}; plays ${story.castRoles[c.id]} in this story)` : `${c.name} (${c.role})`,
       characterId: c.id,
       avatarUrl: c.avatarUrl ?? null,
       avatarDescription: c.avatarDescription ?? null,

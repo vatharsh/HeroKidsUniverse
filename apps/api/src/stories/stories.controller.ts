@@ -19,13 +19,14 @@ export class StoriesController {
   @HttpCode(HttpStatus.OK)
   async checkIdea(
     @CurrentUser() currentUser: CurrentUserPayload,
-    @Body() body: { storyContext?: string; heroOutfit?: string; companionName?: string },
+    @Body() body: { storyContext?: string; heroOutfit?: string; companionName?: string; castRoles?: string[] },
   ) {
     const text = (v: unknown) => (typeof v === 'string' ? v.slice(0, 500) : undefined);
     await this.storiesService.checkIdea(currentUser.id, {
       storyContext: text(body?.storyContext),
       heroOutfit: text(body?.heroOutfit),
       companionName: text(body?.companionName),
+      castRoles: Array.isArray(body?.castRoles) ? text(body.castRoles.filter((r) => typeof r === 'string').join('\n')) : undefined,
     });
     return { safe: true };
   }

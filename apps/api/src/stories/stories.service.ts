@@ -23,6 +23,17 @@ import { ContentSafetyService } from '../ai/content-safety.service';
 import { isSandboxFor } from '../common/sandbox';
 import { PreviewQuotaService } from './preview-quota.service';
 
+/** Keeps "plays as…" only for this story's cast, trimmed to a short role name; null when none. */
+export function cleanCastRoles(roles: Record<string, string> | undefined, characterIds: string[]): Record<string, string> | null {
+  if (!roles || typeof roles !== 'object') return null;
+  const out: Record<string, string> = {};
+  for (const id of characterIds) {
+    const role = typeof roles[id] === 'string' ? roles[id].replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+    if (role) out[id] = role;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 @Injectable()
 export class StoriesService {
   constructor(
@@ -77,12 +88,18 @@ export class StoriesService {
   }
 
   /** Throws the same friendly 400 as create() would, without creating anything or touching credits. */
-  checkIdea(userId: string, fields: { storyContext?: string; heroOutfit?: string; companionName?: string }) {
+  checkIdea(userId: string, fields: { storyContext?: string; heroOutfit?: string; companionName?: string; castRoles?: string }) {
     return this.safety.assertSafeInput(fields, userId);
   }
 
   async create(userId: string, createStoryDto: CreateStoryDto): Promise<Story> {
-    await this.safety.assertSafeInput({ storyContext: createStoryDto.storyContext, companionName: createStoryDto.companionName, heroOutfit: createStoryDto.heroOutfit }, userId);
+    const castRoles = cleanCastRoles(createStoryDto.castRoles, createStoryDto.characterIds ?? []);
+    await this.safety.assertSafeInput({
+      storyContext: createStoryDto.storyContext,
+      companionName: createStoryDto.companionName,
+      heroOutfit: createStoryDto.heroOutfit,
+      castRoles: castRoles ? Object.values(castRoles).join('\n') : undefined,
+    }, userId);
     const hero = await this.heroesRepository.findOne({
       where: { id: createStoryDto.heroId, userId },
     });
@@ -180,6 +197,7 @@ export class StoriesService {
           storyMode: createStoryDto.storyMode ?? StoryMode.NewAdventure,
           storyContext: createStoryDto.storyContext ?? null,
           heroOutfit: createStoryDto.heroOutfit === undefined ? null : createStoryDto.heroOutfit.trim(),
+          castRoles,
           cliffhanger: null,
           arcId: null,
           status: StoryStatus.Pending,
