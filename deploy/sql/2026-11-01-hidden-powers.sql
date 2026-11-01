@@ -3,6 +3,7 @@ ALTER TYPE credit_transactions_reason_enum ADD VALUE IF NOT EXISTS 'reward';
 CREATE TABLE IF NOT EXISTS power_drops (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   day date NOT NULL,
+  "powerKey" text,
   name text NOT NULL,
   emoji text NOT NULL,
   description text NOT NULL,

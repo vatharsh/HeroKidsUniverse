@@ -42,7 +42,7 @@ export default function HiddenPowerLens({ storyId, page }: { storyId: string; pa
     try {
       const r = await specialPowersApi.claim(storyId, spot.drop.id);
       setResult(r);
-      setSpot({ ...spot, found: true, count: r.count, level: r.level, next: r.next, toNext: r.toNext });
+      setSpot({ ...spot, found: true, count: r.count, total: r.total, completeSets: r.completeSets, level: r.level, next: r.next, closest: r.closest });
       setLens(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The power slipped away — try again!");
@@ -82,7 +82,7 @@ export default function HiddenPowerLens({ storyId, page }: { storyId: string; pa
         <button type="button" onClick={() => { setLens(!lens); setPointer(null); }}
           className={`absolute bottom-3 left-3 z-40 flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold shadow-lg transition ${lens ? "bg-gold text-space" : "bg-space/80 text-gold backdrop-blur hover:bg-space"}`}>
           <span className={lens ? "" : "animate-pulse"}>🔮</span>
-          {lens ? "Put lens away" : "A special power is hiding! Use the magic lens"}
+          {lens ? "Put lens away" : spot.foundToday ? `${spot.foundToday} heroes found today's power — can you?` : "A special power is hiding! Use the magic lens"}
         </button>
       ) : (
         <div className="absolute bottom-3 left-3 z-40 rounded-full bg-space/80 backdrop-blur px-3 py-1.5 text-[11px] font-semibold text-gold">
@@ -98,6 +98,9 @@ export default function HiddenPowerLens({ storyId, page }: { storyId: string; pa
             <h3 className="font-[family-name:var(--font-display)] text-3xl mt-2">{result.heroName} found the {result.power.name}!</h3>
             <p className="text-white/80 text-sm mt-2">{result.power.description}</p>
             {result.addedToUniverse && <p className="text-gold text-xs mt-3 font-semibold">✨ It&apos;s now in {result.heroName}&apos;s universe — watch for it in the next episode!</p>}
+            {result.completedCollection && (
+              <p className="mt-3 text-sm font-bold">🎉 {result.completedCollection.emoji} {result.completedCollection.name} collection complete!</p>
+            )}
             {result.newLevel && (
               <div className="mt-4 rounded-2xl bg-white/10 p-3">
                 <p className="text-3xl">{result.newLevel.badge}</p>
@@ -106,10 +109,14 @@ export default function HiddenPowerLens({ storyId, page }: { storyId: string; pa
               </div>
             )}
             <p className="text-white/70 text-xs mt-4">
-              {result.count} special power{result.count === 1 ? "" : "s"} found
-              {result.next ? ` · ${result.toNext} more for ${result.next.badge} ${result.next.name}` : " · top level reached!"}
+              {result.isBonus ? "✨ A bonus power for the Power Book! " : ""}
+              {result.count} of {result.total} Power Book powers found
+              {result.next && result.closest ? ` · ${result.closest.missing} more ${result.closest.emoji} ${result.closest.name} to complete a collection` : !result.next ? " · Platinum Legend!" : ""}
             </p>
-            <button type="button" onClick={() => setResult(null)} className="mt-5 bg-gold text-space font-bold px-6 py-2.5 rounded-full text-sm">Yay!</button>
+            <div className="mt-5 flex justify-center gap-2">
+              <a href="/power-book" className="bg-white/15 hover:bg-white/25 font-semibold px-5 py-2.5 rounded-full text-sm">📖 Power Book</a>
+              <button type="button" onClick={() => setResult(null)} className="bg-gold text-space font-bold px-6 py-2.5 rounded-full text-sm">Yay!</button>
+            </div>
           </div>
         </div>,
         document.body,

@@ -11,6 +11,10 @@ export class PowerDrop {
   @Column({ type: 'date' })
   day!: string;
 
+  /** Power Book key (e.g. 'comet-shield'); null = an admin-written Bonus power that doesn't count towards levels. */
+  @Column({ type: 'text', nullable: true })
+  powerKey!: string | null;
+
   @Column({ type: 'text' })
   name!: string;
 

@@ -12,6 +12,7 @@ import { resolveMediaUrl } from "@/lib/media-url";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import HelpRequestDialog from "@/components/shared/HelpRequestDialog";
 import HiddenPowerLens from "@/components/story/HiddenPowerLens";
+import { HeroTitle } from "@/components/story/HeroFrame";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -508,6 +509,7 @@ interface Story {
   /** null for a standalone ("Write My Own") story. */
   universeId?: string | null;
   hero: { name: string; age: number; gender: string; avatarUrl: string | null };
+  heroId?: string;
 }
 
 /** Locally stored media comes back as relative /api/... paths — point them at the API, not this site. */
@@ -1383,7 +1385,7 @@ export default function StoryReaderPage() {
             {story.status === "completed" && <HiddenPowerLens storyId={story.id} page={page} />}
             {/* Hero name badge */}
             <div className="absolute top-3 right-3 z-20 bg-black/40 backdrop-blur text-white text-xs font-semibold px-3 py-1 rounded-full">
-              {story.hero?.name}
+              <HeroTitle heroId={story.heroId} name={story.hero?.name ?? ""} />
             </div>
             {/* Audio element — keyed by URL so React remounts cleanly on page change */}
             {currentPage?.audioUrl && (

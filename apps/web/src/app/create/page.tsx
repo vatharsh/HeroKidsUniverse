@@ -16,6 +16,7 @@ import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 import MicButton from "@/components/shared/MicButton";
 import MaintenanceNotice from "@/components/shared/MaintenanceNotice";
+import HeroFrame, { HeroTitle } from "@/components/story/HeroFrame";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1217,13 +1218,15 @@ function CreatePageInner() {
             <div className="mb-5">
               <p className="text-ink-muted text-xs font-semibold uppercase tracking-wide mb-2">Hero · Always in the story</p>
               <div className="flex items-center gap-3 bg-brand/5 border border-brand/20 rounded-2xl p-4">
-                <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
-                  {hero?.avatarUrl
-                    ? <img loading="lazy" decoding="async" src={hero.avatarUrl} alt={hero.name} className="w-full h-full object-cover" />
-                    : "🦸"}
-                </div>
+                <HeroFrame heroId={hero?.id}>
+                  <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
+                    {hero?.avatarUrl
+                      ? <img loading="lazy" decoding="async" src={hero.avatarUrl} alt={hero.name} className="w-full h-full object-cover" />
+                      : "🦸"}
+                  </div>
+                </HeroFrame>
                 <div>
-                  <p className="font-[family-name:var(--font-display)] text-ink text-base">{hero?.name ?? heroName}</p>
+                  <p className="font-[family-name:var(--font-display)] text-ink text-base"><HeroTitle heroId={hero?.id} name={hero?.name ?? heroName} /></p>
                   <p className="text-ink-muted text-xs">Main hero · always included</p>
                 </div>
                 <Check className="ml-auto w-4 h-4 text-brand" />

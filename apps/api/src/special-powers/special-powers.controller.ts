@@ -14,6 +14,11 @@ export class SpecialPowersController {
     return this.powers.todayForUser(user.id);
   }
 
+  @Get('book/:heroId')
+  book(@CurrentUser() user: CurrentUserPayload, @Param('heroId') heroId: string) {
+    return this.powers.book(user.id, heroId);
+  }
+
   @Get('story/:storyId')
   forStory(@CurrentUser() user: CurrentUserPayload, @Param('storyId') storyId: string) {
     return this.powers.forStory(user.id, storyId);
@@ -35,13 +40,13 @@ export class AdminSpecialPowersController {
     return this.powers.adminList();
   }
 
-  @Get('suggestions')
-  suggestions() {
-    return this.powers.suggestions();
+  @Get('library')
+  library() {
+    return this.powers.library();
   }
 
   @Post()
-  create(@Body() body: { day?: string; name?: string; emoji?: string; description?: string }) {
+  create(@Body() body: { day?: string; powerKey?: string | null; name?: string; emoji?: string; description?: string }) {
     return this.powers.create(body);
   }
 

@@ -15,6 +15,7 @@ import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/utils";
 import CostumeField from "@/components/shared/CostumeField";
 import MicButton from "@/components/shared/MicButton";
+import HeroFrame, { HeroTitle } from "@/components/story/HeroFrame";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
@@ -843,9 +844,11 @@ function CharactersPageContent() {
           ) : (
             <div className="bg-white rounded-2xl shadow-card p-5 flex items-center gap-4 border-2 border-brand/15">
               <button type="button" onClick={() => setShowHeroEdit(true)} className="relative flex-shrink-0 group">
-                <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-2xl">
-                  <AvatarImg src={hero.avatarUrl} alt={heroName} className="w-full h-full object-cover" fallback="🦸" />
-                </div>
+                <HeroFrame heroId={hero.id}>
+                  <div className="w-14 h-14 rounded-full overflow-hidden bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center text-2xl">
+                    <AvatarImg src={hero.avatarUrl} alt={heroName} className="w-full h-full object-cover" fallback="🦸" />
+                  </div>
+                </HeroFrame>
                 {!hero.avatarUrl && (
                   <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-brand text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                     Add photo
@@ -853,7 +856,7 @@ function CharactersPageContent() {
                 )}
               </button>
               <div className="flex-1 min-w-0">
-                <p className="font-[family-name:var(--font-display)] text-ink text-lg">{heroName}</p>
+                <p className="font-[family-name:var(--font-display)] text-ink text-lg"><HeroTitle heroId={hero.id} name={heroName} /></p>
                 <p className="text-ink-muted text-sm capitalize">
                   {heroGender}
                   {hero.dob && ` · Born ${new Date(hero.dob).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
