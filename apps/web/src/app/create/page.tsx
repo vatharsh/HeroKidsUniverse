@@ -48,9 +48,9 @@ const UNIVERSE_MODES = [
 const STANDALONE_MODES = [
   {
     value: "standalone",
-    emoji: "✏️",
-    label: "Write My Own",
-    description: "Saved independently — not tied to any universe. Pick a theme or describe your own story in the next steps.",
+    emoji: "📖",
+    label: "One-off story",
+    description: "A single story that isn't added to a universe. Pick a world or write your own idea next.",
   },
 ];
 
@@ -65,12 +65,17 @@ const THEMES = [
   { value: "birthday-adventure",   emoji: "🎂", name: "Birthday Adventure",   gradient: "from-pink-950 to-rose-900" },
 ];
 
-const CONTEXT_PROMPTS = [
-  "Arjun uses Magic Stardust to rescue his father from Prison Planet.",
-  "A mysterious letter arrives from the future.",
-  "The hero must find the lost Crystal Key before sunset.",
-  "Nova the Robot needs help and sends an emergency signal.",
-];
+/** Quick story ideas, written around the child's own name. */
+function storyIdeas(name: string) {
+  return [
+    `${name} finds a secret door in the bedroom that opens into a kingdom in the clouds.`,
+    `A treasure hunt around our house with clues hidden by a mischievous parrot.`,
+    `${name}'s first day at a new school turns into a superhero mission.`,
+    `A trip to Nani's village where the old banyan tree starts to talk.`,
+    `${name} helps a lost baby elephant find its family before the monsoon rain.`,
+    `A mysterious letter arrives from the future, written by ${name}.`,
+  ];
+}
 
 const CHAR_ROLES: { value: CharRole; label: string }[] = [
   { value: "friend",   label: "Friend" },
@@ -98,7 +103,7 @@ const STEP_LABELS: Record<StepType, string> = {
 const HEADER_TITLES: Record<StepType, string> = {
   hero:       "Who is the hero?",
   mode:       "What kind of story?",
-  theme:      "Choose the adventure",
+  theme:      "Pick a world — or dream up your own",
   characters: "Who joins this episode?",
   companion:  "Does your hero have a companion?",
   context:    "Add a story hint",
@@ -318,6 +323,8 @@ function CreatePageInner() {
   // Default to standalone for general path; universe path defaults to new_adventure
   const [storyMode, setStoryMode]       = useState(() => preselectedUniverseId ? "new_adventure" : "standalone");
   const [selectedTheme, setSelectedTheme] = useState("");
+  /** "✨ My own idea" chosen on the adventure step — the idea goes in storyContext. */
+  const [ownIdea, setOwnIdea] = useState(false);
   const [storyContext, setStoryContext] = useState("");
 
   // Companion state — new companion being created
@@ -588,7 +595,7 @@ function CreatePageInner() {
         if (!preselectedUniverseId && isUniverseMode(storyMode) && universes.length > 0 && !selectedUniverseId) return false;
         return true;
       }
-      case "theme":      return true;
+      case "theme":      return !ownIdea || storyContext.trim().length > 0;
       case "characters": return true;
       case "companion":  return true;
       case "context":    return true;
@@ -1107,35 +1114,28 @@ function CreatePageInner() {
         {/* ── Theme ───────────────────────────────────────────────────────── */}
         {stepType === "theme" && (
           <section>
-            <p className="text-ink-muted text-sm mb-6">
-              What world will your hero explore?{" "}
-              <span className="text-ink-muted/60 text-xs">Optional — tap a world again to unselect it, or skip if you have your own story in mind.</span>
+            <p className="text-ink-mid text-sm mb-6">
+              Choose a world, write <strong className="text-ink">your own idea</strong>, or let us <strong className="text-ink">surprise you</strong>.
             </p>
-            {selectedTheme && (
-              <button type="button" onClick={() => setSelectedTheme("")}
-                className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand bg-brand/5 border border-brand/20 hover:bg-brand/10 px-3 py-1.5 rounded-full transition">
-                ✕ Clear choice — I&apos;ll describe my own story
-              </button>
-            )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {THEMES.map((theme) => {
                 const isSelected = selectedTheme === theme.value;
                 return (
                   <button key={theme.value} type="button"
-                    onClick={() => setSelectedTheme(isSelected ? "" : theme.value)}
+                    onClick={() => { setSelectedTheme(isSelected ? "" : theme.value); setOwnIdea(false); }}
                     className={cn(
                       "group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 text-left",
                       isSelected
                         ? "ring-4 ring-brand ring-offset-2 ring-offset-cream scale-[1.03] shadow-xl shadow-brand/30"
                         : "hover:scale-[1.02] hover:ring-2 hover:ring-gold/50 hover:ring-offset-1 hover:ring-offset-cream",
                     )}>
-                    <div className={`aspect-square flex flex-col justify-between p-6 bg-gradient-to-br ${theme.gradient}`}>
+                    <div className={`aspect-[4/3] flex flex-col justify-between p-4 bg-gradient-to-br ${theme.gradient}`}>
                       {/* Selected overlay */}
                       {isSelected && (
                         <div className="absolute inset-0 bg-brand/20 pointer-events-none" />
                       )}
                       <div className="flex items-start justify-between">
-                        <span className="text-5xl leading-none">{theme.emoji}</span>
+                        <span className="text-4xl leading-none">{theme.emoji}</span>
                         {isSelected && (
                           <span className="relative z-10 w-7 h-7 rounded-full bg-brand flex items-center justify-center shadow-lg">
                             <Check className="w-4 h-4 text-white" />
@@ -1144,7 +1144,7 @@ function CreatePageInner() {
                       </div>
                       <div className="relative z-10">
                         <h3 className={cn(
-                          "font-[family-name:var(--font-display)] text-xl transition-colors",
+                          "font-[family-name:var(--font-display)] text-lg leading-tight transition-colors",
                           isSelected ? "text-white" : "text-white",
                         )}>{theme.name}</h3>
                         <p className={cn(
@@ -1158,7 +1158,55 @@ function CreatePageInner() {
                   </button>
                 );
               })}
+
+              {/* Their own idea — as visible as the worlds, not hidden behind "skip". */}
+              <button type="button"
+                onClick={() => { setOwnIdea(!ownIdea); setSelectedTheme(""); }}
+                className={cn(
+                  "col-span-2 sm:col-span-3 rounded-2xl border-2 border-dashed px-5 py-4 text-left transition-all",
+                  ownIdea ? "border-brand bg-brand/5 shadow-lg shadow-brand/10" : "border-brand/30 bg-white hover:border-brand hover:bg-brand/5",
+                )}>
+                <div className="flex items-center gap-4">
+                  <span className="text-4xl leading-none">✨</span>
+                  <div className="flex-1">
+                    <h3 className="font-[family-name:var(--font-display)] text-xl text-ink">My own idea</h3>
+                    <p className="text-ink-muted text-sm">Describe any adventure — a trip to Nani&apos;s, a first day at school, anything at all.</p>
+                  </div>
+                  {ownIdea && (
+                    <span className="w-7 h-7 rounded-full bg-brand flex items-center justify-center shadow-lg flex-shrink-0">
+                      <Check className="w-4 h-4 text-white" />
+                    </span>
+                  )}
+                </div>
+              </button>
             </div>
+
+            {ownIdea && (
+              <div className="mt-4 bg-white border border-brand/20 rounded-2xl p-4">
+                <textarea
+                  autoFocus
+                  value={storyContext}
+                  onChange={(e) => setStoryContext(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  placeholder={`e.g. ${storyIdeas(hero?.name ?? "Your hero")[0]}`}
+                  className="w-full px-4 py-3 rounded-xl border border-ink/15 bg-cream text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none text-sm"
+                />
+                <div className="flex items-start justify-between gap-3 mt-2">
+                  <MicButton value={storyContext} onChange={setStoryContext} maxLength={500} />
+                  <p className="text-ink-muted text-xs pt-2">{storyContext.length}/500</p>
+                </div>
+                <p className="text-ink-mid text-[11px] font-semibold uppercase tracking-wide mt-3 mb-2">Need inspiration?</p>
+                <div className="flex flex-wrap gap-2">
+                  {storyIdeas(hero?.name ?? "Your hero").slice(0, 4).map((idea) => (
+                    <button key={idea} type="button" onClick={() => setStoryContext(idea)}
+                      className="text-left text-xs text-ink-mid bg-cream border border-ink/10 hover:border-brand hover:text-brand px-3 py-2 rounded-xl transition">
+                      ✦ {idea}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -1559,7 +1607,9 @@ function CreatePageInner() {
               </div>
             )}
             <p className="text-ink-muted text-sm mb-2">
-              {storyMode === "standalone"
+              {ownIdea && storyContext.trim()
+                ? "Here's your idea — add any extra details you'd like, or just continue."
+                : storyMode === "standalone"
                 ? "Describe what happens in this story. Be as specific or as vague as you like — the AI will build around it."
                 : "Give the AI a hint about what should happen in this episode. The AI will weave it into the story while respecting your universe's history."}
             </p>
@@ -1570,11 +1620,7 @@ function CreatePageInner() {
               onChange={(e) => setStoryContext(e.target.value)}
               rows={4}
               maxLength={500}
-              placeholder={
-                storyMode === "freeform"
-                  ? "e.g. Riya discovers a magical door in her bedroom that leads to a cloud kingdom..."
-                  : "e.g. Arjun uses Magic Stardust to rescue his father from Prison Planet."
-              }
+              placeholder={`e.g. ${storyIdeas(hero?.name ?? "Your hero")[storyMode === "freeform" ? 0 : 2]}`}
               className="w-full px-4 py-3 rounded-2xl border border-ink/15 bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand transition resize-none text-sm mb-2"
             />
             <div className="flex items-start justify-between gap-3 mb-6">
@@ -1585,7 +1631,7 @@ function CreatePageInner() {
             <div className="mb-2">
               <p className="text-ink-mid text-xs font-semibold mb-3 uppercase tracking-wide">Quick ideas</p>
               <div className="flex flex-col gap-2">
-                {CONTEXT_PROMPTS.map((prompt) => (
+                {storyIdeas(hero?.name ?? "Your hero").map((prompt) => (
                   <button key={prompt} type="button"
                     onClick={() => setStoryContext(prompt)}
                     className="text-left text-xs text-ink-mid bg-white border border-ink/10 hover:border-brand hover:text-brand px-4 py-2.5 rounded-xl transition line-clamp-1">
@@ -1635,6 +1681,16 @@ function CreatePageInner() {
                     </div>
                   ) : null;
                 })()}
+                {!selectedTheme && stepSequence.includes("theme") && (
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-ink-muted flex-shrink-0">Adventure</span>
+                    <span className="font-semibold text-ink text-right text-xs leading-relaxed">
+                      {storyContext.trim()
+                        ? `✨ Your idea: “${storyContext.trim().slice(0, 80)}${storyContext.trim().length > 80 ? "…" : ""}”`
+                        : storyMode === "continue_arc" ? "Picks up where the last episode ended" : "🎲 Surprise me"}
+                    </span>
+                  </div>
+                )}
                 {selectedTheme && (
                   <div className="flex items-center justify-between">
                     <span className="text-ink-muted">Adventure</span>
@@ -1739,7 +1795,9 @@ function CreatePageInner() {
                 canAdvance() && "hover:scale-[1.02]",
               )}>
               {stepType === "theme"
-                ? selectedTheme ? "Continue →" : "Skip — use my story context →"
+                ? selectedTheme ? "Continue →"
+                  : ownIdea ? "Continue with my idea →"
+                  : storyMode === "continue_arc" ? "Continue the adventure →" : "🎲 Surprise me →"
                 : stepType === "context"
                   ? storyContext.trim() ? "Use this hint →" : "Skip →"
                   : stepType === "characters"
