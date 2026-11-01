@@ -1124,12 +1124,12 @@ function CreatePageInner() {
                   <button key={theme.value} type="button"
                     onClick={() => { setSelectedTheme(isSelected ? "" : theme.value); setOwnIdea(false); }}
                     className={cn(
-                      "group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 text-left",
+                      "group relative h-full rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 text-left",
                       isSelected
                         ? "ring-4 ring-brand ring-offset-2 ring-offset-cream scale-[1.03] shadow-xl shadow-brand/30"
                         : "hover:scale-[1.02] hover:ring-2 hover:ring-gold/50 hover:ring-offset-1 hover:ring-offset-cream",
                     )}>
-                    <div className={`aspect-[4/3] flex flex-col justify-between p-4 bg-gradient-to-br ${theme.gradient}`}>
+                    <div className={`h-full min-h-[7.5rem] sm:aspect-[4/3] sm:min-h-0 flex flex-col justify-between p-4 bg-gradient-to-br ${theme.gradient}`}>
                       {/* Selected overlay */}
                       {isSelected && (
                         <div className="absolute inset-0 bg-brand/20 pointer-events-none" />
