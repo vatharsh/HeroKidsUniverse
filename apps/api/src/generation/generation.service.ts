@@ -1512,6 +1512,9 @@ export class GenerationService implements OnModuleInit {
     // Decide the (capped) redraws in story order first, then process pages in parallel — each page's redraw and
     // bubble detection is independent of the others.
     let expressionRedrawsLeft = await this.getNumberSetting('MAX_EXPRESSION_VARIANTS', Number(SETTING_DEFAULTS.MAX_EXPRESSION_VARIANTS.value));
+    // Pages of a refused scene each get their own picture (the borrowed one is only a style guide and the last
+    // resort) — a borrowed picture can hold people who aren't on this page yet.
+    const refusedSceneIds = new Set(refusedScenes);
     const pageJobs = scenes.flatMap((scene) => scene.pages.map((page) => {
       const isLaterPage = page.pageNumber !== scene.pages[0]?.pageNumber;
       // Someone arriving on this page isn't in the scene picture (it shows the first page) — this page must get its own.
@@ -1526,8 +1529,9 @@ export class GenerationService implements OnModuleInit {
           page.characterDirections?.some((c) => c.isSpeaking || c.mouthState === 'speaking'));
       // Each redraw is a full image — cap them per story (sheets keep the reused scene image consistent).
       // A newcomer always gets their picture (not counted against the cap).
-      const needsPageSpecificExpression = hasNewcomer || (!!wantsPageSpecificExpression && expressionRedrawsLeft > 0);
-      if (needsPageSpecificExpression && !hasNewcomer) expressionRedrawsLeft--;
+      const mustRedraw = hasNewcomer || refusedSceneIds.has(scene.sceneId);
+      const needsPageSpecificExpression = mustRedraw || (!!wantsPageSpecificExpression && expressionRedrawsLeft > 0);
+      if (needsPageSpecificExpression && !mustRedraw) expressionRedrawsLeft--;
       return { scene, page, needsPageSpecificExpression };
     }));
 

@@ -19,7 +19,7 @@ const NAV_FONT = "font-[family-name:var(--font-display)]";
 function UniverseIconLink({
   className = "",
   labelClassName = "",
-  iconSize = "clamp(48px, 4vw, 58px)",
+  iconSize = 34,
   onClick,
 }: {
   className?: string;
@@ -30,12 +30,12 @@ function UniverseIconLink({
   return (
     <a
       href="/universe"
-      title="Universe"
-      aria-label="Universe"
+      title="My Universe — your hero's worlds, friends, powers and story timeline"
       onClick={onClick}
       className={cn(
-        "group inline-flex items-center gap-2 rounded-full",
-        "transition-transform duration-200 hover:scale-105 active:scale-95",
+        // A labelled pill: the glowing planet alone didn't say what it opens.
+        "group inline-flex items-center gap-2 rounded-full border border-gold/40 bg-white/[0.06] py-1 pl-1 pr-4",
+        "transition-all duration-200 hover:scale-[1.03] hover:border-gold/70 hover:bg-white/10 active:scale-95",
         className,
       )}
     >
@@ -54,9 +54,9 @@ function UniverseIconLink({
         <span className="absolute h-[24%] w-[78%] rotate-[-20deg] rounded-full border-2 border-gold-light/90 border-t-white/30 shadow-[0_0_12px_rgba(245,158,11,0.35)]" />
         <span className="absolute h-[24%] w-[78%] rotate-[-20deg] rounded-full border-2 border-transparent border-b-space/80" />
         <span className="absolute right-[17%] top-[21%] h-2.5 w-2.5 rounded-full bg-[#55D7FF] shadow-[inset_-2px_-2px_4px_rgba(11,5,32,0.45),0_0_10px_rgba(85,215,255,0.55)]" />
-        <Sparkles className="absolute right-[11%] top-[10%] h-4 w-4 text-gold-light drop-shadow-[0_0_8px_rgba(253,230,138,0.8)]" />
+        <Sparkles className="absolute right-[6%] top-[4%] h-3 w-3 text-gold-light drop-shadow-[0_0_8px_rgba(253,230,138,0.8)]" />
       </span>
-      <span className={cn("sr-only", labelClassName)}>Universe</span>
+      <span className={cn(NAV_FONT, "text-lg leading-none text-white/85 group-hover:text-gold-light whitespace-nowrap transition-colors", labelClassName)}>My Universe</span>
     </a>
   );
 }
