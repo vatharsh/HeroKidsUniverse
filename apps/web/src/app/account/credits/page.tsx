@@ -17,6 +17,7 @@ const REASON_META: Record<string, { label: string; icon: string }> = {
   demo:                { label: "Demo credit",           icon: "🎯" },
   signup:              { label: "Welcome gift",          icon: "🌟" },
   payment_refund:      { label: "Payment refunded",      icon: "💸" },
+  reward:              { label: "Hidden Powers reward",  icon: "🏅" },
 };
 
 const plural = (n: number, one: string, many: string) => `${n} ${Math.abs(n) === 1 ? one : many}`;

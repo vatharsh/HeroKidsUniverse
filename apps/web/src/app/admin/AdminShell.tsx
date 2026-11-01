@@ -3,7 +3,7 @@
 import {
   Activity, BarChart3, BookOpen, Bot, Briefcase, ChevronRight, DollarSign, Globe,
   LayoutDashboard, LogOut, Package, Settings, ShieldCheck, ShoppingCart,
-  Tag, Users, Zap, FileText, ScrollText, LifeBuoy } from "lucide-react";
+  Tag, Users, Zap, FileText, ScrollText, LifeBuoy, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ElementType, type ReactNode } from "react";
@@ -35,6 +35,7 @@ const NAV: NavItem[] = [
   { href: "/admin/qa",               icon: Activity,        label: "AI Quality"       },
   { href: "/admin/ai-prompts",       icon: ScrollText,      label: "Prompt Registry"  },
   { href: "/admin/character-canons", icon: ShieldCheck,     label: "Character Canons" },
+  { href: "/admin/special-powers",   icon: Sparkles,        label: "Hidden Powers"    },
   { href: "/admin/influencers",      icon: Briefcase,       label: "Influencers"      },
   { href: "/admin/coupons",          icon: Tag,             label: "Coupons"          },
   { href: "/admin/pricing",          icon: DollarSign,      label: "Pricing"          },

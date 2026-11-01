@@ -16,6 +16,7 @@ import { getAccessToken } from "@/lib/api";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import { resolveMediaUrl } from "@/lib/media-url";
 import PreviewImg from "@/components/shared/PreviewImg";
+import HiddenPowerBanner from "@/components/story/HiddenPowerBanner";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 const TERMINAL = new Set(["completed", "failed"]);
@@ -810,6 +811,8 @@ function DashboardPageInner() {
           <>
             {/* ── Failed jobs banner ──────────────────────────────────── */}
             <FailedJobsBanner jobs={jobs} dismissedBefore={dismissedBefore} onDismiss={dismissFailedBanner} />
+
+            <HiddenPowerBanner />
 
             {/* ── Wallet bar ───────────────────────────────────────────── */}
             {user && (

@@ -11,6 +11,7 @@ import PreviewImg from "@/components/shared/PreviewImg";
 import { resolveMediaUrl } from "@/lib/media-url";
 import { usePublicPlatformSettings } from "@/lib/platform-settings";
 import HelpRequestDialog from "@/components/shared/HelpRequestDialog";
+import HiddenPowerLens from "@/components/story/HiddenPowerLens";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1378,6 +1379,8 @@ export default function StoryReaderPage() {
             <div className="absolute top-3 left-3 z-20 bg-gold text-space font-[family-name:var(--font-comic)] text-xs font-bold px-3 py-1 rounded-full shadow">
               PAGE {page + 1}
             </div>
+            {/* Today's hidden special power (only when one is scheduled and the story is complete) */}
+            {story.status === "completed" && <HiddenPowerLens storyId={story.id} page={page} />}
             {/* Hero name badge */}
             <div className="absolute top-3 right-3 z-20 bg-black/40 backdrop-blur text-white text-xs font-semibold px-3 py-1 rounded-full">
               {story.hero?.name}

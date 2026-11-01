@@ -92,6 +92,8 @@ import { UsersModule } from './users/users.module';
 import { PreviewWaitlist } from './stories/preview-waitlist.entity';
 import { SupportRequest } from './support/support-request.entity';
 import { SupportModule } from './support/support.module';
+import { PowerDrop, PowerFind } from './special-powers/special-power.entities';
+import { SpecialPowersModule } from './special-powers/special-powers.module';
 
 @Module({
   imports: [
@@ -122,6 +124,8 @@ import { SupportModule } from './support/support.module';
           EmailCode,
           PreviewWaitlist,
           SupportRequest,
+          PowerDrop,
+          PowerFind,
           Quest,
           HeroPower,
           StoryArc,
@@ -191,6 +195,7 @@ import { SupportModule } from './support/support.module';
     PowersModule,
     StoryArcsModule,
     SupportModule,
+    SpecialPowersModule,
   ],
   controllers: [AppController],
   providers: [

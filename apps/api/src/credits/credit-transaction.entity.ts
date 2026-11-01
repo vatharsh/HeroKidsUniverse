@@ -13,6 +13,8 @@ export enum CreditTransactionReason {
   Signup = 'signup',
   /** Money refunded through Razorpay; delta takes back the pack's unused credits. */
   PaymentRefund = 'payment_refund',
+  /** Free credits/refreshes earned in the app, e.g. Hidden Powers levels. */
+  Reward = 'reward',
 }
 
 @Entity('credit_transactions')
