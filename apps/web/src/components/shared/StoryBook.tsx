@@ -69,13 +69,15 @@ const LOCKED = PANELS.length;
 const STORY_PAGES = PANELS.length - 1;
 
 function SpeechBubble({ b }: { b: Bubble }) {
+  // A little wider than the engine's box so the bigger text still fits on 2–3 lines.
+  const width = Math.min(b.w + 8, 100 - b.x - 2);
   return (
-    <div className="absolute z-20" style={{ left: `${b.x}%`, top: `${b.y}%`, width: `${b.w}%` }}>
-      <div className="relative rounded-lg border-2 border-black bg-white px-1.5 py-1 shadow-[2px_2px_0_rgba(0,0,0,0.85)]">
-        <p className="font-[family-name:var(--font-comic)] text-[8px] leading-none text-brand mb-0.5 uppercase">{b.speaker}</p>
-        <p className="font-[family-name:var(--font-comic)] text-[9.5px] sm:text-[10.5px] leading-tight text-black">{b.text}</p>
-        <span aria-hidden className="absolute -bottom-[9px] h-0 w-0 border-x-[6px] border-x-transparent border-t-[9px] border-t-black" style={b.tail === "left" ? { left: 10 } : { right: 10 }} />
-        <span aria-hidden className="absolute -bottom-[5px] h-0 w-0 border-x-[4px] border-x-transparent border-t-[6px] border-t-white" style={b.tail === "left" ? { left: 12 } : { right: 12 }} />
+    <div className="absolute z-20" style={{ left: `${Math.max(1.5, b.x - 2)}%`, top: `${b.y}%`, width: `${width}%` }}>
+      <div className="relative rounded-xl border-[2.5px] border-black bg-white px-2 py-1.5 shadow-[3px_3px_0_rgba(0,0,0,0.85)]">
+        <p className="font-[family-name:var(--font-comic)] text-[10px] sm:text-[11px] leading-none text-brand mb-1 uppercase tracking-wide">{b.speaker}</p>
+        <p className="font-[family-name:var(--font-comic)] text-[12.5px] sm:text-[14px] leading-[1.15] text-black">{b.text}</p>
+        <span aria-hidden className="absolute -bottom-[11px] h-0 w-0 border-x-[7px] border-x-transparent border-t-[11px] border-t-black" style={b.tail === "left" ? { left: 12 } : { right: 12 }} />
+        <span aria-hidden className="absolute -bottom-[6px] h-0 w-0 border-x-[5px] border-x-transparent border-t-[7px] border-t-white" style={b.tail === "left" ? { left: 14 } : { right: 14 }} />
       </div>
     </div>
   );

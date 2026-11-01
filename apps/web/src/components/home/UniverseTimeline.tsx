@@ -7,9 +7,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * "Watch the universe grow" — Arjun's sample universe plays episode by episode while his universe
+ * "Watch the universe grow" — Siddhant's sample universe plays episode by episode while his universe
  * card fills up: companion, powers, gear, friends, worlds, quests ticked off, the villain escaping and
- * later defeated. Uses the existing sample illustrations in /public/story-panels — no AI cost.
+ * later defeated. Episode 1 is the home-page sample story; pictures are in /public/story-demo/universe.
  */
 
 const STEP_MS = 3600;
@@ -22,14 +22,14 @@ interface Episode {
 }
 
 const EPISODES: Episode[] = [
-  { image: "/story-panels/page_1.png", title: "The signal", moment: "A tiny robot taps on Arjun's window: “I need your help on a mission!”", toast: "🤖 Nova joins Arjun's universe" },
-  { image: "/story-panels/page_2.png", title: "The Starlight Mission", moment: "The Galaxy's brightest star has lost its shine. Arjun takes the controls.", toast: "🚀 Star Cruiser added to Arjun's gear" },
-  { image: "/story-panels/page_3.png", title: "Through the asteroid storm", moment: "Dodging asteroids at light-speed, Arjun discovers a new power.", toast: "⚡ New power: Zero-G Speed" },
-  { image: "/story-panels/page_4.png", title: "The Glimma Meadows", moment: "The Glimmas have a warning: “The Shadow Swirl has taken our starlight!”", toast: "🌍 New world unlocked: Glimma Meadows" },
-  { image: "/story-panels/page_5.png", title: "The Shadow Swirl", moment: "A storm with glowing eyes swallows the light — and slips away.", toast: "⚠️ The Shadow Swirl escaped — it may return!" },
-  { image: "/story-panels/page_6.png", title: "Bring the shine back", moment: "Arjun finds the last spark of starlight and holds it high.", toast: "💎 Legendary item: Starlight Crystal" },
-  { image: "/story-panels/page_7.png", title: "The Galaxy shines again", moment: "The star wakes up. The Glimmas cheer. Nova beeps a happy song.", toast: "✅ Quest complete: Restore the Galaxy's shine" },
-  { image: "/story-panels/page_8.png", title: "…but the universe is big", moment: "Back home, the telescope picks up a strange crystal glow.", toast: "📜 New quest: The Crystal Realm awaits…" },
+  { image: "/story-demo/universe/ep1.webp", title: "The Baby Phoenix", moment: "Siddhant and Kayra relight little Agni's fire — and a reborn feather shows a map.", toast: "🔥 Agni the phoenix joins Siddhant's universe" },
+  { image: "/story-demo/universe/ep2.webp", title: "The Flying Flower Carpet", moment: "Following the feather-map over the Himalayas on a carpet of flowers.", toast: "🌸 Flying Flower Carpet added to Siddhant's gear" },
+  { image: "/story-demo/universe/ep3.webp", title: "The Crystal Cave", moment: "In the darkest cave, Siddhant's hands begin to glow like phoenix fire.", toast: "✨ New power: Phoenix Glow" },
+  { image: "/story-demo/universe/ep4.webp", title: "The Singing Valley", moment: "A hidden valley of rivers and flowers — and a snow-leopard cub who wants to play.", toast: "🏔️ New world unlocked: The Singing Valley" },
+  { image: "/story-demo/universe/ep5.webp", title: "Tamas the Shadow Crow", moment: "A crow made of shadows snatches the phoenix egg — and flies away.", toast: "⚠️ Tamas escaped with the egg — he'll be back!" },
+  { image: "/story-demo/universe/ep6.webp", title: "The Feather Shield", moment: "Kayra raises the golden feather and a shield of light pushes the shadows back.", toast: "🪶 Legendary item: Golden Phoenix Feather" },
+  { image: "/story-demo/universe/ep7.webp", title: "The Egg Hatches", moment: "Sunrise at the mountain temple — a brand-new phoenix is born!", toast: "✅ Quest complete: Find the second phoenix egg" },
+  { image: "/story-demo/universe/ep8.webp", title: "…but the universe is big", moment: "Back at the Academy, the telescope shows a silver door on the moon.", toast: "📜 New quest: Open the Moon Gate…" },
 ];
 
 type Kind = "cast" | "power" | "gear" | "world" | "quest";
@@ -43,16 +43,18 @@ interface Item {
 }
 
 const ITEMS: Item[] = [
-  { ep: 1, kind: "cast", icon: "🤖", label: "Nova" },
-  { ep: 1, kind: "quest", icon: "🌟", label: "Restore the Galaxy's shine", doneAt: 7 },
-  { ep: 1, kind: "power", icon: "🔥", label: "Cosmic Flame" },
-  { ep: 2, kind: "gear", icon: "🚀", label: "Star Cruiser" },
-  { ep: 3, kind: "power", icon: "⚡", label: "Zero-G Speed" },
-  { ep: 4, kind: "world", icon: "🌍", label: "Glimma Meadows" },
-  { ep: 4, kind: "cast", icon: "🟢", label: "The Glimmas" },
-  { ep: 6, kind: "gear", icon: "💎", label: "Starlight Crystal" },
-  { ep: 6, kind: "power", icon: "🛡️", label: "Star Shield" },
-  { ep: 8, kind: "quest", icon: "🔮", label: "Enter the Crystal Realm" },
+  { ep: 1, kind: "cast", icon: "🔥", label: "Agni" },
+  { ep: 1, kind: "cast", icon: "👧", label: "Kayra" },
+  { ep: 1, kind: "quest", icon: "🥚", label: "Find the second phoenix egg", doneAt: 7 },
+  { ep: 1, kind: "power", icon: "💛", label: "Kindness Flame" },
+  { ep: 2, kind: "gear", icon: "🌸", label: "Flying Flower Carpet" },
+  { ep: 3, kind: "power", icon: "✨", label: "Phoenix Glow" },
+  { ep: 4, kind: "world", icon: "🏔️", label: "The Singing Valley" },
+  { ep: 4, kind: "cast", icon: "🐆", label: "Moti" },
+  { ep: 6, kind: "gear", icon: "🪶", label: "Golden Phoenix Feather" },
+  { ep: 6, kind: "power", icon: "🛡️", label: "Feather Shield" },
+  { ep: 7, kind: "cast", icon: "🐣", label: "Jwala" },
+  { ep: 8, kind: "quest", icon: "🌙", label: "Open the Moon Gate" },
 ];
 
 const GROUPS: Array<{ kind: Kind; title: string }> = [
@@ -150,7 +152,7 @@ export default function UniverseTimeline() {
               ))}
             </div>
 
-            {/* Caption sits under the picture: the pages already have speech bubbles drawn on them */}
+            {/* Caption sits under the picture */}
             <div className="max-w-[420px] mx-auto mt-4 flex items-start gap-3">
               <div key={step} className={`flex-1 min-w-0 ${animate ? "ug-anim animate-[fadeInUp_0.5s_ease-out_both]" : ""}`}>
                 <span className="inline-block bg-gold text-black text-[10px] font-black px-2 py-0.5 rounded-full mb-1.5">EPISODE {ep}</span>
@@ -201,15 +203,15 @@ export default function UniverseTimeline() {
             </div>
           </div>
 
-          {/* ── Arjun's universe card ──────────────────────────────────── */}
+          {/* ── Siddhant's universe card ──────────────────────────────────── */}
           <div className="bg-white/[0.06] border border-white/15 rounded-3xl p-5 sm:p-6 backdrop-blur-sm">
             <div className="flex items-center gap-4 mb-5">
               <div className="relative w-16 h-16 rounded-2xl overflow-hidden border border-white/20 shrink-0">
-                <Image src="/story-panels/cover.png" alt="Arjun" fill sizes="64px" className="object-cover object-top" />
+                <Image src="/story-demo/universe/avatar.webp" alt="Siddhant" fill sizes="64px" className="object-cover" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-gold text-[10px] font-bold tracking-widest uppercase">SAMPLE UNIVERSE</p>
-                <h3 className="font-[family-name:var(--font-display)] text-white text-xl sm:text-2xl leading-tight">Arjun&apos;s Starfire Chronicles</h3>
+                <h3 className="font-[family-name:var(--font-display)] text-white text-xl sm:text-2xl leading-tight">Siddhant&apos;s Star Castle Chronicles</h3>
               </div>
               <div className="text-center shrink-0">
                 <span key={ep} className={`block text-4xl font-[family-name:var(--font-display)] text-gold font-black leading-none ${animate ? "ug-anim animate-[ugPopIn_0.5s_ease-out_both]" : ""}`}>{ep}</span>
@@ -254,10 +256,10 @@ export default function UniverseTimeline() {
                 <p className="text-white/40 text-[10px] font-bold tracking-widest uppercase mb-2">Villain</p>
                 {villain ? (
                   <div className={`relative flex items-center gap-3 rounded-2xl border border-red-400/30 bg-red-950/40 px-4 py-3 ${ep === 5 && animate ? "ug-anim animate-[ugPopIn_0.55s_ease-out_both]" : ""}`}>
-                    <span className="text-2xl">🌪️</span>
+                    <span className="text-2xl">🐦‍⬛</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-white font-semibold text-sm">The Shadow Swirl</p>
-                      <p className="text-white/50 text-xs">Stole the Galaxy&apos;s starlight</p>
+                      <p className="text-white font-semibold text-sm">Tamas the Shadow Crow</p>
+                      <p className="text-white/50 text-xs">Stole the phoenix egg</p>
                     </div>
                     <span key={villain.label} className={`shrink-0 text-[11px] font-black uppercase tracking-wide px-2.5 py-1 rounded-md shadow ${villain.className} ${animate && (ep === 5 || ep === 7) ? "ug-anim animate-[ugStamp_0.6s_ease-out_both]" : "-rotate-[8deg]"}`}>
                       {villain.label}
@@ -270,7 +272,7 @@ export default function UniverseTimeline() {
             </div>
 
             <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-white/45 text-xs">Every item stays — Arjun can use them in all future episodes.</p>
+              <p className="text-white/45 text-xs">Every item stays — Siddhant can use them in all future episodes.</p>
               <a href="/demo" className="bg-brand/20 hover:bg-brand/40 border border-brand/40 text-brand-light hover:text-white text-xs font-bold px-4 py-2 rounded-full transition-all whitespace-nowrap">
                 See the full universe →
               </a>

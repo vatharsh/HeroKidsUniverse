@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import HiddenPowerHowTo from "@/components/story/HiddenPowerHowTo";
 import { specialPowersApi } from "@/lib/special-powers";
 
 const DISMISS_KEY = "hk_power_announce_dismissed";
@@ -16,6 +17,7 @@ export default function HiddenPowerAnnouncement() {
   const { user } = useAuth();
   const [drop, setDrop] = useState<{ name: string; emoji: string; foundToday: number | null } | null>(null);
   const [hidden, setHidden] = useState(true);
+  const [howTo, setHowTo] = useState(false);
 
   useEffect(() => {
     specialPowersApi.publicToday().then((d) => {
@@ -47,11 +49,15 @@ export default function HiddenPowerAnnouncement() {
             {user
               ? <>The <strong>{drop.name}</strong> is hiding in your stories — today only.</>
               : <>A special power is hiding in every hero&apos;s story today.</>}
-            {drop.foundToday ? <span className="text-white/70"> {drop.foundToday} heroes found it!</span> : null}
+            {drop.foundToday ? <span className="text-white/70"> {drop.foundToday} heroes found it!</span> : null}{" "}
+            <button type="button" onClick={() => setHowTo(true)} className="font-semibold text-gold-light underline underline-offset-2 hover:text-white whitespace-nowrap">
+              How? ▶
+            </button>
           </p>
           <Link href={href} className="shrink-0 bg-gold text-space font-bold text-xs px-4 py-2 rounded-full hover:brightness-110">
             {user ? "Find it 🔮" : "Create your hero"}
           </Link>
+          <HiddenPowerHowTo open={howTo} onClose={() => setHowTo(false)} power={drop} cta={{ href, label: user ? "Find it 🔮" : "Create your hero" }} />
           <button type="button" onClick={dismiss} aria-label="Close" className="shrink-0 w-7 h-7 rounded-full text-white/60 hover:text-white hover:bg-white/10">×</button>
         </div>
       </div>

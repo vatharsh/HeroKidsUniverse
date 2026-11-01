@@ -411,3 +411,38 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ug-anim { animation: none !important; }
 }
+
+/* ─── Hidden Powers "how it works" slides ────────────────────────────── */
+
+/* The lens wanders over the page and settles on the hidden spot (68%, 58%). */
+@keyframes hpLensPath {
+  0%   { left: 22%; top: 26%; }
+  30%  { left: 78%; top: 30%; }
+  55%  { left: 30%; top: 72%; }
+  80%, 100% { left: 68%; top: 58%; }
+}
+@keyframes hpSparkle {
+  0%, 45% { opacity: 0.06; transform: translate(-50%, -50%) scale(0.7); }
+  65%     { opacity: 0.4;  transform: translate(-50%, -50%) scale(0.85); }
+  80%, 100% { opacity: 1;  transform: translate(-50%, -50%) scale(1.25); }
+}
+@keyframes hpHintFar  { 0%, 60% { opacity: 1; } 66%, 100% { opacity: 0; } }
+@keyframes hpHintNear { 0%, 60% { opacity: 0; } 66%, 100% { opacity: 1; } }
+@keyframes hpTap {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  45%      { transform: translate(-4px, -4px) scale(0.88); }
+}
+@keyframes hpRipple {
+  0%   { transform: scale(0.4); opacity: 0.9; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes hpFlyIn {
+  0%   { opacity: 0; transform: translateY(18px) scale(0.6); }
+  60%  { opacity: 1; transform: translateY(-4px) scale(1.1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes hpBar { from { width: 25%; } to { width: 37.5%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .hp-anim { animation: none !important; }
+}
