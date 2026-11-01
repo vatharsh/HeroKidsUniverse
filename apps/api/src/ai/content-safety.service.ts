@@ -373,6 +373,7 @@ export class ContentSafetyService {
 
 const FIELD_LABELS: Record<string, string> = {
   storyContext: 'story idea',
+  heroOutfit: "hero's look",
   companionName: 'companion name',
   name: 'name',
   heroTitle: 'hero title',

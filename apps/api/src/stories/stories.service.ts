@@ -76,8 +76,13 @@ export class StoriesService {
     }
   }
 
+  /** Throws the same friendly 400 as create() would, without creating anything or touching credits. */
+  checkIdea(userId: string, fields: { storyContext?: string; heroOutfit?: string; companionName?: string }) {
+    return this.safety.assertSafeInput(fields, userId);
+  }
+
   async create(userId: string, createStoryDto: CreateStoryDto): Promise<Story> {
-    await this.safety.assertSafeInput({ storyContext: createStoryDto.storyContext, companionName: createStoryDto.companionName }, userId);
+    await this.safety.assertSafeInput({ storyContext: createStoryDto.storyContext, companionName: createStoryDto.companionName, heroOutfit: createStoryDto.heroOutfit }, userId);
     const hero = await this.heroesRepository.findOne({
       where: { id: createStoryDto.heroId, userId },
     });
@@ -174,6 +179,7 @@ export class StoriesService {
           theme: createStoryDto.theme ?? null,
           storyMode: createStoryDto.storyMode ?? StoryMode.NewAdventure,
           storyContext: createStoryDto.storyContext ?? null,
+          heroOutfit: createStoryDto.heroOutfit === undefined ? null : createStoryDto.heroOutfit.trim(),
           cliffhanger: null,
           arcId: null,
           status: StoryStatus.Pending,

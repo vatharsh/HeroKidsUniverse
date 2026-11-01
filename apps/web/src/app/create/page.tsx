@@ -7,6 +7,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Navbar from "@/components/layout/Navbar";
 import AvatarGenerateModal from "@/components/shared/AvatarGenerateModal";
 import AvatarPicker from "@/components/shared/AvatarPicker";
+import HeroLookPicker, { type LookChoice } from "@/components/create/HeroLookPicker";
 import CostumeField from "@/components/shared/CostumeField";
 import FreeQuotaCard from "@/components/shared/FreeQuotaCard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -130,6 +131,7 @@ interface ExistingHero {
   gender: HeroGender;
   avatarUrl: string | null;
   universeId?: string | null;
+  costumeDescription?: string | null;
 }
 
 interface Character {
@@ -153,6 +155,7 @@ interface Universe {
   id: string;
   name: string;
   heroTitle: string | null;
+  visualState?: { heroOutfit?: string | null } | null;
 }
 
 // ── Crop Modal ───────────────────────────────────────────────────────────────
@@ -327,6 +330,9 @@ function CreatePageInner() {
   /** "✨ My own idea" chosen on the adventure step — the idea goes in storyContext. */
   const [ownIdea, setOwnIdea] = useState(false);
   const [storyContext, setStoryContext] = useState("");
+  /** Hero's look for this story — null = the default (this universe's look if it has one, else the usual). */
+  const [lookChoice, setLookChoice] = useState<LookChoice | null>(null);
+  const [newLook, setNewLook] = useState("");
 
   // Companion state — new companion being created
   const [companionType, setCompanionType]   = useState<string | null>(null);
@@ -344,6 +350,9 @@ function CreatePageInner() {
   // Today's free previews are used up (HTTP 429): show the "come back tomorrow / buy now" card.
   const [freeQuotaFull, setFreeQuotaFull] = useState(false);
   const [error, setError]           = useState("");
+  /** Child-safety check of the parent's idea/look before they move on — shown while the text is unchanged. */
+  const [safetyWarning, setSafetyWarning] = useState<{ key: string; message: string } | null>(null);
+  const [checkingIdea, setCheckingIdea] = useState(false);
 
   // Load existing hero + characters on mount
   useEffect(() => {
@@ -417,6 +426,11 @@ function CreatePageInner() {
   }, [selectedUniverseId, preselectedUniverseId]);
 
   const hasHero = !!hero;
+  const lookUniverseId = storyMode === "standalone" ? null : (preselectedUniverseId ?? selectedUniverseId);
+  const universeLook = universes.find((u) => u.id === lookUniverseId)?.visualState?.heroOutfit ?? null;
+  const heroLook: LookChoice = lookChoice === "universe" && !universeLook ? "usual" : (lookChoice ?? (universeLook ? "universe" : "usual"));
+  // New look → that look; back to usual inside a universe that has its own look → '' (clears it); else unchanged.
+  const heroOutfitParam = heroLook === "new" && newLook.trim() ? newLook.trim() : heroLook === "usual" && universeLook ? "" : undefined;
 
   // Dynamic step sequence based on mode + hero existence
   const stepSequence = useMemo<StepType[]>(() => {
@@ -670,6 +684,7 @@ function CreatePageInner() {
           theme: selectedTheme || undefined,
           storyMode,
           storyContext: storyContext.trim() || undefined,
+          ...(heroOutfitParam !== undefined ? { heroOutfit: heroOutfitParam } : {}),
           characterIds: selectedCharIds.length > 0 ? selectedCharIds : undefined,
           ...(effectiveUniverseId ? { universeId: effectiveUniverseId } : {}),
           ...(companionType ? { companionType, companionName: companionName.trim() || undefined, companionPetId: companionPetId ?? undefined } : {}),
@@ -687,8 +702,31 @@ function CreatePageInner() {
     }
   }
 
-  function advance() {
-    if (stepType === "generate") return;
+  const ideaKey = `${storyContext.trim()}|${heroLook === "new" ? newLook.trim() : ""}`;
+  const shownSafetyWarning = safetyWarning?.key === ideaKey ? safetyWarning.message : null;
+
+  async function advance() {
+    if (stepType === "generate" || checkingIdea) return;
+    // Check what the parent typed against the child-safety policy now, before the review step and any credit.
+    const look = stepType === "context" && heroLook === "new" ? newLook.trim() : "";
+    const idea = (stepType === "theme" && ownIdea) || stepType === "context" ? storyContext.trim() : "";
+    if (idea || look) {
+      setCheckingIdea(true);
+      try {
+        const res = await fetch(`${BASE}/stories/check-idea`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("hvu_access") ?? ""}` },
+          body: JSON.stringify({ storyContext: idea || undefined, heroOutfit: look || undefined }),
+        });
+        if (res.status === 400) {
+          const body = await res.json().catch(() => ({}));
+          setSafetyWarning({ key: ideaKey, message: typeof body.message === "string" ? body.message : "Please keep it child-friendly and try rewording it." });
+          return;
+        }
+      } catch { /* offline or server busy — the same check runs again when the story is created */ }
+      finally { setCheckingIdea(false); }
+    }
+    setSafetyWarning(null);
     setStep(s => s + 1);
   }
 
@@ -1609,6 +1647,18 @@ function CreatePageInner() {
                 <p className="text-ink-muted text-[11px] mt-1.5">Optional — we&apos;ll create one automatically if you skip.</p>
               </div>
             )}
+            {hasHero && hero && (
+              <HeroLookPicker
+                heroName={hero.name}
+                usualLook={hero.costumeDescription ?? null}
+                universeLook={universeLook}
+                inUniverse={!!lookUniverseId || (storyMode !== "standalone")}
+                choice={heroLook}
+                onChoice={setLookChoice}
+                newLook={newLook}
+                onNewLook={setNewLook}
+              />
+            )}
             <p className="text-ink-muted text-sm mb-2">
               {ownIdea && storyContext.trim()
                 ? "Here's your idea — add any extra details you'd like, or just continue."
@@ -1702,6 +1752,14 @@ function CreatePageInner() {
                     </span>
                   </div>
                 )}
+                {hasHero && (heroLook === "universe" || (heroLook === "new" && newLook.trim())) && (
+                  <div className="flex items-start justify-between gap-4">
+                    <span className="text-ink-muted flex-shrink-0">Look</span>
+                    <span className="font-semibold text-ink text-right text-xs leading-relaxed">
+                      👕 {(heroLook === "new" ? newLook.trim() : universeLook ?? "").slice(0, 90)}
+                    </span>
+                  </div>
+                )}
                 {selectedCharIds.length > 0 && (
                   <div className="flex items-start justify-between gap-4">
                     <span className="text-ink-muted flex-shrink-0">Cast</span>
@@ -1775,6 +1833,14 @@ function CreatePageInner() {
           </section>
         )}
 
+        {shownSafetyWarning && (stepType === "theme" || stepType === "context") && (
+          <div role="alert" className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
+            <p className="text-amber-900 text-sm font-bold">⚠️ This doesn&apos;t meet our child-safety policy, so we can&apos;t make this story</p>
+            <p className="text-amber-800 text-xs mt-1 leading-relaxed">{shownSafetyWarning}</p>
+            <p className="text-amber-700 text-[11px] mt-1">Nothing has been charged. Change the wording above and press Continue again.</p>
+          </div>
+        )}
+
         {/* ── Navigation ──────────────────────────────────────────────────── */}
         <div className={cn("flex gap-4 mt-8", stepType === "generate" ? "justify-center" : "")}>
           {step > 0 && stepType !== "generate" && (
@@ -1791,13 +1857,13 @@ function CreatePageInner() {
           )}
           {stepType !== "generate" && (
             <button type="button"
-              disabled={!canAdvance()}
-              onClick={advance}
+              disabled={!canAdvance() || checkingIdea}
+              onClick={() => void advance()}
               className={cn(
                 "flex-1 bg-brand disabled:bg-ink/20 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-full transition-all shadow-brand",
                 canAdvance() && "hover:scale-[1.02]",
               )}>
-              {stepType === "theme"
+              {checkingIdea ? "Checking your idea…" : stepType === "theme"
                 ? selectedTheme ? "Continue →"
                   : ownIdea ? "Continue with my idea →"
                   : storyMode === "continue_arc" ? "Continue the adventure →" : "🎲 Surprise me →"

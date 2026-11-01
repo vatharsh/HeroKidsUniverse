@@ -14,6 +14,22 @@ export class StoriesController {
     private readonly videoService: VideoGenerationService,
   ) {}
 
+  /** Child-safety check of what the parent typed, so the create page can warn before the review step. */
+  @Post('check-idea')
+  @HttpCode(HttpStatus.OK)
+  async checkIdea(
+    @CurrentUser() currentUser: CurrentUserPayload,
+    @Body() body: { storyContext?: string; heroOutfit?: string; companionName?: string },
+  ) {
+    const text = (v: unknown) => (typeof v === 'string' ? v.slice(0, 500) : undefined);
+    await this.storiesService.checkIdea(currentUser.id, {
+      storyContext: text(body?.storyContext),
+      heroOutfit: text(body?.heroOutfit),
+      companionName: text(body?.companionName),
+    });
+    return { safe: true };
+  }
+
   @Post()
   create(@CurrentUser() currentUser: CurrentUserPayload, @Body() createStoryDto: CreateStoryDto) {
     return this.storiesService.create(currentUser.id, createStoryDto);

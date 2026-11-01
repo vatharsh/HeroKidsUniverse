@@ -44,3 +44,17 @@ export function isGeminiSafetyStop(
     ].includes(String(finishReason ?? ''))
   );
 }
+
+/**
+ * Clothing words that make Gemini's image filter refuse pictures of children ("PROHIBITED_CONTENT") even in
+ * an innocent outfit — e.g. "baggy trousers, loose linen shirt" was refused for a 7-year-old while the same
+ * outfit without them was drawn every time. Dropped from outfit text before it reaches an image prompt (longer forms listed first so they match whole).
+ */
+const RISKY_CLOTHING_WORDS = /\b(loose-fitting|tight-fitting|skin-tight|bare-chested|see-through|loose|baggy|tight|skimpy|revealing|sheer|bare|shirtless|topless|midriff|cropped)\b[\s-]*/gi;
+
+export function childSafeOutfit(text: string): string;
+export function childSafeOutfit(text: string | null | undefined): string | null;
+export function childSafeOutfit(text: string | null | undefined): string | null {
+  if (!text) return text ?? null;
+  return text.replace(RISKY_CLOTHING_WORDS, '').replace(/\s{2,}/g, ' ').replace(/\s+([,.;])/g, '$1').trim();
+}

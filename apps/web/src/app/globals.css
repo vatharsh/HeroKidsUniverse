@@ -442,6 +442,11 @@ body {
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes hpBar { from { width: 25%; } to { width: 37.5%; } }
+/* Dashboard banner: the banner stays solid; a soft gold glow breathes behind it. */
+@keyframes hpBannerGlow {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 0.6; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .hp-anim { animation: none !important; }

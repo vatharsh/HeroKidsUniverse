@@ -36,6 +36,7 @@ import { pickStoryShape } from './story-shapes';
 import { geminiTextPrice } from '../ai/gemini-pricing';
 import { aiUsageContext } from '../ai/ai-usage-recorder.service';
 import { ContentSafetyError, ContentSafetyService, isContentSafetyError } from '../ai/content-safety.service';
+import { childSafeOutfit } from '../ai/gemini-safety';
 import type { StoryGenerationInput } from '../ai/interfaces/story-generation.provider';
 import { Quest, QuestStatus } from '../quests/quest.entity';
 import { Story, StoryMode, StoryPage, StoryScene, StoryStatus, StoryTheme, StoryVisualState } from '../stories/story.entity';
@@ -243,6 +244,11 @@ export class GenerationService implements OnModuleInit {
 
       const universeContext = story.universeId ? await this.buildUniverseContext(story) : undefined;
       const isStandalone = story.storyMode === StoryMode.Standalone;
+      // A look picked for this story, or saved for this universe, replaces the hero's usual outfit.
+      const backToUsualLook = story.heroOutfit === '';
+      const universeLook = isStandalone || backToUsualLook ? null : (universeContext?.visualState?.heroOutfit ?? null);
+      const lookOverride = story.heroOutfit || universeLook || null;
+      const heroCostume = lookOverride || hero.costumeDescription || null;
 
       let existingVisualState: StoryVisualState | null = null;
       if (story.universeId && !isStandalone && story.storyMode !== StoryMode.NewAdventure) {
@@ -264,11 +270,11 @@ export class GenerationService implements OnModuleInit {
         }
 
         // Seed hero costume from hero profile if no prior story established one
-        if (existingVisualState && !existingVisualState.costume && hero.costumeDescription) {
-          existingVisualState.costume = hero.costumeDescription;
-        } else if (!existingVisualState && hero.costumeDescription) {
+        if (existingVisualState && (lookOverride || !existingVisualState.costume) && heroCostume) {
+          existingVisualState.costume = heroCostume;
+        } else if (!existingVisualState && heroCostume) {
           existingVisualState = {
-            costume: hero.costumeDescription,
+            costume: heroCostume,
             companion: null,
             weapon: null,
             powers: universeContext?.heroPowers ?? [],
@@ -276,6 +282,11 @@ export class GenerationService implements OnModuleInit {
             transformation: null,
           };
         }
+      }
+
+      // New Adventures and standalone stories don't load a visual state — still tell the writer the new look.
+      if (lookOverride && !existingVisualState) {
+        existingVisualState = { costume: lookOverride, companion: null, weapon: null, powers: universeContext?.heroPowers ?? [], inventory: [], transformation: null };
       }
 
       // Strip companion from visual state when user opted out for this episode
@@ -361,12 +372,12 @@ export class GenerationService implements OnModuleInit {
       // Gemini's storyVisualState.costume reflects what it thinks the hero is wearing (often casual),
       // which must NOT override the user-authored costume. Only allow Gemini's value as a last resort.
       // Standalone stories don't use the universe costume, but still need ONE locked outfit — the writer's.
-      const effectiveCostume = isStandalone
-        ? (normalizedGenerated.storyVisualState?.costume || null)
+      const effectiveCostume = childSafeOutfit(isStandalone
+        ? (story.heroOutfit || normalizedGenerated.storyVisualState?.costume || null)
         // The universe's saved costume keeps the hero recognisable across New Adventures too (only
         // Continue / New Arc load the last story's visual state).
-        : (hero.costumeDescription || existingVisualState?.costume || universeContext?.visualState?.costume
-          || normalizedGenerated.storyVisualState?.costume || null);
+        : (heroCostume || existingVisualState?.costume || universeContext?.visualState?.costume
+          || normalizedGenerated.storyVisualState?.costume || null));
       // Writer-designed outfit for every other character. Parents often put accessories or age in the
       // "outfit" field ("rectangular glasses"), so keep their note AND the writer's actual outfit.
       for (const [name, outfit] of Object.entries(normalizedGenerated.storyVisualState?.characterOutfits ?? {})) {
@@ -376,6 +387,7 @@ export class GenerationService implements OnModuleInit {
           ? `${outfit}; always with: ${parentNote}`
           : outfit;
       }
+      for (const name of Object.keys(characterOutfits)) characterOutfits[name] = childSafeOutfit(characterOutfits[name]);
 
       let storyVisualState: StoryVisualState | null = null;
       if (normalizedGenerated.storyVisualState) {
@@ -430,9 +442,14 @@ export class GenerationService implements OnModuleInit {
       // Always update if hero.costumeDescription changed — user-authored value always wins.
       if (!isStandalone && story.universeId && storyVisualState?.costume) {
         const universe = await this.universesRepo.findOne({ where: { id: story.universeId } });
-        const costumeChanged = hero.costumeDescription && universe?.visualState?.costume !== hero.costumeDescription;
-        if (universe && (!universe.visualState?.costume || costumeChanged)) {
-          const updatedVisualState = { ...(universe.visualState ?? {}), costume: storyVisualState.costume };
+        const costumeChanged = heroCostume && universe?.visualState?.costume !== heroCostume;
+        if (universe && (!universe.visualState?.costume || costumeChanged || story.heroOutfit !== null)) {
+          // A new look picked for this story becomes this universe's look for the episodes after it.
+          const updatedVisualState = {
+            ...(universe.visualState ?? {}),
+            costume: storyVisualState.costume,
+            ...(story.heroOutfit !== null ? { heroOutfit: story.heroOutfit || null } : {}),
+          };
           await this.universesRepo.update(story.universeId, { visualState: updatedVisualState as typeof universe.visualState });
         }
       }

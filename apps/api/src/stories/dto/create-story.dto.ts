@@ -29,6 +29,12 @@ export class CreateStoryDto {
   @IsUUID(undefined, { each: true })
   characterIds?: string[];
 
+  /** New look for the hero in this story (and, inside a universe, the episodes after it). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  heroOutfit?: string;
+
   @IsOptional()
   @IsString()
   companionType?: string;

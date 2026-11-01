@@ -157,6 +157,7 @@ export interface UniverseContext {
     vehicle: string | null;
     heroPowerVisual: string | null;
     badgeStyle: string | null;
+    heroOutfit?: string | null;
   } | null;
 }
 

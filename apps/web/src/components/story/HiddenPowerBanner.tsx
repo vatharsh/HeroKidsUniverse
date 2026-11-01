@@ -16,8 +16,11 @@ export default function HiddenPowerBanner() {
   if (!data?.drop || data.heroes.length === 0) return null;
   const allFound = data.heroes.every((h) => h.foundToday);
   return (
-    <div className={`mb-6 rounded-3xl bg-gradient-to-r from-space via-brand to-purple-700 text-white px-5 py-4 shadow-brand flex flex-col sm:flex-row sm:items-center gap-3 ${allFound ? "" : "ring-4 ring-gold/70 animate-[pulse_2s_ease-in-out_infinite] motion-reduce:animate-none"}`}>
-      <span className="text-4xl leading-none animate-pulse" aria-hidden>{allFound ? data.drop.emoji : "🔮"}</span>
+    <div className="relative mb-6">
+      {/* Soft gold glow breathing behind the banner — the banner itself never fades. */}
+      {!allFound && <div aria-hidden className="absolute -inset-1 rounded-[1.75rem] bg-gradient-to-r from-gold via-amber-300 to-gold blur-md hp-anim animate-[hpBannerGlow_3s_ease-in-out_infinite]" />}
+    <div className={`relative rounded-3xl bg-gradient-to-r from-space via-brand to-purple-700 text-white px-5 py-4 shadow-brand flex flex-col sm:flex-row sm:items-center gap-3 ${allFound ? "" : "border border-gold/70"}`}>
+      <span className="text-4xl leading-none" aria-hidden>{allFound ? data.drop.emoji : "🔮"}</span>
       <div className="flex-1">
         <p className="font-[family-name:var(--font-display)] text-xl">
           {allFound ? `Today's ${data.drop.name} is in your collection!` : `✨ A special power is hiding in your stories today!`}
@@ -39,6 +42,7 @@ export default function HiddenPowerBanner() {
           <Link href="/power-book" className="text-[11px] font-bold text-gold underline-offset-2 hover:underline px-1 py-1">📖 Open Power Book →</Link>
         </div>
       </div>
+    </div>
     </div>
   );
 }

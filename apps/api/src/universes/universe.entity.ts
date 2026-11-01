@@ -23,6 +23,8 @@ export interface UniverseVisualState {
   vehicle: string | null;
   heroPowerVisual: string | null;
   badgeStyle: string | null;
+  /** The hero's look in this universe when a parent chose a new one (wins over the hero's usual outfit). */
+  heroOutfit?: string | null;
 }
 
 @Entity('universes')

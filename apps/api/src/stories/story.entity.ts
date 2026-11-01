@@ -217,6 +217,13 @@ export class Story {
   @Column({ type: 'text', nullable: true })
   storyContext!: string | null;
 
+  /**
+   * A look picked for this story ("desert explorer clothes"); overrides the hero's usual outfit and, in a
+   * universe, becomes that universe's look. '' = back to the usual outfit (clears the universe's look).
+   */
+  @Column({ type: 'text', nullable: true })
+  heroOutfit!: string | null;
+
   @Column({ type: 'text', nullable: true })
   cliffhanger!: string | null;
 
