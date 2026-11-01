@@ -4,6 +4,7 @@ import { Clapperboard, FileText, LifeBuoy, Loader2, Package, Share2, Trash2 } fr
 import { useParams, useRouter } from "next/navigation";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAccessToken } from "@/lib/api";
 import WaitingGames from "@/components/games/WaitingGames";
@@ -1123,32 +1124,43 @@ export default function StoryReaderPage() {
 
   return (
     <div className="min-h-screen bg-space-gradient flex flex-col">
-      {/* Print-only layout: all pages stacked for PDF */}
+      {/* Print-only layout for "PDF": one story page per sheet. It sits directly in <body> (portal) so print
+          CSS can hide everything else — a position:fixed overlay would repeat page 1 on every sheet. */}
       <style>{`
+        @media screen { #print-story { display: none; } }
         @media print {
-          body * { visibility: hidden; }
-          #print-story, #print-story * { visibility: visible; }
-          #print-story { position: fixed; inset: 0; background: white; overflow: auto; padding: 24px; }
+          @page { size: A4; margin: 12mm; }
+          html, body { background: white !important; min-height: 0 !important; }
+          body > *:not(#print-story) { display: none !important; }
+          #print-story { display: block !important; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          #print-story .print-sheet { break-after: page; page-break-after: always; break-inside: avoid; }
+          #print-story .print-sheet:last-child { break-after: auto; page-break-after: auto; }
           .no-print { display: none !important; }
         }
       `}</style>
 
-      {/* Hidden print view — all pages stacked */}
-      <div id="print-story" className="hidden print:block">
-        <h1 style={{ fontFamily: "serif", fontSize: 28, marginBottom: 8, textAlign: "center" }}>
-          {story.title ?? "My Story"}
-        </h1>
-        <p style={{ textAlign: "center", color: "#666", fontSize: 13, marginBottom: 32 }}>
-          A story starring {story.hero?.name}
-        </p>
+      {createPortal(
+      <div id="print-story">
+        <div className="print-sheet" style={{ textAlign: "center", paddingTop: 24 }}>
+          <h1 style={{ fontFamily: "serif", fontSize: 30, marginBottom: 8 }}>
+            {story.title ?? "My Story"}
+          </h1>
+          <p style={{ color: "#666", fontSize: 13, marginBottom: 24 }}>
+            A story starring {story.hero?.name}
+          </p>
+          {story.coverImageUrl && (
+            <img src={resolveMediaUrl(story.coverImageUrl)} alt="Cover"
+              style={{ width: "100%", maxWidth: 520, borderRadius: 12, display: "block", margin: "0 auto" }} />
+          )}
+        </div>
         {story.pages.map((pg) => {
           const bubbles = getSpeechBubbles(pg);
           return (
-            <div key={pg.pageNumber} style={{ pageBreakInside: "avoid", marginBottom: 48 }}>
+            <div key={pg.pageNumber} className="print-sheet" style={{ maxWidth: 520, margin: "0 auto" }}>
               {/* Image + speech bubbles container — aspect-ratio matches interactive view so bubble % positions land correctly */}
               <div style={{ position: "relative", width: "100%", aspectRatio: "376/499", borderRadius: 12, overflow: "hidden", marginBottom: 8 }}>
                 {pg.imageUrl && (
-                  <img src={pg.imageUrl} alt={`Page ${pg.pageNumber}`}
+                  <img src={resolveMediaUrl(pg.imageUrl)} alt={`Page ${pg.pageNumber}`}
                     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 )}
                 {/* Speech bubbles overlay for print */}
@@ -1188,11 +1200,13 @@ export default function StoryReaderPage() {
                 )}
               </div>
               <p style={{ fontSize: 15, lineHeight: 1.8, color: "#1a1a2e", marginTop: 14 }}>{pageWords(pg)}</p>
-              <p style={{ color: "#888", fontSize: 11, marginTop: 6 }}>— Page {pg.pageNumber} —</p>
+              <p style={{ color: "#888", fontSize: 11, marginTop: 6, textAlign: "center" }}>— Page {pg.pageNumber} —</p>
             </div>
           );
         })}
-      </div>
+      </div>,
+      document.body,
+      )}
 
       {/* Top bar */}
       <header className="no-print flex items-center justify-between px-4 py-3 bg-space/80 backdrop-blur border-b border-white/10">
