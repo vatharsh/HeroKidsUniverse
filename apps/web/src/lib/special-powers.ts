@@ -56,6 +56,8 @@ export interface AdminDrop { id: string; day: string; powerKey: string | null; n
 let todayOnce: Promise<{ drop: { name: string; emoji: string; foundToday: number | null } | null; heroes: HeroToday[] }> | null = null;
 
 export const specialPowersApi = {
+  /** No login needed — for the home page announcement. */
+  publicToday: () => req<{ name: string; emoji: string; foundToday: number | null } | null>("/special-powers/public-today"),
   /** Shared per page load: the banner and every hero frame use the same request. */
   today: () => (todayOnce ??= req<{ drop: { name: string; emoji: string; foundToday: number | null } | null; heroes: HeroToday[] }>("/special-powers/today").catch((e) => { todayOnce = null; throw e; })),
   book: (heroId: string) => req<PowerBook>(`/special-powers/book/${heroId}`),

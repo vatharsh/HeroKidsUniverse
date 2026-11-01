@@ -58,6 +58,12 @@ export class SpecialPowersService {
     return { count: p.count, total: p.total, completeSets: p.completeSets, level: p.level, next: p.next, closest: p.closest };
   }
 
+  /** Home page announcement (no login): just whether a power is hiding today and what it looks like. */
+  async publicToday() {
+    const drop = await this.today();
+    return drop ? { name: drop.name, emoji: drop.emoji, foundToday: await this.foundTodayCount(drop.id) } : null;
+  }
+
   /** Dashboard banner + hero frames: today's power and every hero's level. */
   async todayForUser(userId: string) {
     const drop = await this.today();

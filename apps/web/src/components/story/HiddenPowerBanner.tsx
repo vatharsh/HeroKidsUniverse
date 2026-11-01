@@ -16,7 +16,7 @@ export default function HiddenPowerBanner() {
   if (!data?.drop || data.heroes.length === 0) return null;
   const allFound = data.heroes.every((h) => h.foundToday);
   return (
-    <div className="mb-6 rounded-3xl bg-gradient-to-r from-space via-brand to-purple-700 text-white px-5 py-4 shadow-brand flex flex-col sm:flex-row sm:items-center gap-3">
+    <div className={`mb-6 rounded-3xl bg-gradient-to-r from-space via-brand to-purple-700 text-white px-5 py-4 shadow-brand flex flex-col sm:flex-row sm:items-center gap-3 ${allFound ? "" : "ring-4 ring-gold/70 animate-[pulse_2s_ease-in-out_infinite] motion-reduce:animate-none"}`}>
       <span className="text-4xl leading-none animate-pulse" aria-hidden>{allFound ? data.drop.emoji : "🔮"}</span>
       <div className="flex-1">
         <p className="font-[family-name:var(--font-display)] text-xl">

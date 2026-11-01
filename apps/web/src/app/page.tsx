@@ -1,5 +1,6 @@
 import CTABanner from "@/components/home/CTABanner";
 import FAQ from "@/components/home/FAQ";
+import HiddenPowerAnnouncement from "@/components/home/HiddenPowerAnnouncement";
 import HeroSection from "@/components/home/HeroSection";
 import HowItWorks from "@/components/home/HowItWorks";
 import MeetTheHeroes from "@/components/home/MeetTheHeroes";
@@ -50,6 +51,7 @@ export default function HomePage() {
         {/* 10 — Final CTA */}
         <CTABanner />
       </main>
+      <HiddenPowerAnnouncement />
       <Footer />
     </>
   );

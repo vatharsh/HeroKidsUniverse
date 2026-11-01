@@ -2,12 +2,19 @@ import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { SpecialPowersService } from './special-powers.service';
 
 @Controller('special-powers')
 export class SpecialPowersController {
   constructor(private readonly powers: SpecialPowersService) {}
+
+  @Public()
+  @Get('public-today')
+  publicToday() {
+    return this.powers.publicToday();
+  }
 
   @Get('today')
   today(@CurrentUser() user: CurrentUserPayload) {
