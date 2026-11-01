@@ -19,7 +19,7 @@ export default function HiddenPowerAnnouncement() {
 
   useEffect(() => {
     specialPowersApi.publicToday().then((d) => {
-      if (!d) return;
+      if (!d?.name) return;
       setDrop(d);
       let dismissed = "";
       try { dismissed = localStorage.getItem(DISMISS_KEY) ?? ""; } catch { /* storage blocked */ }

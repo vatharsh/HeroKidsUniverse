@@ -10,7 +10,8 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(Array.isArray(body.message) ? body.message.join(", ") : (body.message ?? "Request failed"));
-  return (body.data ?? body) as T;
+  // "No power today" comes back as data: null — keep that null rather than falling back to the wrapper.
+  return (body && typeof body === "object" && "data" in body ? body.data : body) as T;
 }
 
 export interface PowerLevel { sets: number; key: "bronze" | "silver" | "gold" | "platinum"; name: string; badge: string; reward: string; rewardText: string }
