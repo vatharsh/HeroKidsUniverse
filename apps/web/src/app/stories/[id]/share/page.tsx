@@ -8,6 +8,9 @@ import { resolveMediaUrl } from "@/lib/media-url";
 interface StoryPage {
   pageNumber: number;
   text: string;
+  narrationText?: string;
+  /** Polished words that match the speech bubbles and audio — preferred over the first-draft text. */
+  finalNarrationText?: string;
   imageUrl?: string;
 }
 
@@ -137,7 +140,7 @@ export default function StorySharePage() {
           {/* Story text */}
           <div className="px-7 py-6">
             <p className="font-[family-name:var(--font-body)] text-ink text-xl leading-relaxed text-center">
-              {currentPage?.text}
+              {currentPage ? currentPage.finalNarrationText || currentPage.narrationText || currentPage.text : null}
             </p>
             {isLastPage && (
               <p className="font-[family-name:var(--font-display)] text-brand text-2xl text-center mt-4">

@@ -103,19 +103,21 @@ export class VideoGenerationService implements OnModuleInit {
       segments.push({ frame: coverPath, seconds: COVER_SECONDS });
 
       for (const page of pages) {
+        // Same words as the speech bubbles and narration audio (older stories only have the draft text).
+        const words = page.finalNarrationText || page.narrationText || page.text;
         const image = await this.fetchBuffer(page.imageUrl!);
         const framePath = path.join(tmpDir, `page-${page.pageNumber}.png`);
         fs.writeFileSync(framePath, await renderPageFrame({
           format,
           image,
           bubbles: (page.speechBubbles ?? []) as FrameBubble[],
-          text: page.text,
+          text: words,
           title,
           pageNumber: page.pageNumber,
           totalPages: pages.length,
         }));
         let audioPath: string | undefined;
-        let seconds = Math.max(5, page.text.split(/\s+/).length * 0.42);
+        let seconds = Math.max(5, words.split(/\s+/).length * 0.42);
         if (page.audioUrl) {
           try {
             audioPath = path.join(tmpDir, `audio-${page.pageNumber}${path.extname(new URL(page.audioUrl, 'http://x').pathname) || '.mp3'}`);

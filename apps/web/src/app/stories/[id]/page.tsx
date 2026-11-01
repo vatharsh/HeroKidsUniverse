@@ -93,6 +93,14 @@ interface StoryPage {
   };
 }
 
+/**
+ * The words shown and read for a page. The narration was polished after the first draft and the speech
+ * bubbles and audio use the polished version — so show that too (older stories only have the draft).
+ */
+function pageWords(p: { text: string; narrationText?: string; finalNarrationText?: string }): string {
+  return p.finalNarrationText || p.narrationText || p.text;
+}
+
 // CSS crop transform for each hint — maps a shared scene illustration to a page-specific "shot"
 function getCropStyle(cropHint: string | undefined): React.CSSProperties {
   switch (cropHint) {
@@ -748,7 +756,7 @@ export default function StoryReaderPage() {
         setAudioPlaying(true);
       } else if (pg.text && typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(pg.text);
+        const utter = new SpeechSynthesisUtterance(pageWords(pg));
         utter.rate = 0.88; utter.pitch = 1.05;
         utter.onend = handleAudioEnded;
         window.speechSynthesis.speak(utter);
@@ -774,7 +782,7 @@ export default function StoryReaderPage() {
       setAudioPlaying(true);
     } else if (firstPage.text && typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(firstPage.text);
+      const utter = new SpeechSynthesisUtterance(pageWords(firstPage));
       utter.rate = 0.88; utter.pitch = 1.05;
       utter.onend = handleAudioEnded;
       window.speechSynthesis.speak(utter);
@@ -1080,7 +1088,7 @@ export default function StoryReaderPage() {
       setAudioPlaying(true);
     } else if (currentPage?.text && typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(currentPage.finalNarrationText ?? currentPage.narrationText ?? currentPage.text);
+      const utter = new SpeechSynthesisUtterance(pageWords(currentPage));
       utter.rate  = 0.88;
       utter.pitch = 1.05;
       utter.onend = handleAudioEnded;
@@ -1179,7 +1187,7 @@ export default function StoryReaderPage() {
                   </div>
                 )}
               </div>
-              <p style={{ fontSize: 15, lineHeight: 1.8, color: "#1a1a2e", marginTop: 14 }}>{pg.text}</p>
+              <p style={{ fontSize: 15, lineHeight: 1.8, color: "#1a1a2e", marginTop: 14 }}>{pageWords(pg)}</p>
               <p style={{ color: "#888", fontSize: 11, marginTop: 6 }}>— Page {pg.pageNumber} —</p>
             </div>
           );
@@ -1461,7 +1469,7 @@ export default function StoryReaderPage() {
           {/* Story text */}
           <div className="px-7 py-6">
             <p className="font-[family-name:var(--font-body)] text-ink text-xl leading-relaxed text-center">
-              {currentPage?.text}
+              {currentPage ? pageWords(currentPage) : null}
             </p>
 
             {/* Per-page state snapshot — items/powers earned/active */}
