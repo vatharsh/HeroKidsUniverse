@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import Logo from "@/components/shared/Logo";
-import UniverseBubbleIcon from "@/components/layout/UniverseBubbleIcon";
+import UniverseGalaxyIcon from "@/components/layout/UniverseGalaxyIcon";
 
 const navLinks = [
   { href: "/#how-it-works", label: "How It Works" },
@@ -20,7 +20,7 @@ const NAV_FONT = "font-[family-name:var(--font-display)]";
 function UniverseIconLink({
   className = "",
   labelClassName = "",
-  iconSize = 42,
+  iconSize = 54,
   onClick,
 }: {
   className?: string;
@@ -44,7 +44,7 @@ function UniverseIconLink({
       )}
     >
       <span className="uni-anim relative animate-[uniBreathe_4s_ease-in-out_infinite]">
-        <UniverseBubbleIcon size={typeof iconSize === "number" ? iconSize : 42} fast={hovered} />
+        <UniverseGalaxyIcon size={typeof iconSize === "number" ? iconSize : 54} fast={hovered} />
       </span>
       <span className={cn(NAV_FONT, "text-lg leading-none text-white/85 group-hover:text-gold-light whitespace-nowrap transition-colors", labelClassName)}>My Universe</span>
     </a>
