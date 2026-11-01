@@ -1619,6 +1619,7 @@ export class GenerationService implements OnModuleInit {
             imageUrl: pageImageUrl,
             speechBubbles: page.speechBubbles as NonNullable<StoryPage['speechBubbles']>,
             cast: this.withPageCast(storyCast, page.characterDirections),
+            pageText: [page.text, page.sceneDescription].filter(Boolean).join(' '),
           });
           speechBubbles = placed.speechBubbles;
           characterLayout = placed.characterLayout;
@@ -1963,14 +1964,18 @@ export class GenerationService implements OnModuleInit {
     imageUrl?: string;
     speechBubbles: NonNullable<StoryPage['speechBubbles']>;
     cast: CastMember[];
+    /** The page's words — lets detection find the object the page is about, so bubbles keep clear of it. */
+    pageText?: string;
   }): Promise<{ speechBubbles: StoryPage['speechBubbles']; characterLayout: StoryPage['characterLayout'] }> {
     try {
-      const located = await this.characterLocator.locate({
+      const { characters: located, objects } = await this.characterLocator.locateScene({
         imageBase64: params.imageBase64,
         imageUrl: params.imageBase64 ? undefined : params.imageUrl,
         cast: params.cast,
+        pageText: params.pageText,
       });
-      const placements = layoutBubbles(params.speechBubbles, located, await this.getImageAspect());
+      if (objects.length) this.logger.log(`Bubble layout page ${params.pageNumber}: keeping clear of ${objects.map((o) => o.name).join(', ')}`);
+      const placements = layoutBubbles(params.speechBubbles, located, await this.getImageAspect(), objects.map((o) => o.box));
       const speechBubbles = params.speechBubbles.map((bubble, i) => {
         const placed = placements[i];
         if (!placed) return bubble;
@@ -2023,6 +2028,7 @@ export class GenerationService implements OnModuleInit {
         imageUrl: page.imageUrl,
         speechBubbles: clean,
         cast: this.withPageCast(cast, page.characterDirections),
+        pageText: [page.finalNarrationText || page.text, page.sceneDescription].filter(Boolean).join(' '),
       });
       for (const b of placed.speechBubbles ?? []) (b.layoutSource ? bubblesPlaced++ : bubblesUnplaced++);
       pages.push({ ...page, speechBubbles: placed.speechBubbles, characterLayout: placed.characterLayout });

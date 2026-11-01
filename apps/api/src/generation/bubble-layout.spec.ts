@@ -31,6 +31,17 @@ describe('layoutBubbles', () => {
     expect(placed!.bubbleRect.y + placed!.bubbleRect.height).toBeLessThanOrEqual(daadi.head.y);
   });
 
+  it('keeps clear of the key object the page is about (real case: the flying key in Siddhant\'s hands)', () => {
+    // Detected on "Flight Across the Golden Dunes", last page; the bubble used to land right on the key.
+    const sid: LocatedCharacter = { name: 'Siddhant', head: { x: 33.3, y: 17.3, width: 21.4, height: 25.2 }, mouth: { x: 44.8, y: 39.4 } };
+    const ved: LocatedCharacter = { name: 'Vedant Bhaiya', head: { x: 55, y: 11.1, width: 20.9, height: 25.6 }, mouth: { x: 62.7, y: 33.2 } };
+    const key: Box = { x: 38, y: 46, width: 16, height: 14 };
+    const bubble = [{ speakerName: 'Siddhant', text: 'Arre! Where did this flying key come from?' }];
+    const [placed] = layoutBubbles(bubble, [sid, ved], 1, [key]);
+    expect(overlaps(placed!.bubbleRect, key)).toBe(false);
+    expect(overlaps(placed!.bubbleRect, sid.head) || overlaps(placed!.bubbleRect, ved.head)).toBe(false);
+  });
+
   it('never stacks two bubbles on top of each other', () => {
     const [a, b] = layoutBubbles([
       { speakerName: 'Siddhant', text: 'I will protect my family, no matter what!' },

@@ -106,8 +106,13 @@ function candidateRects(head: Box, size: { width: number; height: number }, thin
   const headCx = head.x + head.width / 2;
   const headCy = head.y + head.height / 2;
   const rects: Box[] = [];
-  // Try the natural width and a wider, shorter variant (fewer lines fits better above a head near the top).
-  const sizes = [size, { width: Math.min(58, size.width * 1.35), height: Math.max(9, size.height * 0.72) }];
+  // Try the natural width and a wider, shorter variant (fewer lines fits better above a head near the top)…
+  // …and a narrower, taller one that can tuck in beside a head when the space above and below is taken.
+  const sizes = [
+    size,
+    { width: Math.min(58, size.width * 1.35), height: Math.max(9, size.height * 0.72) },
+    { width: Math.max(22, size.width * 0.7), height: Math.min(30, size.height * 1.45) },
+  ];
   for (const { width: w, height: h } of sizes) {
     // Above the head — slide across, and nudge down inside the image rather than discarding it.
     const above = Math.max(MARGIN, head.y - GAP - h);
@@ -116,13 +121,20 @@ function candidateRects(head: Box, size: { width: number; height: number }, thin
       for (const dy of [-0.8, -0.4]) {
         rects.push({ x: head.x - GAP - w, y: headCy + h * dy, width: w, height: h });          // left of head
         rects.push({ x: head.x + head.width + GAP, y: headCy + h * dy, width: w, height: h }); // right of head
+        // …and the same, nudged back inside the picture when the head is near an edge
+        rects.push({ x: MARGIN, y: headCy + h * dy, width: w, height: h });
+        rects.push({ x: 100 - MARGIN - w, y: headCy + h * dy, width: w, height: h });
       }
       // Below the head (beside the body) — used when everything above is crowded by other characters
       const below = head.y + head.height + GAP;
       for (const t of [0.15, 0.5, 0.85]) rects.push({ x: headCx - w * t, y: below, width: w, height: h });
     }
-    // Top band fallbacks (classic comic placement) across the width of the image
-    for (const x of [MARGIN, 50 - w / 2, 100 - MARGIN - w]) rects.push({ x, y: MARGIN, width: w, height: h });
+    // Top and bottom bands (classic comic placement) across the width of the image — the bottom band keeps a
+    // bubble off whatever the characters are holding when there is no room near the head.
+    for (const x of [MARGIN, 50 - w / 2, 100 - MARGIN - w]) {
+      rects.push({ x, y: MARGIN, width: w, height: h });
+      if (!thinking) rects.push({ x, y: 100 - MARGIN - h, width: w, height: h });
+    }
   }
   return rects.map((r) => ({ ...r, x: Math.round(r.x * 10) / 10, y: Math.round(r.y * 10) / 10 }));
 }
@@ -150,7 +162,10 @@ export function layoutBubbles(
   bubbles: BubbleInput[],
   characters: LocatedCharacter[],
   imageAspect = 1,
+  /** Important story objects (the key, the lamp…) a bubble should not cover. */
+  keepClear: Box[] = [],
 ): Array<PlacedBubble | null> {
+  const objects = keepClear.map((o) => inflate(o, 1));
   const faces = characters.map((c) => inflate(c.head, FACE_PADDING));
   const placed: Box[] = [];
   const tails: Array<{ from: Point; to: Point }> = [];
@@ -180,6 +195,9 @@ export function layoutBubbles(
       if (reach > 35) score += 25;                                                 // long tails are hard to follow
       if (others.some((o) => segmentHits(base, anchor, o.head))) score += 60;      // tail must not cross another face
       score += others.filter((o) => overlaps(rect, bodyOf(o.head))).length * 12;  // avoid covering other people
+      score += objects.filter((o) => overlaps(rect, o)).length * 80;              // never hide the story's key object
+      if (objects.some((o) => segmentHits(base, anchor, o))) score += 40;          // nor draw the tail across it
+      if (overlaps(rect, bodyOf(head))) score += 6;                               // nor the speaker's own hands
       if (placed.some((other) => segmentHits(base, anchor, other))) score += 60;  // tail must not cross another bubble
       if (tails.some((t) => segmentHits(t.from, t.to, rect))) score += 60;        // nor sit on an earlier tail
       if (!best || score < best.score) best = { rect, score };

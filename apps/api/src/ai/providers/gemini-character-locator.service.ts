@@ -21,6 +21,12 @@ export interface CharacterLocation {
   mouth: { x: number; y: number } | null;
 }
 
+/** An important thing in the picture (the key, the lamp…) that a speech bubble must not cover. */
+export interface KeyObjectLocation {
+  name: string;
+  box: { x: number; y: number; width: number; height: number };
+}
+
 type Box2d = [number, number, number, number];
 
 /**
@@ -41,16 +47,26 @@ export class GeminiCharacterLocator {
     this.genAI = new GoogleGenerativeAI(this.config.get<string>('GEMINI_API_KEY') ?? '');
   }
 
-  async locate(params: {
+  /** Characters only (older callers). */
+  async locate(params: { imageBase64?: string; imageUrl?: string; cast: CastMember[] }): Promise<CharacterLocation[]> {
+    return (await this.locateScene(params)).characters;
+  }
+
+  /**
+   * Characters' heads and mouths, plus up to two important story objects named in the page text (the flying
+   * key, the lamp…) so bubbles can keep clear of them — one request.
+   */
+  async locateScene(params: {
     imageBase64?: string;
     imageUrl?: string;
     cast: CastMember[];
-  }): Promise<CharacterLocation[]> {
-    if (!params.cast.length) return [];
+    pageText?: string;
+  }): Promise<{ characters: CharacterLocation[]; objects: KeyObjectLocation[] }> {
+    if (!params.cast.length) return { characters: [], objects: [] };
     const image = params.imageBase64
       ? { data: params.imageBase64, mimeType: 'image/png' }
       : params.imageUrl ? await this.fetchImage(params.imageUrl) : null;
-    if (!image) return [];
+    if (!image) return { characters: [], objects: [] };
 
     const row = await this.settingsRepo.findOne({ where: { key: 'BUBBLE_DETECTION_MODEL' } }).catch(() => null);
     const modelName = row?.value?.trim() || SETTING_DEFAULTS.BUBBLE_DETECTION_MODEL.value;
@@ -69,7 +85,13 @@ export class GeminiCharacterLocator {
       '- "head_box": [ymin, xmin, ymax, xmax] tightly around the head (top of hair to chin), normalized 0-1000',
       '- "mouth": [y, x] centre of the mouth normalized 0-1000, or null if the mouth is not visible',
       'Leave out characters that are not visible. Do not guess positions and do not include anyone not listed.',
-      'Respond with JSON only: {"characters": [{"name": "...", "head_box": [..], "mouth": [..]}]}',
+      ...(params.pageText ? [
+        '',
+        `This page of the story says: "${params.pageText.slice(0, 600)}"`,
+        'If the text names an important object the reader needs to see (a key, lamp, map, egg, treasure, letter, creature…) and it is clearly',
+        'visible, also return up to 2 of them in "objects", each with "name" and "box_2d": [ymin, xmin, ymax, xmax] normalized 0-1000. Not people.',
+      ] : []),
+      'Respond with JSON only: {"characters": [{"name": "...", "head_box": [..], "mouth": [..]}], "objects": [{"name": "...", "box_2d": [..]}]}',
     ].join('\n');
 
     const result = await model.generateContent([
@@ -82,10 +104,19 @@ export class GeminiCharacterLocator {
     });
     const parsed = JSON.parse(result.response.text()) as {
       characters?: Array<{ name?: string; head_box?: Box2d; mouth?: [number, number] | null }>;
+      objects?: Array<{ name?: string; box_2d?: Box2d }>;
     };
 
+    const objects: KeyObjectLocation[] = (parsed.objects ?? []).slice(0, 2).flatMap((o) => {
+      const box = o.box_2d;
+      if (!Array.isArray(box) || box.length !== 4 || box.some((v) => typeof v !== 'number')) return [];
+      const [ymin, xmin, ymax, xmax] = box.map((v) => Math.min(1000, Math.max(0, v)) / 10);
+      if (xmax <= xmin || ymax <= ymin || (xmax - xmin) * (ymax - ymin) > 2500) return []; // ignore "the whole picture"
+      return [{ name: String(o.name ?? 'object'), box: { x: xmin, y: ymin, width: xmax - xmin, height: ymax - ymin } }];
+    });
+
     const known = new Map(params.cast.map((c) => [c.name.toLowerCase(), c.name]));
-    return (parsed.characters ?? []).flatMap((c) => {
+    const characters = (parsed.characters ?? []).flatMap((c) => {
       const name = c.name ? known.get(c.name.toLowerCase()) : undefined;
       const box = c.head_box;
       if (!name || !Array.isArray(box) || box.length !== 4 || box.some((v) => typeof v !== 'number')) return [];
@@ -96,6 +127,7 @@ export class GeminiCharacterLocator {
         : null;
       return [{ name, head: { x: xmin, y: ymin, width: xmax - xmin, height: ymax - ymin }, mouth }];
     });
+    return { characters, objects };
   }
 
   private async fetchImage(url: string): Promise<{ data: string; mimeType: string } | null> {
