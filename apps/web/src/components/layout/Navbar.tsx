@@ -1,12 +1,13 @@
 "use client";
 
-import { ChevronDown, Menu, Sparkles, X } from "lucide-react";
+import { ChevronDown, Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import Logo from "@/components/shared/Logo";
+import UniversePlanetIcon from "@/components/layout/UniversePlanetIcon";
 
 const navLinks = [
   { href: "/#how-it-works", label: "How It Works" },
@@ -19,7 +20,7 @@ const NAV_FONT = "font-[family-name:var(--font-display)]";
 function UniverseIconLink({
   className = "",
   labelClassName = "",
-  iconSize = 34,
+  iconSize = 40,
   onClick,
 }: {
   className?: string;
@@ -27,39 +28,25 @@ function UniverseIconLink({
   iconSize?: number | string;
   onClick?: () => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   return (
     <a
       href="/universe"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       title="My Universe — your hero's worlds, friends, powers and story timeline"
       onClick={onClick}
       className={cn(
         // A labelled pill: the glowing planet alone didn't say what it opens.
-        "group relative overflow-hidden inline-flex items-center gap-2 rounded-full border border-gold/40 bg-white/[0.06] py-1 pl-1 pr-4",
+        "group relative overflow-hidden inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-white/[0.06] py-0.5 pl-1 pr-4",
         "transition-all duration-200 hover:scale-[1.03] hover:border-gold/70 hover:bg-white/10 active:scale-95",
         className,
       )}
     >
       {/* A soft shine sweeps across the pill every few seconds */}
       <span aria-hidden className="uni-anim pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent animate-[uniShine_5s_ease-in-out_infinite]" />
-      <span
-        className={cn(
-          "uni-anim relative grid place-items-center rounded-full animate-[uniBreathe_4s_ease-in-out_infinite]",
-          "border border-gold/45 bg-[radial-gradient(circle_at_34%_22%,rgba(253,230,138,0.42),rgba(124,58,237,0.36)_38%,rgba(11,5,32,0.98)_76%)]",
-          "shadow-[inset_0_2px_12px_rgba(255,255,255,0.18),inset_0_-12px_18px_rgba(11,5,32,0.52),0_10px_24px_rgba(0,0,0,0.25),0_0_24px_rgba(245,158,11,0.22)]",
-        )}
-        style={{ width: iconSize, height: iconSize }}
-      >
-        <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.22),transparent)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-        <span className="absolute left-[18%] top-[20%] h-1 w-1 rounded-full bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
-        <span className="absolute right-[24%] bottom-[22%] h-1.5 w-1.5 rounded-full bg-gold-light shadow-[0_0_10px_rgba(253,230,138,0.8)]" />
-        <span className="absolute h-[54%] w-[54%] rounded-full bg-[radial-gradient(circle_at_35%_30%,#FDE68A_0%,#F59E0B_24%,#7C3AED_58%,#25105D_100%)] shadow-[inset_-8px_-10px_14px_rgba(11,5,32,0.45),0_0_18px_rgba(245,158,11,0.35)]" />
-        <span className="absolute h-[24%] w-[78%] rotate-[-20deg] rounded-full border-2 border-gold-light/90 border-t-white/30 shadow-[0_0_12px_rgba(245,158,11,0.35)]" />
-        <span className="absolute h-[24%] w-[78%] rotate-[-20deg] rounded-full border-2 border-transparent border-b-space/80" />
-        {/* A little moon orbiting the planet — faster on hover */}
-        <span aria-hidden className="uni-anim absolute inset-[-3px] animate-[spin_6s_linear_infinite] group-hover:animate-[spin_2s_linear_infinite]">
-          <span className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-[#55D7FF] shadow-[inset_-1px_-1px_3px_rgba(11,5,32,0.45),0_0_8px_rgba(85,215,255,0.8)]" />
-        </span>
-        <Sparkles className="uni-anim absolute right-[2%] top-[0%] h-3 w-3 text-gold-light drop-shadow-[0_0_8px_rgba(253,230,138,0.8)] animate-[uniTwinkle_2.4s_ease-in-out_infinite]" />
+      <span className="uni-anim relative animate-[uniBreathe_4s_ease-in-out_infinite]">
+        <UniversePlanetIcon size={typeof iconSize === "number" ? iconSize : 40} fast={hovered} />
       </span>
       <span className={cn(NAV_FONT, "text-lg leading-none text-white/85 group-hover:text-gold-light whitespace-nowrap transition-colors", labelClassName)}>My Universe</span>
     </a>
