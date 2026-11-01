@@ -22,6 +22,23 @@ export class ContentSafetyError extends Error {
   }
 }
 
+/**
+ * The image model refused to draw at all (e.g. Gemini "PROHIBITED_CONTENT"). Unlike a drawn picture that our
+ * reviewer found unsafe, nothing unsafe exists — these refusals are often false alarms on pictures of children,
+ * so they get a gentler redraw, and a scene that is still refused can borrow a neighbouring scene's picture.
+ */
+export class ImageRefusedError extends ContentSafetyError {
+  readonly refusedByProvider = true;
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'ImageRefusedError';
+  }
+}
+
+export function isImageRefusal(err: unknown): boolean {
+  return err instanceof ImageRefusedError;
+}
+
 export function isContentSafetyError(err: unknown): boolean {
   return (
     err instanceof ContentSafetyError ||

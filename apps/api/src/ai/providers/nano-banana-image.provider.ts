@@ -17,7 +17,7 @@ import type {
 import type { CharacterIdentity } from '../../heroes/hero.entity';
 import { OpenAIImageProvider } from './openai-image.provider';
 import { AVATAR_STYLE, STORYBOOK_STYLE } from '../style.constants';
-import { ContentSafetyError } from '../content-safety.service';
+import { ContentSafetyError, ImageRefusedError } from '../content-safety.service';
 import { CHILD_SAFE_IMAGE_RULE, GEMINI_CHILD_SAFETY_SETTINGS, isGeminiSafetyStop } from '../gemini-safety';
 import { AiUsageRecorder } from '../ai-usage-recorder.service';
 import { AiOperation } from '../entities/ai-usage-log.entity';
@@ -389,7 +389,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
         const candidate = result?.response?.candidates?.[0];
         if (isGeminiSafetyStop(candidate?.finishReason, result?.response?.promptFeedback?.blockReason)) {
           // A safety refusal is an answer, not a glitch — never retry it or send it to another provider.
-          throw new ContentSafetyError(`image refused by Gemini safety filters (${candidate?.finishReason ?? result?.response?.promptFeedback?.blockReason})`);
+          throw new ImageRefusedError(`image refused by Gemini safety filters (${candidate?.finishReason ?? result?.response?.promptFeedback?.blockReason})`);
         }
 
         // Extract the image part from the response

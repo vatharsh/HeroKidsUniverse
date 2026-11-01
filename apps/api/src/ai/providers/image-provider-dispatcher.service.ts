@@ -17,8 +17,8 @@ import type {
   SpeechBubbleLayoutResult,
 } from '../interfaces/image-generation.provider';
 import type { CharacterIdentity } from '../../heroes/hero.entity';
-import { ContentSafetyError, ContentSafetyService } from '../content-safety.service';
-import { CHILD_SAFE_IMAGE_RULE } from '../gemini-safety';
+import { ContentSafetyError, ContentSafetyService, isImageRefusal } from '../content-safety.service';
+import { CHILD_SAFE_IMAGE_RULE, GENTLE_REDRAW_NOTE } from '../gemini-safety';
 import { NanoBananaImageProvider } from './nano-banana-image.provider';
 import { OpenAIImageProvider } from './openai-image.provider';
 
@@ -57,15 +57,26 @@ export class ImageProviderDispatcher implements ImageGenerationProvider {
   /**
    * Every picture a child might see is checked before it is used. A picture that fails is redrawn once
    * with an extra child-safety instruction; if that fails too, a ContentSafetyError is thrown (the story
-   * then fails and the credit is refunded).
+   * then fails and the credit is refunded). If the model refuses to draw at all (ImageRefusedError — often a
+   * false alarm on pictures of children), it is asked once more with a gentler instruction before giving up.
    */
   private async childSafe(what: string, draw: (safetyNote?: string) => Promise<ImageGenerationOutput>): Promise<ImageGenerationOutput> {
+    let note: string | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const output = await draw(attempt === 0 ? undefined : CHILD_SAFE_IMAGE_RULE);
+      let output: ImageGenerationOutput;
+      try {
+        output = await draw(note);
+      } catch (err) {
+        if (!isImageRefusal(err) || attempt === 1) throw err;
+        this.logger.warn(`${what} refused by the image model (attempt 1) — redrawing gently`);
+        note = GENTLE_REDRAW_NOTE;
+        continue;
+      }
       if (!output.imageBase64) return output; // URL-only outputs are checked by the provider's own filters
       const verdict = await this.safety.checkImage(output.imageBase64);
       if (verdict.safe) return output;
       this.logger.warn(`Unsafe ${what} (attempt ${attempt + 1}): ${verdict.reasons.join(', ')} — ${attempt === 0 ? 'redrawing' : 'giving up'}`);
+      note = CHILD_SAFE_IMAGE_RULE;
     }
     throw new ContentSafetyError(`${what} failed the child-safety check twice`);
   }

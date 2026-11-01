@@ -35,7 +35,7 @@ import { UniverseVillain, VillainStatus } from '../universes/universe-villain.en
 import { pickStoryShape } from './story-shapes';
 import { geminiTextPrice } from '../ai/gemini-pricing';
 import { aiUsageContext } from '../ai/ai-usage-recorder.service';
-import { ContentSafetyError, ContentSafetyService, isContentSafetyError } from '../ai/content-safety.service';
+import { ContentSafetyError, ContentSafetyService, isContentSafetyError, isImageRefusal } from '../ai/content-safety.service';
 import { childSafeOutfit } from '../ai/gemini-safety';
 import type { StoryGenerationInput } from '../ai/interfaces/story-generation.provider';
 import { Quest, QuestStatus } from '../quests/quest.entity';
@@ -1143,6 +1143,8 @@ export class GenerationService implements OnModuleInit {
       scene: SceneOutput;
       imageOutput: import('../ai/interfaces/image-generation.provider').ImageGenerationOutput | null;
       error?: string;
+      /** The image model refused to draw this scene even after a gentle redraw (no unsafe picture exists). */
+      refused?: boolean;
     };
 
     const illustratedScenes = scenes.slice(0, maxScenes);
@@ -1342,9 +1344,10 @@ export class GenerationService implements OnModuleInit {
       } catch (err) {
         settled++;
         if (onPageDone) await onPageDone(settled, illustratedScenes.length).catch(() => {});
-        // An unsafe picture must stop the whole story (and refund it) rather than leave a gap.
-        if (isContentSafetyError(err)) throw err;
-        return { scene, imageOutput: null, error: err instanceof Error ? err.message : 'Unknown' };
+        // An unsafe picture must stop the whole story (and refund it) rather than leave a gap. A refusal to draw
+        // is different — nothing unsafe was made — so that scene borrows a neighbour's picture further down.
+        if (isContentSafetyError(err) && !isImageRefusal(err)) throw err;
+        return { scene, imageOutput: null, error: err instanceof Error ? err.message : 'Unknown', refused: isImageRefusal(err) };
       }
     };
 
@@ -1439,6 +1442,24 @@ export class GenerationService implements OnModuleInit {
         illustrationBrief: scene.illustrationBrief,
         pageNumbers: scene.pages.map((p) => p.pageNumber),
       });
+    }
+
+    // Scenes the image model refused to draw: if most of the story is affected, stop and refund (a book that is
+    // mostly borrowed pictures isn't worth a credit); otherwise reuse the nearest scene's picture for those pages.
+    const refusedScenes = sceneResults.filter((r) => r.refused).map((r) => r.scene.sceneId);
+    if (refusedScenes.length && refusedScenes.length * 2 > sceneResults.length) {
+      throw new ContentSafetyError(`the image model refused ${refusedScenes.length} of ${sceneResults.length} scenes`);
+    }
+    for (const sceneId of refusedScenes) {
+      const i = sceneResults.findIndex((r) => r.scene.sceneId === sceneId);
+      const donor = [...sceneResults.slice(0, i).reverse(), ...sceneResults.slice(i + 1)]
+        .find((r) => sceneIllustrationMap.get(r.scene.sceneId));
+      if (!donor) continue;
+      sceneIllustrationMap.set(sceneId, sceneIllustrationMap.get(donor.scene.sceneId));
+      sceneImageBase64Map.set(sceneId, sceneImageBase64Map.get(donor.scene.sceneId));
+      const stored = storedScenes.find((sc) => sc.sceneId === sceneId);
+      if (stored) stored.illustrationUrl = sceneIllustrationMap.get(sceneId) ?? null;
+      this.logger.warn(`Story ${story.id}: scene ${sceneId} was refused by the image model — reusing scene ${donor.scene.sceneId}'s picture`);
     }
 
     for (const scene of remainingScenes) {

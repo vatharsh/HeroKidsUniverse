@@ -28,6 +28,11 @@ export const CHILD_SAFE_IMAGE_RULE =
   'CHILD-SAFE PICTURE for a 4–12 year old reader: everyone fully and modestly clothed; no blood, wounds, injuries or gore; ' +
   'no weapon pointed at or hurting anyone; nothing horror-like or frightening; no smoking, alcohol or drugs; no romance or kissing.';
 
+/** Second try after the image model refused to draw: same scene, told plainly and gently. */
+export const GENTLE_REDRAW_NOTE =
+  CHILD_SAFE_IMAGE_RULE + ' Keep this a calm, gentle, wholesome storybook picture: friendly faces, everyone fully dressed exactly as on ' +
+  'their character sheets (long sleeves and full-length clothes are fine), relaxed poses, no close-ups of bodies, a bright happy mood.';
+
 /** True when a Gemini response was stopped by its safety filters. */
 export function isGeminiSafetyStop(
   finishReason?: string | null,
