@@ -38,7 +38,7 @@ function UniverseIconLink({
       onClick={onClick}
       className={cn(
         // A labelled pill: the glowing planet alone didn't say what it opens.
-        "group relative overflow-hidden inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-white/[0.06] py-0.5 pl-1 pr-4",
+        "group relative overflow-hidden inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] py-0.5 pl-1 pr-4",
         "transition-all duration-200 hover:scale-[1.03] hover:border-gold/70 hover:bg-white/10 active:scale-95",
         className,
       )}
