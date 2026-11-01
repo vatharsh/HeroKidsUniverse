@@ -474,7 +474,7 @@ export class GenerationService implements OnModuleInit {
 
       await updateJob({
         status: JobStatus.GeneratingImages,
-        currentStep: 'Generating Illustrations',
+        currentStep: `Drawing the pictures — 0 of ${pageCount} pages ready`,
         progressPercentage: 20,
       });
       await this.storiesRepo.update(storyId, { status: StoryStatus.GeneratingImages });
@@ -508,8 +508,10 @@ export class GenerationService implements OnModuleInit {
           characterBibles,
           supportingCharAges,
           async (sceneNum, total) => {
+            // Pictures are drawn a scene (2 pages) at a time; parents think in pages, so count pages.
+            const pagesReady = Math.min(pageCount, Math.round((pageCount * sceneNum) / total));
             await updateJob({
-              currentStep: `Generating Illustrations (scene ${sceneNum}/${total})`,
+              currentStep: `Drawing the pictures — ${pagesReady} of ${pageCount} pages ready`,
               progressPercentage: 20 + Math.round((60 * sceneNum) / total),
             });
           },
@@ -544,7 +546,7 @@ export class GenerationService implements OnModuleInit {
           supportingCharAges,
           async (pageNum, total) => {
             await updateJob({
-              currentStep: `Generating Illustrations (${pageNum}/${total})`,
+              currentStep: `Drawing the pictures — ${pageNum} of ${total} pages ready`,
               progressPercentage: 20 + Math.round((60 * pageNum) / total),
             });
           },
