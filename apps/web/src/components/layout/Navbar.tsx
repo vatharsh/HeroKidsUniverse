@@ -37,14 +37,12 @@ function UniverseIconLink({
       title="My Universe — your hero's worlds, friends, powers and story timeline"
       onClick={onClick}
       className={cn(
-        // A labelled pill: the glowing planet alone didn't say what it opens.
-        "group relative overflow-hidden inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] py-0.5 pl-1 pr-4",
-        "transition-all duration-200 hover:scale-[1.03] hover:border-gold/70 hover:bg-white/10 active:scale-95",
+        // No frame around it — just the icon and the words, like the other header links.
+        "group relative overflow-hidden inline-flex items-center gap-1.5 py-0.5 pr-1",
+        "transition-transform duration-200 hover:scale-[1.03] active:scale-95",
         className,
       )}
     >
-      {/* A soft shine sweeps across the pill every few seconds */}
-      <span aria-hidden className="uni-anim pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent animate-[uniShine_5s_ease-in-out_infinite]" />
       <span className="uni-anim relative animate-[uniBreathe_4s_ease-in-out_infinite]">
         <UniverseBubbleIcon size={typeof iconSize === "number" ? iconSize : 42} fast={hovered} />
       </span>

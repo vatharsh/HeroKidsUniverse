@@ -453,11 +453,6 @@ body {
 }
 
 /* ─── Header "My Universe" pill ─────────────────────────────────────────── */
-@keyframes uniShine {
-  0%, 60% { transform: translateX(0) skewX(-20deg); opacity: 0; }
-  70%     { opacity: 1; }
-  100%    { transform: translateX(450%) skewX(-20deg); opacity: 0; }
-}
 @keyframes uniTwinkle {
   0%, 100% { transform: scale(0.8) rotate(0deg); opacity: 0.7; }
   50%      { transform: scale(1.25) rotate(20deg); opacity: 1; }

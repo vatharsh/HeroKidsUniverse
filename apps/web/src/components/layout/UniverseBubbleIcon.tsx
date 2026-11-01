@@ -88,9 +88,8 @@ export default function UniverseBubbleIcon({ size = 42, fast = false }: { size?:
         </g>
       </g>
 
-      {/* soft outline: a faint glow plus a thin light edge — a thick gold frame looked heavy in the pill */}
-      <path d={BUBBLE} fill="none" stroke="#C4B5FD" strokeOpacity="0.35" strokeWidth="3" strokeLinejoin="round" />
-      <path d={BUBBLE} fill="none" stroke="#EDE9FE" strokeOpacity="0.85" strokeWidth="1.1" strokeLinejoin="round" />
+      {/* bubble outline on top */}
+      <path d={BUBBLE} fill="none" stroke="#FCD34D" strokeWidth="2.2" strokeLinejoin="round" />
     </svg>
   );
 }
