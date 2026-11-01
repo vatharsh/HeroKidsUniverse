@@ -34,7 +34,6 @@ function EditDrawer({ user, onClose, onSaved }: { user: AdminUser; onClose: () =
   const [role, setRole] = useState(user.role);
   const [plan, setPlan] = useState(user.plan);
   const [credits, setCredits] = useState(String(user.credits));
-  const [isPremium, setIsPremium] = useState(user.isPremium);
   const [isTestAccount, setIsTestAccount] = useState(!!user.isTestAccount);
   const [saving, setSaving] = useState(false);
 
@@ -45,7 +44,7 @@ function EditDrawer({ user, onClose, onSaved }: { user: AdminUser; onClose: () =
     await fetch(`${BASE}/admin/users/${user.id}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ role, plan, credits: Number(credits), isPremium, isTestAccount }),
+      body: JSON.stringify({ role, plan, credits: Number(credits), isTestAccount }),
     });
     setSaving(false);
     onSaved();
@@ -75,21 +74,18 @@ function EditDrawer({ user, onClose, onSaved }: { user: AdminUser; onClose: () =
               <option value="admin">admin</option>
             </select>
           </div>
-          <div>
-            <label className="text-gray-500 text-xs block mb-1.5">Plan</label>
-            <select value={plan} onChange={e => setPlan(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 text-sm focus:outline-none focus:border-violet-400">
-              <option value="basic">basic</option>
-              <option value="standard">standard</option>
-              <option value="premium">premium</option>
-            </select>
-          </div>
+
           <div>
             <label className="text-gray-500 text-xs block mb-1.5">Credits</label>
             <input type="number" value={credits} onChange={e => setCredits(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 text-sm focus:outline-none focus:border-violet-400" />
           </div>
-          <div className="flex items-center gap-3">
-            <input type="checkbox" id="premium" checked={isPremium} onChange={e => setIsPremium(e.target.checked)} className="w-4 h-4 accent-violet-600" />
-            <label htmlFor="premium" className="text-gray-600 text-sm">Premium</label>
+          {/* "plan = premium" is what unlocks unlimited characters; other plan values and the old Premium flag do nothing. */}
+          <div className="flex items-start gap-3">
+            <input type="checkbox" id="unlimited-chars" checked={plan === "premium"} onChange={e => setPlan(e.target.checked ? "premium" : "basic")} className="w-4 h-4 mt-0.5 accent-violet-600" />
+            <label htmlFor="unlimited-chars" className="text-gray-600 text-sm">
+              Unlimited characters
+              <span className="block text-[11px] text-gray-400">Ignores character slots — for team, influencer or VIP accounts.</span>
+            </label>
           </div>
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
             <div className="flex items-center gap-3">
@@ -138,11 +134,6 @@ export default function UsersPage() {
 
   useEffect(() => { fetchUsers(); }, []); // eslint-disable-line
 
-  const PLAN_STYLE: Record<string, string> = {
-    basic:    "bg-gray-100 text-gray-500",
-    standard: "bg-violet-100 text-violet-700",
-    premium:  "bg-amber-100 text-amber-700",
-  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -179,16 +170,16 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              {["Name", "Email", "Role", "Plan", "Credits", "Stories", "Universes", "AI Cost", "Joined", ""].map(h => (
+              {["Name", "Email", "Role", "Credits", "Stories", "Universes", "AI Cost", "Joined", ""].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-gray-500 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="px-4 py-10 text-center"><Loader2 className="w-5 h-5 text-violet-600 animate-spin mx-auto" /></td></tr>
+              <tr><td colSpan={9} className="px-4 py-10 text-center"><Loader2 className="w-5 h-5 text-violet-600 animate-spin mx-auto" /></td></tr>
             ) : (data?.items?.length ?? 0) === 0 ? (
-              <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400 text-xs">No users found</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400 text-xs">No users found</td></tr>
             ) : (
               data?.items?.map(u => (
                 <tr key={u.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
@@ -198,16 +189,13 @@ export default function UsersPage() {
                         {u.name?.[0]?.toUpperCase() ?? "?"}
                       </div>
                       <span className="text-gray-900 text-xs font-bold">{u.name}</span>
-                      {u.isPremium && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-black">PRO</span>}
+                      {u.plan === "premium" && <span title="Unlimited characters" className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-black">∞ CHARS</span>}
                       {u.isTestAccount && <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-black">TEST</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs font-semibold">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${u.role === "admin" ? "bg-violet-100 text-violet-700" : "bg-gray-100 text-gray-500"}`}>{u.role}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${PLAN_STYLE[u.plan] ?? "bg-gray-100 text-gray-500"}`}>{u.plan}</span>
                   </td>
                   <td className="px-4 py-3 text-gray-900 text-xs font-bold">{u.credits}</td>
                   <td className="px-4 py-3 text-gray-700 text-xs font-semibold">{u.storyCount ?? "—"}</td>

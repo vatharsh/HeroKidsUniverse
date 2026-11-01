@@ -4,18 +4,22 @@ import { BarChart3, Loader2, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAccessToken } from "@/lib/api";
+import { formatInr } from "@/lib/utils";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api";
 
+/** A payment or refund — credit packs (Razorpay) and merchandise, newest first. */
 interface Payment {
   id: string;
-  userId: string;
-  userEmail?: string;
-  razorpayOrderId: string;
-  razorpayPaymentId: string | null;
+  type: "payment" | "refund";
+  userEmail: string | null;
+  isTest: boolean | null;
+  orderNumber: string | null;
+  description: string | null;
   amountInr: number;
+  provider: string | null;
+  transactionId: string | null;
   status: string;
-  method: string | null;
   createdAt: string;
 }
 
@@ -30,6 +34,7 @@ interface Paginated {
 const STATUS_STYLE: Record<string, string> = {
   created:  "bg-amber-50 text-amber-700",
   captured: "bg-emerald-50 text-emerald-700",
+  success:  "bg-emerald-50 text-emerald-700",
   failed:   "bg-red-50 text-red-600",
   refunded: "bg-gray-100 text-gray-500",
 };
@@ -86,7 +91,7 @@ export default function PaymentsPage() {
       </div>
 
       <div className="flex gap-2 mb-4">
-        {["", "created", "captured", "failed", "refunded"].map(s => (
+        {["", "payment", "refund", "test"].map(s => (
           <button
             key={s || "all"}
             onClick={() => { setStatusFilter(s); setPage(1); fetchData(1, s); }}
@@ -94,7 +99,7 @@ export default function PaymentsPage() {
               statusFilter === s ? "bg-violet-600 text-white border-violet-600" : "border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
           >
-            {s || "All"}
+            {s === "" ? "All" : s === "payment" ? "Payments" : s === "refund" ? "Refunds" : "Test purchases"}
           </button>
         ))}
       </div>
@@ -103,28 +108,32 @@ export default function PaymentsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              {["Razorpay Order", "Payment ID", "User", "Amount", "Status", "Method", "Date"].map(h => (
+              {["Date", "Type", "Parent", "Order", "What", "Amount", "Razorpay ID", "Status"].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-gray-500 text-xs font-semibold uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center"><Loader2 className="w-5 h-5 text-violet-600 animate-spin mx-auto" /></td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center"><Loader2 className="w-5 h-5 text-violet-600 animate-spin mx-auto" /></td></tr>
             ) : data?.items.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-xs">No payments found</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-xs">No payments found</td></tr>
             ) : (
               data?.items.map(p => (
                 <tr key={p.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600 text-xs font-mono font-semibold">{p.razorpayOrderId.slice(0, 16)}…</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs font-mono">{p.razorpayPaymentId?.slice(0, 16) ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-700 text-xs font-semibold">{p.userEmail ?? p.userId.slice(0, 8)}</td>
-                  <td className="px-4 py-3 text-emerald-600 text-xs font-black">₹{Number(p.amountInr).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{new Date(p.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.type === "refund" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{p.type === "refund" ? "Refund" : "Payment"}</span>
+                    {(p.provider === "test" || p.isTest) && <span className="ml-1 text-[10px] font-semibold text-gray-400">test</span>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 text-xs font-semibold">{p.userEmail ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs font-mono">{p.orderNumber ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{p.description ?? "—"}</td>
+                  <td className={`px-4 py-3 text-xs font-black ${p.type === "refund" ? "text-rose-600" : "text-emerald-600"}`}>{p.type === "refund" ? "−" : ""}{formatInr(Number(p.amountInr))}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs font-mono">{p.transactionId ?? "—"}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[p.status] ?? "bg-gray-100 text-gray-500"}`}>{p.status}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{p.method ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{new Date(p.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))
             )}

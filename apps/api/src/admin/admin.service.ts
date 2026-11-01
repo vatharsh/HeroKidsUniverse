@@ -162,12 +162,14 @@ export class AdminService {
       this.getSetting('AI_MONTHLY_COST_HARD_LIMIT_USD', 500),
     ]);
 
-    const [monthStart] = this.getDateBounds();
+    const [, monthStart] = this.getDateBounds();
+    // Before launch everything is test data, so show it all; after launch show only real (live) business.
+    const live = (await this.getSettingBool('SANDBOX_MODE', true)) ? undefined : false;
     const [revenueToday, aiCostToday, aiCostThisMonth, storiesGeneratedToday, activeJobs] = await Promise.all([
-      this.sumOrderRevenue(todayStart),
-      this.sumAiCost(todayStart),
-      this.sumAiCost(monthStart),
-      this.storiesRepo.count({ where: { createdAt: MoreThanOrEqual(todayStart) } as any }),
+      this.sumOrderRevenue(todayStart, live),
+      this.sumAiCost(todayStart, live),
+      this.sumAiCost(monthStart, live),
+      this.storiesRepo.count({ where: { createdAt: MoreThanOrEqual(todayStart), ...(live === false ? { isSandbox: false } : {}) } as any }),
       this.jobsRepo.count({ where: { status: In(ACTIVE_JOB_STATUSES) } as any }),
     ]);
 
@@ -274,7 +276,7 @@ export class AdminService {
     // All counts and costs filtered consistently by the same sandbox flag
     const sf = sandboxFilter;  // undefined = all, true = sandbox, false = live
 
-    const userWhere = sf !== undefined ? { isSandbox: sf } : {};
+    const userWhere = { role: UserRole.Parent, ...(sf !== undefined ? { isSandbox: sf } : {}) };
     const universeWhere = sf !== undefined ? { isSandbox: sf } : {};
     const storyWhere = sf !== undefined ? { isSandbox: sf } : {};
     const orderWhere = sf !== undefined
@@ -334,7 +336,13 @@ export class AdminService {
       })(),
     ]);
 
-    const estimatedGrossProfitInr = revenueThisMonth - totalAiCostUsd * usdToInr;
+    // This month's profit, as Reports → P&L works it out. revenueThisMonth is already net of refunds,
+    // so: net sales − GST − payment fees − AI − commission.
+    const month = await this.monthCosts(monthStart, sf);
+    const paymentFeesThisMonthInr = Math.round(revenueThisMonth * 2.36) / 100;
+    const estimatedGrossProfitInr = Math.round(
+      revenueThisMonth - month.gst - paymentFeesThisMonthInr - aiCostThisMonth * usdToInr - month.commission,
+    );
     const profitMarginPct = revenueThisMonth > 0 ? (estimatedGrossProfitInr / revenueThisMonth) * 100 : 0;
     const aiCostWarning = aiCostToday >= dailyWarning || aiCostThisMonth >= monthlyWarning;
     const aiCostCritical = aiCostToday >= dailyHardLimit || aiCostThisMonth >= monthlyHardLimit;
@@ -355,6 +363,10 @@ export class AdminService {
       aiCostThisMonth,
       estimatedGrossProfitInr,
       profitMarginPct,
+      refundsThisMonthInr: Math.round(month.refunds),
+      gstThisMonthInr: Math.round(month.gst),
+      paymentFeesThisMonthInr: Math.round(paymentFeesThisMonthInr),
+      commissionThisMonthInr: Math.round(month.commission),
       mostPopularTheme: mostPopularThemeRow?.theme ?? '',
       mostPopularProduct: mostPopularProductRow?.productType ?? '',
       aiCostWarning,
@@ -867,23 +879,43 @@ export class AdminService {
     return saved;
   }
 
+  /**
+   * Every payment and refund: credit packs (Razorpay, from the credit ledger) and merchandise
+   * (order_payment_details). The old `payments` table is never written to, so it isn't used.
+   */
   async listPayments(page = 1, limit = 20, status?: string, search?: string) {
-    const qb = this.paymentsRepo.createQueryBuilder('payment').leftJoin('users', 'user', 'user.id = payment.userId');
-    if (status) qb.andWhere('payment.status = :status', { status });
+    const params: unknown[] = [];
+    const where: string[] = ['TRUE'];
+    if (status === 'payment' || status === 'refund') { params.push(status); where.push(`x.type = $${params.length}`); }
+    if (status === 'test') where.push(`x.provider = 'test'`);
     if (search?.trim()) {
-      qb.andWhere('(payment.razorpayOrderId ILIKE :q OR payment.razorpayPaymentId ILIKE :q OR user.email ILIKE :q)', {
-        q: `%${search.trim()}%`,
-      });
+      params.push(`%${search.trim()}%`);
+      where.push(`(x."transactionId" ILIKE $${params.length} OR x."userEmail" ILIKE $${params.length} OR x."orderNumber" ILIKE $${params.length})`);
     }
-    const [items, total] = await qb.orderBy('payment.createdAt', 'DESC').skip((page - 1) * limit).take(limit).getManyAndCount();
-    const users = items.length ? await this.usersRepo.find({ where: { id: In(items.map((p) => p.userId)) } }) : [];
-    const userMap = new Map(users.map((u) => [u.id, u.email]));
-    return makePage(
-      items.map((payment) => ({ ...payment, userEmail: userMap.get(payment.userId) ?? '' })),
-      total,
-      page,
-      limit,
+    const ledger = `
+      SELECT t.id::text AS id, CASE WHEN t.reason = 'purchase' THEN 'payment' ELSE 'refund' END AS type,
+             u.email AS "userEmail", (u."isSandbox" OR u."isTestAccount") AS "isTest",
+             (SELECT o."orderNumber" FROM orders o WHERE o."orderType" = 'credit_purchase' AND o."adminNotes" LIKE '%' || t."razorpayPaymentId" || '%' LIMIT 1) AS "orderNumber",
+             t."packName" AS description, t."pricePaid"::float AS "amountInr",
+             CASE WHEN t."razorpayPaymentId" LIKE 'pay\\_%' THEN 'razorpay' ELSE 'test' END AS provider,
+             CASE WHEN t.reason = 'purchase' THEN t."razorpayPaymentId" ELSE t."referenceId" END AS "transactionId",
+             'success' AS status, t."createdAt" AS "createdAt"
+        FROM credit_transactions t JOIN users u ON u.id = t."userId"
+       WHERE t."pricePaid" > 0 AND t.reason IN ('purchase', 'payment_refund')
+      UNION ALL
+      SELECT opd.id::text, CASE WHEN opd."transactionType"::text IN ('refund', 'partial_refund') THEN 'refund' ELSE 'payment' END,
+             u.email, o."isSandbox", o."orderNumber", 'Merchandise order', opd.amount::float,
+             opd."paymentProvider"::text, opd."transactionId"::text, opd.status::text, opd."createdAt"
+        FROM order_payment_details opd
+        LEFT JOIN orders o ON o.id = opd."orderId" LEFT JOIN users u ON u.id = o."userId"
+       WHERE opd."deletedAt" IS NULL`;
+    const base = `FROM (${ledger}) x WHERE ${where.join(' AND ')}`;
+    const [{ n }] = await this.dataSource.query(`SELECT COUNT(*)::int AS n ${base}`, params);
+    const items = await this.dataSource.query(
+      `SELECT x.* ${base} ORDER BY x."createdAt" DESC LIMIT ${Math.min(100, Math.max(1, limit))} OFFSET ${(Math.max(1, page) - 1) * limit}`,
+      params,
     );
+    return makePage(items, n, page, limit);
   }
 
   async getAiAnalytics(isSandbox?: boolean) {
@@ -1537,19 +1569,50 @@ export class AdminService {
     );
   }
 
+  /** Refunds, GST (inside GST-inclusive pack prices, net of refunds) and influencer commission since `start`. */
+  private async monthCosts(start: Date, sandbox?: boolean) {
+    const rate = await this.getSetting('GST_RATE_PCT', 18);
+    const userTest = sandbox === undefined ? 'TRUE' : sandbox ? '(u."isSandbox" OR u."isTestAccount")' : 'NOT (u."isSandbox" OR u."isTestAccount")';
+    const [row] = await this.dataSource.query(
+      `SELECT
+         (SELECT COALESCE(SUM(t."pricePaid"), 0) FROM credit_transactions t JOIN users u ON u.id = t."userId"
+           WHERE t.reason = 'payment_refund' AND t."createdAt" >= $1 AND ${userTest})::float AS refunds,
+         (SELECT COALESCE(SUM(CASE WHEN o."orderType" = 'credit_purchase'
+                                   THEN COALESCE(NULLIF(o."taxAmount", 0), o."totalAmount" * $2 / (100 + $2))
+                                   ELSE o."taxAmount" END), 0)
+            FROM orders o WHERE o."isDeleted" = false AND o."createdAt" >= $1
+             AND o.status NOT IN ('pending_payment', 'cancelled', 'failed')
+             ${sandbox === undefined ? '' : `AND o."isSandbox" = ${sandbox ? 'TRUE' : 'FALSE'}`})::float AS gst,
+         (SELECT COALESCE(SUM(c."commissionAmount"), 0) FROM influencer_commissions c JOIN users u ON u.id = c."userId"
+           WHERE c."isDeleted" = false AND c.status <> 'cancelled' AND c."createdAt" >= $1 AND ${userTest})::float AS commission`,
+      [start, rate],
+    );
+    const refunds = Number(row?.refunds ?? 0);
+    // GST owed = GST on sales − GST given back inside refunds.
+    const gst = Number(row?.gst ?? 0) - (refunds * rate) / (100 + rate);
+    return { refunds, gst: Math.max(0, gst), commission: Number(row?.commission ?? 0) };
+  }
+
   private async sumOrderRevenue(start?: Date, isSandbox?: boolean) {
     // All v2 orders (merchandise + credit purchases) — this is where all real orders land
     const cqb = this.commerceOrdersRepo
       .createQueryBuilder('co')
       .select('SUM(co.totalAmount)', 'sum')
+      // Refunded orders count as sales here; the money refunded is subtracted below (once).
       .where('co.status NOT IN (:...excluded)', {
-        excluded: [CommerceOrderStatus.Cancelled, CommerceOrderStatus.Failed, CommerceOrderStatus.Refunded, CommerceOrderStatus.PendingPayment],
+        excluded: [CommerceOrderStatus.Cancelled, CommerceOrderStatus.Failed, CommerceOrderStatus.PendingPayment],
       })
       .andWhere('co.isDeleted = false');
     if (start) cqb.andWhere('co.createdAt >= :start', { start });
     if (isSandbox !== undefined) cqb.andWhere('co.isSandbox = :isSandbox', { isSandbox });
     const crow = await cqb.getRawOne<{ sum: string }>();
-    const v2Revenue = toNumber(crow?.sum);
+    const userTest = isSandbox === undefined ? 'TRUE' : isSandbox ? '(u."isSandbox" OR u."isTestAccount")' : 'NOT (u."isSandbox" OR u."isTestAccount")';
+    const [refundRow] = await this.dataSource.query(
+      `SELECT COALESCE(SUM(t."pricePaid"), 0)::float AS refunds FROM credit_transactions t JOIN users u ON u.id = t."userId"
+        WHERE t.reason = 'payment_refund' ${start ? 'AND t."createdAt" >= $1' : ''} AND ${userTest}`,
+      start ? [start] : [],
+    );
+    const v2Revenue = toNumber(crow?.sum) - toNumber(refundRow?.refunds);
 
     // Legacy merchandise_orders table (old orders before v2 migration)
     const qb = this.ordersRepo
@@ -1575,12 +1638,12 @@ export class AdminService {
     return toNumber(row?.sum);
   }
 
+  /** Start of today and of this month in India (IST), as UTC instants. */
   private getDateBounds() {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
+    const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
+    const ymd = ist.toISOString().slice(0, 10);
+    const todayStart = new Date(`${ymd}T00:00:00+05:30`);
+    const monthStart = new Date(`${ymd.slice(0, 8)}01T00:00:00+05:30`);
     return [todayStart, monthStart] as const;
   }
 

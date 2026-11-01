@@ -27,6 +27,10 @@ interface DashboardData {
   aiCostThisMonth: number;
   estimatedGrossProfitInr: number;
   profitMarginPct: number;
+  refundsThisMonthInr?: number;
+  gstThisMonthInr?: number;
+  paymentFeesThisMonthInr?: number;
+  commissionThisMonthInr?: number;
   mostPopularTheme: string;
   mostPopularProduct: string;
   aiCostWarning: boolean;
@@ -172,7 +176,12 @@ function ProfitWidget({ data }: { data: DashboardData }) {
       </div>
 
       <p className="text-xs text-gray-400 font-medium mt-4">
-        Profit = Revenue − AI Cost × ₹{data.usdToInr}/USD &nbsp;·&nbsp; currency configured in Settings
+        This month: profit = sales after refunds (₹{data.revenueThisMonth.toLocaleString("en-IN")})
+        − GST ₹{(data.gstThisMonthInr ?? 0).toLocaleString("en-IN")}
+        − payment fees (est.) ₹{(data.paymentFeesThisMonthInr ?? 0).toLocaleString("en-IN")}
+        − AI cost ₹{Math.round(data.aiCostThisMonth * data.usdToInr).toLocaleString("en-IN")}
+        − influencer commission ₹{(data.commissionThisMonthInr ?? 0).toLocaleString("en-IN")}.
+        Full breakdown in Reports → P&amp;L.
       </p>
     </div>
   );
