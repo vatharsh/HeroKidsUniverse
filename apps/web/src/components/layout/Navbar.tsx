@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import Logo from "@/components/shared/Logo";
-import UniversePlanetIcon from "@/components/layout/UniversePlanetIcon";
+import UniverseBubbleIcon from "@/components/layout/UniverseBubbleIcon";
 
 const navLinks = [
   { href: "/#how-it-works", label: "How It Works" },
@@ -20,7 +20,7 @@ const NAV_FONT = "font-[family-name:var(--font-display)]";
 function UniverseIconLink({
   className = "",
   labelClassName = "",
-  iconSize = 40,
+  iconSize = 42,
   onClick,
 }: {
   className?: string;
@@ -46,7 +46,7 @@ function UniverseIconLink({
       {/* A soft shine sweeps across the pill every few seconds */}
       <span aria-hidden className="uni-anim pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 skew-x-[-20deg] bg-gradient-to-r from-transparent via-white/25 to-transparent animate-[uniShine_5s_ease-in-out_infinite]" />
       <span className="uni-anim relative animate-[uniBreathe_4s_ease-in-out_infinite]">
-        <UniversePlanetIcon size={typeof iconSize === "number" ? iconSize : 40} fast={hovered} />
+        <UniverseBubbleIcon size={typeof iconSize === "number" ? iconSize : 42} fast={hovered} />
       </span>
       <span className={cn(NAV_FONT, "text-lg leading-none text-white/85 group-hover:text-gold-light whitespace-nowrap transition-colors", labelClassName)}>My Universe</span>
     </a>
