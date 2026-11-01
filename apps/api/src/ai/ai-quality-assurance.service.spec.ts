@@ -92,7 +92,10 @@ function makeImageProvider(overrides: Partial<Record<string, jest.Mock>> = {}) {
     }),
     generateImage: jest.fn().mockResolvedValue({
       imageUrl: 'http://localhost:3000/api/upload/files/regen.png',
+      imageBase64: 'cmVnZW4=',
     }),
+    // A redraw is only kept when it scores better than the page it replaces — the redraw here scores 9.
+    checkFaceConsistency: jest.fn().mockResolvedValue({ identityScore: 9, recommendation: 'accept', issues: [] }),
     ...overrides,
   };
 }
@@ -441,6 +444,31 @@ describe('AIQualityAssuranceService', () => {
       expect(result.pagesRetried).toBeGreaterThan(0);
     });
 
+    it('keeps the original page when the redraw is not a better likeness', async () => {
+      const { service, imageProvider } = await buildModule({
+        imageProviderOverrides: {
+          checkFaceConsistencyFromUrl: jest.fn().mockResolvedValue({ identityScore: 3, recommendation: 'regenerate', issues: [] }),
+          checkFaceConsistency: jest.fn().mockResolvedValue({ identityScore: 3, recommendation: 'regenerate', issues: [] }),
+        },
+        settingRows: [
+          { key: 'QA_MIN_OVERALL_CONFIDENCE', value: '100' },
+          { key: 'QA_ENABLE_AUTO_REGENERATION', value: 'true' },
+          { key: 'QA_MIN_IDENTITY_SCORE', value: '6' },
+          { key: 'QA_MAX_RETRIES', value: '1' },
+        ],
+      });
+      const pages = makePages(2);
+      const result = await service.runStoryQA({
+        story: makeStory(), hero: makeHero(), heroCanon: null,
+        pages,
+        storyVisualState: { costume: 'red jacket', companion: null, weapon: null, powers: [], inventory: [], transformation: null },
+        imageGenerationInput: { heroName: 'Siddhant', heroAge: 8, sceneDescription: 'Test scene' },
+      });
+      expect(imageProvider.generateImage).toHaveBeenCalled();
+      expect(result.pagesRetried).toBe(0);
+      expect(result.finalPages.map((p) => p.imageUrl)).toEqual(pages.map((p) => p.imageUrl));
+    });
+
     it('respects QA_MAX_RETRIES — pagesRetried <= pages * maxRetries', async () => {
       const { service, imageProvider } = await buildModule({
         imageProviderOverrides: {
@@ -688,7 +716,7 @@ describe('AIQualityAssuranceService', () => {
 
     it('allows regen up to budget (one image fits, second is blocked)', async () => {
       // Budget = $0.015. One image at $0.011 fits. Second page should be blocked.
-      const generateImage = jest.fn().mockResolvedValue({ imageUrl: 'http://localhost/regen.png' });
+      const generateImage = jest.fn().mockResolvedValue({ imageUrl: 'http://localhost/regen.png', imageBase64: 'cmVnZW4=' });
       const { service } = await buildModule({
         imageProviderOverrides: {
           checkFaceConsistencyFromUrl: jest.fn().mockResolvedValue({

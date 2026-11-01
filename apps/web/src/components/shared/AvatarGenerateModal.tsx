@@ -20,6 +20,8 @@ interface Props {
   generationsUsed: number;
   maxGenerations: number;
   avatarRefreshTokens?: number;
+  /** "YYYY-MM-DD" — the avatar is drawn to look exactly this old (they drifted older without it). */
+  birthDate?: string | null;
   onSuccess: (avatarUrl: string) => void;
   onCancel: () => void;
 }
@@ -33,6 +35,17 @@ const ADJUSTMENT_OPTIONS: Array<{ label: string; hint: string; emoji: string }> 
   { label: "Try again",       emoji: "🔄", hint: "" },
 ];
 
+/** Whole years from a "YYYY-MM-DD" birth date; null when missing or unrealistic. */
+function ageFrom(birthDate?: string | null): number | null {
+  if (!birthDate) return null;
+  const born = new Date(`${birthDate.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(born.getTime())) return null;
+  const now = new Date();
+  let years = now.getFullYear() - born.getFullYear();
+  if (now.getMonth() < born.getMonth() || (now.getMonth() === born.getMonth() && now.getDate() < born.getDate())) years--;
+  return years > 0 && years < 100 ? years : null;
+}
+
 const CROP_SIZE = 240; // circular viewport diameter in px
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
@@ -42,6 +55,7 @@ export default function AvatarGenerateModal({
   characterName,
   generationsUsed, maxGenerations,
   avatarRefreshTokens = 0,
+  birthDate,
   onSuccess, onCancel,
 }: Props) {
   const [step, setStep]         = useState<Step>("crop");
@@ -204,6 +218,8 @@ export default function AvatarGenerateModal({
       form.append("photo", croppedFile);
       form.append("type", generateType);
       if (adjustmentHint) form.append("adjustmentHint", adjustmentHint);
+      const age = ageFrom(birthDate);
+      if (age) form.append("age", String(age));
 
       const res  = await fetch(`${BASE}/avatars/generate`, {
         method: "POST",

@@ -29,11 +29,13 @@ export class AvatarsController {
     @UploadedFile() photo: Express.Multer.File,
     @Body('type') type: string,
     @Body('adjustmentHint') adjustmentHint?: string,
+    @Body('age') age?: string,
   ) {
     if (!photo) throw new BadRequestException('photo is required');
     if (type !== 'hero' && type !== 'character') {
       throw new BadRequestException('type must be hero or character');
     }
-    return this.avatarsService.generate(user.id, photo, type, adjustmentHint);
+    const years = Number(age);
+    return this.avatarsService.generate(user.id, photo, type, adjustmentHint, Number.isInteger(years) && years > 0 && years < 100 ? years : undefined);
   }
 }

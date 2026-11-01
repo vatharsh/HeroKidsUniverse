@@ -59,6 +59,7 @@ export class AvatarsService {
     photo: Express.Multer.File,
     type: 'hero' | 'character',
     adjustmentHint?: string,
+    age?: number,
   ): Promise<{ avatarUrl: string }> {
     // Checked before anything is charged, so a rejected photo or instruction costs nothing.
     await this.safety.assertSafeInput({ adjustmentHint }, userId);
@@ -74,6 +75,7 @@ export class AvatarsService {
         photoBuffer: photo.buffer,
         photoMimeType: photo.mimetype,
         adjustmentHint: adjustmentHint?.trim() || undefined,
+        age,
       });
       avatarUrl = await this.persist(userId, output, type);
     } catch (err) {

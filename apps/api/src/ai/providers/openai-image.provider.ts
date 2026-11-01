@@ -591,7 +591,7 @@ Description to parse:
       '• Eyes: size, spacing, tilt/slant, corner shape, single/double lid, depth — exact',
       '• Eyebrows: arch height, thickness, spacing, length — exact',
       '• Skin tone and undertone — exact same shade',
-      '• Age appearance — do NOT make younger or smoother',
+      '• Age appearance — exactly as in the reference: do NOT make them younger OR older',
       '• Any distinctive features: glasses, beard, moustache, freckles, dimples, moles, birthmarks, braces',
       '',
       'HAIR — PRESERVE EXACTLY:',
@@ -607,6 +607,7 @@ Description to parse:
       `STYLE TARGET: ${AVATAR_STYLE}`,
       '',
       'DO NOT: normalise, idealise, smooth out, Pixar-ify, or alter the face geometry in any way. If a stranger compared the reference photo and the output side-by-side, they must immediately say "same person."',
+      input.age ? `AGE — CRITICAL: this child is ${input.age} years old. They must look exactly ${input.age}: keep child-like proportions, a young face and soft features; do NOT make them look older (no pre-teen, teen or adult features).` : '',
       registryRules
         ? `ADDITIONAL RULES FROM ADMIN:\n${registryRules}`
         : '',

@@ -374,6 +374,7 @@ function CharacterFormModal({
           photoPreview={generateTarget.preview}
           generateType="character"
           characterName={name.trim() || undefined}
+          birthDate={dob || null}
           generationsUsed={avatarStats.characterGenerationsUsed}
           maxGenerations={avatarStats.characterGenerationsMax}
           onSuccess={handleGenerateSuccess}
@@ -589,6 +590,7 @@ function HeroEditModal({
           photoFile={generateTarget.file}
           photoPreview={generateTarget.preview}
           generateType="hero"
+          birthDate={dob || null}
           generationsUsed={
             avatarStats.heroGenerationsUsed < avatarStats.heroGenerationsMax
               ? avatarStats.heroGenerationsUsed           // within free quota: show X of 2

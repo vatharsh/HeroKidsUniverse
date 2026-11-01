@@ -123,6 +123,8 @@ export interface AvatarGenerationInput {
   photoBuffer?: Buffer;
   photoMimeType?: string;
   adjustmentHint?: string;
+  /** The child's real age (from their birth date) — avatars must look exactly this old, never older. */
+  age?: number | null;
 }
 
 export interface ApparentAgeCheckInput {

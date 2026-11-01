@@ -791,6 +791,7 @@ function CreatePageInner() {
           photoFile={photoFile}
           photoPreview={photoPreview}
           generateType="hero"
+          birthDate={heroDob || null}
           generationsUsed={avatarGenUsed}
           maxGenerations={avatarGenMax}
           avatarRefreshTokens={avatarRefreshTokens}

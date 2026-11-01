@@ -9,7 +9,7 @@ import { StoryGenerationLog } from '../ai/entities/story-generation-log.entity';
 import { IMAGE_GENERATION_PROVIDER } from '../ai/interfaces/image-generation.provider';
 import { NARRATION_PROVIDER } from '../ai/interfaces/narration.provider';
 import { STORY_GENERATION_PROVIDER } from '../ai/interfaces/story-generation.provider';
-import type { ImageGenerationInput, ImageGenerationProvider } from '../ai/interfaces/image-generation.provider';
+import type { ImageGenerationInput, ImageGenerationOutput, ImageGenerationProvider } from '../ai/interfaces/image-generation.provider';
 import type { NarrationProvider } from '../ai/interfaces/narration.provider';
 import type {
   PageCharacter,
@@ -1244,18 +1244,47 @@ export class GenerationService implements OnModuleInit {
       }
     }
 
+    const visibleCast = (page?: SceneOutput['pages'][number]) =>
+      (page?.characterDirections ?? []).filter((d) => d.name && d.visible !== false).map((d) => d.name as string);
+    // Story pictures are checked against the hero's sheet for THIS story (same face, same outfit) — the everyday
+    // avatar has different clothes and hair cover, which made every picture score low and get redrawn.
+    const heroFaceRef = this.sheetRefsFor(castSheets, heroName, [])[0]?.url ?? hero.avatarUrl ?? null;
+    /** Redraw with identity boost, but keep the redraw only if it is a better likeness than the original. */
+    const boostIfBetter = async (
+      input: ImageGenerationInput, original: ImageGenerationOutput, originalScore: number, what: string, attempts?: number,
+    ): Promise<ImageGenerationOutput> => {
+      try {
+        const boosted = await this.generateImageWithRetry({ ...input, identityBoostMode: true }, attempts);
+        const boostedQa = heroFaceRef && boosted.imageBase64
+          ? await this.imageProvider.checkFaceConsistency(heroFaceRef, boosted.imageBase64, heroName).catch(() => null)
+          : null;
+        if (boostedQa && boostedQa.identityScore > originalScore) return boosted;
+        this.logger.warn(`Identity boost for ${what} was no better (${boostedQa?.identityScore ?? '?'} vs ${originalScore}) — keeping the original`);
+      } catch {
+        this.logger.warn(`Identity boost regeneration failed for ${what}, using original`);
+      }
+      return original;
+    };
+
     const buildSceneImageInput = (scene: SceneOutput, styleReferenceUrl?: string): ImageGenerationInput => {
       const firstPage = scene.pages[0];
+      // The scene picture is shown on the scene's FIRST page, so it holds only who is there on that page — someone
+      // who arrives on the next page must not already be standing in it (that page gets its own picture).
+      const firstPageCast = visibleCast(firstPage);
       const sceneRefs = this.sheetRefsFor(
         castSheets, heroName,
-        scene.pages.flatMap((p) => p.characterDirections ?? []),
-        [scene.illustrationBrief, ...scene.pages.map((p) => p.sceneDescription ?? '')].join(' '),
+        firstPage?.characterDirections ?? [],
+        firstPage?.sceneDescription || scene.illustrationBrief,
       );
+      const onlyFirstPage = scene.pages.length > 1 && firstPage?.sceneDescription
+        ? `\nTHIS PICTURE IS PAGE ${firstPage.pageNumber} ONLY: ${firstPage.sceneDescription}` +
+          (firstPageCast.length ? `\nCharacters in this picture: ${[heroName, ...firstPageCast.filter((n) => n !== heroName)].join(', ')}. Anyone else in the brief arrives on a later page — do NOT draw them yet.` : '')
+        : '';
       return {
         castReferences: sceneRefs.length ? sceneRefs : undefined,
         // Change 3: embed hero+character ages in the first mention of each name
         sceneDescription: this.prefixAgesInSceneDescription(
-          scene.illustrationBrief, heroName, heroAge, supportingCharInfoForAgePrefix,
+          scene.illustrationBrief + onlyFirstPage, heroName, heroAge, supportingCharInfoForAgePrefix,
         ),
         heroName,
         heroAge,
@@ -1289,19 +1318,15 @@ export class GenerationService implements OnModuleInit {
         const imageInput = buildSceneImageInput(scene, styleReferenceUrl);
         let imageOutput = await this.generateImageWithRetry(imageInput);
 
-        if (!isBackgroundOnly && faceQAEnabled && hero.avatarUrl && imageOutput.imageBase64) {
+        if (!isBackgroundOnly && faceQAEnabled && heroFaceRef && imageOutput.imageBase64) {
           const qaResult = await this.imageProvider.checkFaceConsistency(
-            hero.avatarUrl, imageOutput.imageBase64, heroName,
+            heroFaceRef, imageOutput.imageBase64, heroName,
           ).catch(() => null);
           if (qaResult && qaResult.identityScore < faceQAThreshold) {
             this.logger.warn(
               `Face QA scene ${scene.sceneId}: score=${qaResult.identityScore}/${faceQAThreshold} — regenerating with identity boost`,
             );
-            try {
-              imageOutput = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true });
-            } catch {
-              this.logger.warn(`Identity boost regeneration failed for scene ${scene.sceneId}, using original`);
-            }
+            imageOutput = await boostIfBetter(imageInput, imageOutput, qaResult.identityScore, `scene ${scene.sceneId}`);
           }
         }
 
@@ -1488,16 +1513,21 @@ export class GenerationService implements OnModuleInit {
     // bubble detection is independent of the others.
     let expressionRedrawsLeft = await this.getNumberSetting('MAX_EXPRESSION_VARIANTS', Number(SETTING_DEFAULTS.MAX_EXPRESSION_VARIANTS.value));
     const pageJobs = scenes.flatMap((scene) => scene.pages.map((page) => {
+      const isLaterPage = page.pageNumber !== scene.pages[0]?.pageNumber;
+      // Someone arriving on this page isn't in the scene picture (it shows the first page) — this page must get its own.
+      const firstCast = new Set(visibleCast(scene.pages[0]).map((n) => n.toLowerCase()));
+      const hasNewcomer = isLaterPage && visibleCast(page).some((n) => !firstCast.has(n.toLowerCase()));
       // Gemini marks 'reuse' when character poses/expressions are essentially unchanged
       // from the scene base image — only speech bubbles differ, so no new image is needed.
       const wantsPageSpecificExpression =
         page.imageVariant !== 'reuse' &&
-        page.pageNumber !== scene.pages[0]?.pageNumber &&
+        isLaterPage &&
         ((page.speechBubbles?.length ?? 0) > 0 ||
           page.characterDirections?.some((c) => c.isSpeaking || c.mouthState === 'speaking'));
       // Each redraw is a full image — cap them per story (sheets keep the reused scene image consistent).
-      const needsPageSpecificExpression = !!wantsPageSpecificExpression && expressionRedrawsLeft > 0;
-      if (needsPageSpecificExpression) expressionRedrawsLeft--;
+      // A newcomer always gets their picture (not counted against the cap).
+      const needsPageSpecificExpression = hasNewcomer || (!!wantsPageSpecificExpression && expressionRedrawsLeft > 0);
+      if (needsPageSpecificExpression && !hasNewcomer) expressionRedrawsLeft--;
       return { scene, page, needsPageSpecificExpression };
     }));
 
@@ -1541,12 +1571,12 @@ export class GenerationService implements OnModuleInit {
               characterDirections: page.characterDirections,
             };
             let output = await this.generateImageWithRetry(imageInput, 1);
-            if (faceQAEnabled && hero.avatarUrl && output.imageBase64) {
+            if (faceQAEnabled && heroFaceRef && output.imageBase64) {
               const qaResult = await this.imageProvider.checkFaceConsistency(
-                hero.avatarUrl, output.imageBase64, heroName,
+                heroFaceRef, output.imageBase64, heroName,
               ).catch(() => null);
               if (qaResult && qaResult.identityScore < faceQAThreshold) {
-                output = await this.generateImageWithRetry({ ...imageInput, identityBoostMode: true }, 1);
+                output = await boostIfBetter(imageInput, output, qaResult.identityScore, `page ${page.pageNumber}`, 1);
               }
             }
             pageImageUrl = output.imageBase64

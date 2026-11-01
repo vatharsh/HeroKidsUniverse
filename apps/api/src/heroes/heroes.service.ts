@@ -46,7 +46,7 @@ export class HeroesService {
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
       // heroId not available yet (entity not saved), so upload uses a random UUID prefix.
-      const result = await this.generateChargedAvatar(userId, createHeroDto.name, photo);
+      const result = await this.generateChargedAvatar(userId, createHeroDto.name, photo, undefined, createHeroDto.dob);
       avatarUrl = result.avatarUrl;
       avatarDescription = result.avatarDescription;
       characterIdentity = result.characterIdentity;
@@ -102,7 +102,7 @@ export class HeroesService {
 
     if (photo) {
       // The raw photo is never uploaded/persisted — only used in-memory to generate the avatar.
-      const result = await this.generateChargedAvatar(userId, hero.name ?? 'Hero', photo, hero.id);
+      const result = await this.generateChargedAvatar(userId, hero.name ?? 'Hero', photo, hero.id, updateHeroDto.dob ?? hero.dob);
       hero.avatarUrl = result.avatarUrl;
       hero.avatarDescription = result.avatarDescription;
       hero.characterIdentity = result.characterIdentity;
@@ -156,7 +156,7 @@ export class HeroesService {
       : null;
 
     if (mockPhoto) {
-      const result = await this.generateAvatar(hero.userId, hero.name ?? 'Hero', mockPhoto, hero.id);
+      const result = await this.generateAvatar(hero.userId, hero.name ?? 'Hero', mockPhoto, hero.id, hero.dob);
       hero.avatarUrl = result.avatarUrl ?? hero.avatarUrl;
       hero.avatarDescription = result.avatarDescription ?? hero.avatarDescription;
       hero.characterIdentity = result.characterIdentity ?? hero.characterIdentity;
@@ -210,10 +210,10 @@ export class HeroesService {
    * A parent's hero avatar uses the account's free allowance, then Avatar Refreshes — the same
    * rules as the avatar studio. Creating or editing heroes used to generate avatars with no limit.
    */
-  private async generateChargedAvatar(userId: string, name: string, photo: Express.Multer.File, heroId?: string) {
+  private async generateChargedAvatar(userId: string, name: string, photo: Express.Multer.File, heroId?: string, dob?: string | null) {
     await this.safety.assertSafePhoto(photo, userId);
     const reservation = await reserveAvatarGeneration(this.dataSource, userId, 'hero', { referenceId: heroId ?? null });
-    const result = await this.generateAvatar(userId, name, photo, heroId);
+    const result = await this.generateAvatar(userId, name, photo, heroId, dob);
     if (!result.avatarUrl) await releaseAvatarGeneration(this.dataSource, reservation);
     else await logAvatarUsage(this.dataSource, userId);
     return result;
@@ -224,6 +224,7 @@ export class HeroesService {
     name: string,
     photo: Express.Multer.File,
     heroId?: string,
+    dob?: string | null,
   ): Promise<{ avatarUrl: string | null; avatarDescription: string | null; characterIdentity: Hero['characterIdentity'] }> {
     try {
       const [avatar, avatarDescription] = await Promise.all([
@@ -232,6 +233,8 @@ export class HeroesService {
           role: 'hero',
           photoBuffer: photo.buffer,
           photoMimeType: photo.mimetype,
+          // A child's avatar must look their real age — without it, avatars drifted older (a 7-year-old came out ~12).
+          age: dob ? this.computeAge(dob) : null,
         }),
         this.imageProvider.describeCharacterAppearance(photo.buffer, photo.mimetype),
       ]);

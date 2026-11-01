@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export type LookChoice = "usual" | "universe" | "new";
 
 const NEW_LOOKS: Array<{ label: string; text: string }> = [
-  { label: "🏜️ Desert adventurer", text: "Desert adventurer clothes: cream kurta-style shirt, embroidered green waistcoat, sand-coloured trousers, red sash, small wrapped turban, sandals" },
+  { label: "🏜️ Desert adventurer", text: "Desert adventurer clothes: cream kurta-style shirt, embroidered green waistcoat, sand-coloured trousers, red sash, small embroidered cap worn on the back of the head, sandals" },
   { label: "🚀 Astronaut", text: "A white-and-blue astronaut suit with a round glass helmet and a star patch" },
   { label: "🏴‍☠️ Pirate", text: "A friendly pirate outfit: striped shirt, red bandana, blue coat with gold buttons, boots" },
   { label: "🧙 Wizard", text: "A starry midnight-blue wizard robe with a pointed hat and a small wand" },

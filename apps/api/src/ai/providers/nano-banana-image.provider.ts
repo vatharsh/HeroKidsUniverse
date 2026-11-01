@@ -445,7 +445,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
       '• Eyes: size, spacing, tilt, corner shape, depth — exact',
       '• Eyebrows: arch, thickness, spacing, length — exact',
       '• Skin tone and undertone — exact same shade, do NOT lighten',
-      '• Age appearance — do NOT make younger or smoother',
+      '• Age appearance — exactly as in the reference: do NOT make them younger OR older',
       '• Distinctive features: glasses, beard, moustache, freckles, dimples, moles, birthmarks',
       '',
       'HAIR — PRESERVE EXACTLY:',
@@ -457,6 +457,7 @@ export class NanoBananaImageProvider implements ImageGenerationProvider {
       '• Replace background with a soft neutral gradient studio background',
       '',
       'DO NOT normalise, idealise, or alter the face geometry. The output must be instantly recognisable as the same person.',
+      input.age ? `AGE — CRITICAL: this child is ${input.age} years old. They must look exactly ${input.age}: keep child-like proportions, a young face and soft features; do NOT make them look older (no pre-teen, teen or adult features).` : '',
       input.adjustmentHint ? `SPECIFIC ADJUSTMENT: ${input.adjustmentHint}` : '',
       input.role ? `CHARACTER ROLE (pose confidence only — do not change appearance): ${input.role}` : '',
       'OUTPUT: single portrait, head and shoulders, centred, child-safe. No text, no watermark, no border.',
@@ -664,6 +665,10 @@ Description to parse:
         'Exactly ONE character, full body from head to toe, standing in a relaxed natural pose, three-quarter front view, friendly expression.',
         'Plain soft light-grey studio background, even soft lighting, nothing else in the picture. No text, no labels, no logos.',
         input.outfit ? `Outfit (draw exactly this): ${input.outfit}.` : '',
+        // Hair is one of the strongest likeness cues — a turban or hat hiding it made heroes unrecognisable.
+        input.referenceUrl
+          ? 'Keep their own hairstyle clearly visible. If the outfit includes a hat, cap or turban, draw it small and set back on the head so the hairline and hair still show.'
+          : '',
         input.appearance ? `Appearance: ${input.appearance}.` : '',
         `Look the age stated above — do not make them older or younger.`,
         'No real-world logos, brands or foreign flags on the clothes.',

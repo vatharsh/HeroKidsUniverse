@@ -183,12 +183,31 @@ export class AIQualityAssuranceService {
 
           try {
             this.logger.log(`QA auto-regenerating page ${pr.pageNumber} attempt ${attempt}/${maxRetries} (identityScore=${pr.identityScore})`);
+            const sheetRefs = this.pageSheetRefs(originalPage, hero, storyVisualState);
             const regenInput: ImageGenerationInput = {
               ...(imageGenerationInput as ImageGenerationInput),
               sceneDescription: originalPage.sceneDescription ?? imageGenerationInput.sceneDescription ?? '',
+              // The story's character sheets keep everyone's face AND outfit — without them a redraw drifted
+              // (new faces for side characters, different clothes).
+              castReferences: sheetRefs.length ? sheetRefs : undefined,
+              dialogue: originalPage.dialogue,
+              characters: originalPage.characters,
               identityBoostMode: true,
             };
             const output = await this.imageProvider.generateImage(regenInput);
+            regenCostSoFar += settings.imageCostPerRegen;
+            // Keep the redraw only if it is actually a better likeness than the page it would replace.
+            const reference = this.heroReference(hero, storyVisualState);
+            const newQa = !reference ? null
+              : output.imageBase64
+                ? await this.imageProvider.checkFaceConsistency(reference, output.imageBase64, hero.name ?? 'Hero').catch(() => null)
+                : output.imageUrl
+                  ? await this.imageProvider.checkFaceConsistencyFromUrl(reference, output.imageUrl, hero.name ?? 'Hero').catch(() => null)
+                  : null;
+            if (!newQa || newQa.identityScore <= (pr.identityScore ?? 0)) {
+              this.logger.warn(`QA redraw of page ${pr.pageNumber} was no better (${newQa?.identityScore ?? '?'} vs ${pr.identityScore}) — keeping the original`);
+              continue;
+            }
             let newUrl: string | undefined;
             if (output.imageBase64) {
               newUrl = await this.uploadService.uploadGeneratedImage(
@@ -198,7 +217,6 @@ export class AIQualityAssuranceService {
               newUrl = output.imageUrl;
             }
             if (newUrl) {
-              regenCostSoFar += settings.imageCostPerRegen;
               pr.acceptedImageUrl = newUrl;
               pr.retryCount++;
               pr.accepted = true;
@@ -335,7 +353,7 @@ export class AIQualityAssuranceService {
     const [identityScore, storyScore, expressionScore, dialogueScore, compositionScore, narrationScore] =
       await Promise.all([
         settings.enableIdentityQa
-          ? this.scoreIdentity(page, hero, heroCanon).catch(() => 5)
+          ? this.scoreIdentity(page, hero, heroCanon, storyVisualState).catch(() => 5)
           : Promise.resolve(null),
         settings.enableStoryQa
           ? Promise.resolve(this.scoreStory(page, storyVisualState, allPages, issues))
@@ -388,23 +406,52 @@ export class AIQualityAssuranceService {
     };
   }
 
+  /**
+   * The hero's likeness reference for a story: their character sheet for THIS story (same outfit and hair cover as
+   * the pages) when there is one, else the everyday avatar.
+   */
+  private heroReference(hero: Hero, storyVisualState: StoryVisualState | null): string | null {
+    const sheets = storyVisualState?.castSheets ?? {};
+    const name = (hero.name ?? '').toLowerCase();
+    const key = Object.keys(sheets).find((k) => k.toLowerCase() === name);
+    return (key ? sheets[key] : null) ?? hero.avatarUrl ?? null;
+  }
+
+  /** Character sheets for the people in a page — so a redraw keeps everyone's face and outfit (hero first, max 4). */
+  private pageSheetRefs(page: StoryPage, hero: Hero, storyVisualState: StoryVisualState | null): Array<{ name: string; url: string }> {
+    const sheets = storyVisualState?.castSheets ?? {};
+    const first = (n: string) => n.toLowerCase().split(/\s+/)[0];
+    const text = `${page.sceneDescription ?? ''} ${(page.characters ?? []).map((c) => c.name).join(' ')}`.toLowerCase();
+    const names = [hero.name ?? '', ...((page.characterDirections ?? []) as Array<{ name?: string; visible?: boolean }>)
+      .filter((d) => d.name && d.visible !== false).map((d) => d.name as string)];
+    const refs: Array<{ name: string; url: string }> = [];
+    for (const key of Object.keys(sheets)) {
+      const wanted = names.some((n) => n && first(n) === first(key)) || text.includes(first(key));
+      if (wanted && !refs.some((r) => r.name === key)) refs.push({ name: key, url: sheets[key] });
+    }
+    const heroFirst = (hero.name ?? '').toLowerCase();
+    return refs.sort((a, b) => Number(b.name.toLowerCase() === heroFirst) - Number(a.name.toLowerCase() === heroFirst)).slice(0, 4);
+  }
+
   private async scoreIdentity(
     page: StoryPage,
     hero: Hero,
     _heroCanon: CharacterCanon | null,
+    storyVisualState: StoryVisualState | null = null,
   ): Promise<number> {
     if (!page.imageUrl) {
       this.logger.debug(`Identity QA page ${page.pageNumber}: no imageUrl, score=0`);
       return 0;
     }
-    if (!hero.avatarUrl) {
+    const reference = this.heroReference(hero, storyVisualState);
+    if (!reference) {
       this.logger.debug(`Identity QA page ${page.pageNumber}: no avatarUrl, score=8 (skip)`);
       return 8;
     }
 
     try {
       const result = await this.imageProvider.checkFaceConsistencyFromUrl(
-        hero.avatarUrl,
+        reference,
         page.imageUrl,
         hero.name ?? 'Hero',
       );
