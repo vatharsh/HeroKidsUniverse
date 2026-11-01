@@ -43,21 +43,27 @@ export interface PagedResult<T> {
   summary: Record<string, number | string>;
 }
 
-function parseDate(s?: string): Date | undefined {
-  if (!s) return undefined;
-  return new Date(s);
+/** Report dates are India days: "2026-10-25" means 00:00–23:59 IST. */
+function istStart(ymd: string): Date {
+  return new Date(`${ymd.slice(0, 10)}T00:00:00+05:30`);
 }
 
-function startOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(0, 0, 0, 0);
-  return r;
+function istEnd(ymd: string): Date {
+  return new Date(`${ymd.slice(0, 10)}T23:59:59.999+05:30`);
 }
 
-function endOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(23, 59, 59, 999);
-  return r;
+function istToday(): string {
+  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** Orders that actually brought money in (refunded ones count here; their refunds are subtracted separately). */
+const COUNTED_ORDER = `o.status NOT IN ('pending_payment', 'cancelled', 'failed')`;
+
+/** Test data at user level: pre-launch (sandbox) accounts and accounts marked as test. */
+function userSandboxSql(alias: string, sandbox: boolean | undefined): string {
+  if (sandbox === undefined) return 'TRUE';
+  const test = `(${alias}."isSandbox" OR ${alias}."isTestAccount")`;
+  return sandbox ? test : `NOT ${test}`;
 }
 
 function toNum(v: unknown): number {
@@ -94,14 +100,15 @@ export class ReportsService {
   }
 
   private defaultDateRange(filters: ReportFilters): { from: Date; to: Date } {
-    const now = new Date();
-    const from = filters.dateFrom
-      ? startOfDay(parseDate(filters.dateFrom)!)
-      : startOfDay(new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000));
-    const to = filters.dateTo
-      ? endOfDay(parseDate(filters.dateTo)!)
-      : endOfDay(now);
+    const today = istToday();
+    const from = istStart(filters.dateFrom || new Date(istStart(today).getTime() - 89 * 86_400_000 + 5.5 * 3600_000).toISOString());
+    const to = istEnd(filters.dateTo || today);
     return { from, to };
+  }
+
+  private async gstRate(): Promise<number> {
+    const row = await this.settingsRepo.findOne({ where: { key: 'GST_RATE_PCT' } });
+    return toNum(row?.value) || 18;
   }
 
   private paginate(page = 1, limit = 25): { page: number; limit: number; skip: number } {
@@ -159,33 +166,46 @@ export class ReportsService {
     if (!exportAll) qb.offset(skip).limit(limit);
     const items = await qb.getRawMany<Record<string, unknown>>();
 
-    // summary
-    const summQb = this.dataSource.createQueryBuilder(Order, 'o')
-      .select([
-        'COALESCE(SUM(o.totalAmount), 0) AS "totalRevenue"',
-        'COUNT(o.id) AS "totalOrders"',
-        'COALESCE(AVG(o.totalAmount), 0) AS "avgOrderValue"',
-        'COALESCE(SUM(o.discountAmount), 0) AS "totalDiscount"',
-        'COALESCE(SUM(o.shippingAmount), 0) AS "totalShipping"',
-        'COALESCE(SUM(ops.totalRefundedAmount), 0) AS "totalRefunded"',
-      ])
-      .leftJoin(OrderPaymentSummary, 'ops', 'ops.orderId = o.id')
-      .where('o.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('o.deletedAt IS NULL');
-
-    if (filters.isSandbox !== undefined) summQb.andWhere('o.isSandbox = :sb', { sb: filters.isSandbox });
-    if (filters.status) summQb.andWhere('o.status = :status', { status: filters.status });
-
-    const [summRow] = await summQb.getRawMany<Record<string, unknown>>();
+    // Summary: paid orders only (cancelled / failed / unpaid never brought money in), net of refunds and GST.
+    const rate = await this.gstRate();
+    const params: unknown[] = [from, to, rate];
+    const where: string[] = [`o."deletedAt" IS NULL`, `o."createdAt" BETWEEN $1 AND $2`, COUNTED_ORDER];
+    if (filters.isSandbox !== undefined) where.push(`o."isSandbox" = ${filters.isSandbox ? 'TRUE' : 'FALSE'}`);
+    if (filters.status) { params.push(filters.status); where.push(`o.status = $${params.length}`); }
+    if (filters.paymentMethod) { params.push(filters.paymentMethod); where.push(`o."paymentMethod" = $${params.length}`); }
+    if (filters.search) { params.push(`%${filters.search}%`); where.push(`(o."orderNumber" ILIKE $${params.length} OR u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`); }
+    const [sr] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS "paidOrders",
+              COALESCE(SUM(o."totalAmount"), 0)::float AS gross,
+              COALESCE(AVG(o."totalAmount"), 0)::float AS avg,
+              COALESCE(SUM(o."discountAmount"), 0)::float AS discount,
+              -- Credit packs are priced GST-inclusive; merchandise adds GST on top in taxAmount.
+              COALESCE(SUM(CASE WHEN o."orderType" = 'credit_purchase'
+                                THEN COALESCE(NULLIF(o."taxAmount", 0), o."totalAmount" * $3 / (100 + $3))
+                                ELSE o."taxAmount" END), 0)::float AS gst,
+              COALESCE(SUM(ops."totalRefundedAmount"), 0)::float AS "merchRefunds"
+         FROM orders o LEFT JOIN users u ON u.id = o."userId" LEFT JOIN order_payment_summaries ops ON ops."orderId" = o.id
+        WHERE ${where.join(' AND ')}`,
+      params,
+    );
+    const [rr] = await this.dataSource.query(
+      `SELECT COALESCE(SUM(t."pricePaid"), 0)::float AS refunds
+         FROM credit_transactions t JOIN users u ON u.id = t."userId"
+        WHERE t.reason = 'payment_refund' AND t."createdAt" BETWEEN $1 AND $2 AND ${userSandboxSql('u', filters.isSandbox)}`,
+      [from, to],
+    );
+    const refunds = toNum(rr?.refunds) + toNum(sr?.merchRefunds);
+    const gst = toNum(sr?.gst);
+    const refundGst = toNum(rr?.refunds) * rate / (100 + rate);
     const summary = {
-      totalRevenue: toNum(summRow?.totalRevenue),
-      totalOrders: toNum(summRow?.totalOrders),
-      avgOrderValue: Math.round(toNum(summRow?.avgOrderValue)),
-      totalDiscount: toNum(summRow?.totalDiscount),
-      totalShipping: toNum(summRow?.totalShipping),
-      totalRefunded: toNum(summRow?.totalRefunded),
+      paidOrders: toNum(sr?.paidOrders),
+      grossSales: Math.round(toNum(sr?.gross)),
+      refunded: Math.round(refunds),
+      gstIncluded: Math.round(gst - refundGst),
+      netSalesExGst: Math.round(toNum(sr?.gross) - refunds - (gst - refundGst)),
+      avgOrderValue: Math.round(toNum(sr?.avg)),
+      couponDiscounts: Math.round(toNum(sr?.discount)),
     };
-
     return { items, total, page, limit, totalPages: Math.ceil(total / limit) || 1, summary };
   }
 
@@ -247,6 +267,7 @@ export class ReportsService {
       items, total, page, limit, totalPages: Math.ceil(total / limit) || 1,
       summary: {
         totalOrders: total,
+        paidOrders: Object.entries(byStatus).filter(([st]) => !['pending_payment', 'cancelled', 'failed'].includes(st)).reduce((t, [, c]) => t + c, 0),
         pendingOrders: byStatus['pending_payment'] ?? 0,
         shippedOrders: byStatus['shipped'] ?? 0,
         deliveredOrders: byStatus['delivered'] ?? 0,
@@ -265,16 +286,16 @@ export class ReportsService {
     const qb = this.dataSource.createQueryBuilder(Product, 'p')
       .leftJoin(ProductCategory, 'pc', 'pc.id = p.categoryId')
       .leftJoin(OrderItem, 'oi', 'oi.productId = p.id AND oi.deletedAt IS NULL')
-      .leftJoin(Order, 'o', 'o.id = oi.orderId AND o.deletedAt IS NULL AND o.createdAt BETWEEN :from AND :to', { from, to })
+      .leftJoin(Order, 'o', `o.id = oi.orderId AND o.deletedAt IS NULL AND o.createdAt BETWEEN :from AND :to AND ${COUNTED_ORDER}`, { from, to })
       .select([
         'p.id AS "id"',
         'p.name AS "productName"',
         'pc.name AS "category"',
         'p.productType AS "productType"',
         'p.isActive AS "isActive"',
-        'COALESCE(SUM(oi.quantity), 0) AS "quantitySold"',
-        'COALESCE(SUM(oi.totalPrice), 0) AS "grossRevenue"',
-        'COUNT(DISTINCT oi.orderId) AS "ordersCount"',
+        'COALESCE(SUM(CASE WHEN o.id IS NOT NULL THEN oi.quantity END), 0) AS "quantitySold"',
+        'COALESCE(SUM(CASE WHEN o.id IS NOT NULL THEN oi.totalPrice END), 0) AS "grossRevenue"',
+        'COUNT(DISTINCT o.id) AS "ordersCount"',
         'p.createdAt AS "createdAt"',
       ])
       .where('p.deletedAt IS NULL')
@@ -456,51 +477,36 @@ export class ReportsService {
   async getUniverses(filters: ReportFilters, exportAll = false): Promise<PagedResult<Record<string, unknown>>> {
     const { from, to } = this.defaultDateRange(filters);
     const { page, limit, skip } = this.paginate(filters.page, filters.limit);
+    const params: unknown[] = [from, to];
+    const where = [`un."createdAt" BETWEEN $1 AND $2`];
+    if (filters.isSandbox !== undefined) where.push(`un."isSandbox" = ${filters.isSandbox ? 'TRUE' : 'FALSE'}`);
+    if (filters.userId) { params.push(filters.userId); where.push(`un."userId" = $${params.length}`); }
+    if (filters.search) { params.push(`%${filters.search}%`); where.push(`(un.name ILIKE $${params.length} OR u.name ILIKE $${params.length})`); }
+    const base = `FROM universes un LEFT JOIN users u ON u.id = un."userId" WHERE ${where.join(' AND ')}`;
 
-    const qb = this.dataSource.createQueryBuilder(Universe, 'un')
-      .leftJoin(User, 'u', 'u.id = un.userId')
-      .select([
-        'un.id AS "id"',
-        'un.name AS "universeName"',
-        'u.name AS "userName"',
-        'u.email AS "userEmail"',
-        '(SELECT COUNT(*) FROM heroes h WHERE h.universe_id = un.id) AS "heroesCount"',
-        '(SELECT COUNT(*) FROM stories st WHERE st.universe_id = un.id) AS "storiesCount"',
-        '(SELECT COUNT(*) FROM hero_powers hp WHERE hp.universe_id = un.id) AS "powersCount"',
-        '(SELECT COUNT(*) FROM quests q WHERE q.universe_id = un.id) AS "questsCount"',
-        '(SELECT MAX(st2.created_at) FROM stories st2 WHERE st2.universe_id = un.id) AS "lastStoryDate"',
-        'un.createdAt AS "createdAt"',
-        'un.isSandbox AS "isSandbox"',
-      ])
-      .where('un.createdAt BETWEEN :from AND :to', { from, to });
-
-    if (filters.isSandbox !== undefined) qb.andWhere('un.isSandbox = :sb', { sb: filters.isSandbox });
-    if (filters.userId) qb.andWhere('un.userId = :uid', { uid: filters.userId });
-    if (filters.search) qb.andWhere('(un.name ILIKE :s OR u.name ILIKE :s)', { s: `%${filters.search}%` });
-
-    qb.orderBy('un.createdAt', 'DESC');
-
-    const total = await qb.getCount();
-    if (!exportAll) qb.offset(skip).limit(limit);
-    const items = await qb.getRawMany<Record<string, unknown>>();
-
-    const sumQb = this.dataSource.createQueryBuilder(Universe, 'un')
-      .select(['COUNT(un.id) AS "total"'])
-      .where('un.createdAt BETWEEN :from AND :to', { from, to });
-    if (filters.isSandbox !== undefined) sumQb.andWhere('un.isSandbox = :sb', { sb: filters.isSandbox });
-    const [sr] = await sumQb.getRawMany<Record<string, unknown>>();
-
-    const topUniverse = items.reduce<Record<string, unknown> | null>((top, r) => {
-      if (!top || toNum(r.storiesCount) > toNum(top.storiesCount)) return r;
-      return top;
-    }, null);
-
+    const [{ n }] = await this.dataSource.query(`SELECT COUNT(*)::int AS n ${base}`, params);
+    const items = await this.dataSource.query(
+      `SELECT un.id AS "id", un.name AS "universeName", u.name AS "userName", u.email AS "userEmail",
+              (SELECT COUNT(*) FROM heroes h WHERE h."universeId" = un.id)::int AS "heroesCount",
+              (SELECT COUNT(*) FROM stories st WHERE st."universeId" = un.id)::int AS "storiesCount",
+              (SELECT COUNT(*) FROM hero_powers hp WHERE hp."universeId" = un.id)::int AS "powersCount",
+              (SELECT COUNT(*) FROM quests q WHERE q."universeId" = un.id)::int AS "questsCount",
+              (SELECT MAX(st2."createdAt") FROM stories st2 WHERE st2."universeId" = un.id) AS "lastStoryDate",
+              un."createdAt" AS "createdAt", un."isSandbox" AS "isSandbox"
+         ${base} ORDER BY un."createdAt" DESC ${exportAll ? '' : `LIMIT ${limit} OFFSET ${skip}`}`,
+      params,
+    );
+    const [agg] = await this.dataSource.query(
+      `SELECT COALESCE(AVG(c), 0)::float AS avg, (ARRAY_AGG(name ORDER BY c DESC))[1] AS top
+         FROM (SELECT un.name, (SELECT COUNT(*) FROM stories st WHERE st."universeId" = un.id) AS c ${base}) x`,
+      params,
+    );
     return {
-      items, total, page, limit, totalPages: Math.ceil(total / limit) || 1,
+      items, total: n, page, limit, totalPages: Math.ceil(n / limit) || 1,
       summary: {
-        totalUniverses: toNum(sr?.total),
-        mostActiveUniverse: (topUniverse?.universeName as string) ?? '—',
-        avgStoriesPerUniverse: total > 0 ? Math.round(items.reduce((s, r) => s + toNum(r.storiesCount), 0) / items.length) : 0,
+        totalUniverses: n,
+        mostActiveUniverse: agg?.top ?? '—',
+        avgStoriesPerUniverse: Math.round(toNum(agg?.avg) * 10) / 10,
       },
     };
   }
@@ -510,62 +516,40 @@ export class ReportsService {
   async getUsers(filters: ReportFilters, exportAll = false): Promise<PagedResult<Record<string, unknown>>> {
     const { from, to } = this.defaultDateRange(filters);
     const { page, limit, skip } = this.paginate(filters.page, filters.limit);
+    const params: unknown[] = [from, to];
+    const where = [`u."createdAt" BETWEEN $1 AND $2`, `u.role = 'parent'`, `u."deletedAt" IS NULL`, userSandboxSql('u', filters.isSandbox)];
+    if (filters.search) { params.push(`%${filters.search}%`); where.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`); }
+    const base = `FROM users u WHERE ${where.join(' AND ')}`;
 
-    const qb = this.dataSource.createQueryBuilder(User, 'u')
-      .leftJoin('stories', 'st', 'st.user_id = u.id')
-      .leftJoin('universes', 'un', 'un.user_id = u.id')
-      .leftJoin(Order, 'o', 'o.userId = u.id AND o.deletedAt IS NULL')
-      .select([
-        'u.id AS "id"',
-        'u.name AS "name"',
-        'u.email AS "email"',
-        'u.createdAt AS "createdAt"',
-        'u.credits AS "creditsRemaining"',
-        'u.plan AS "plan"',
-        'u.isPremium AS "isPremium"',
-        'COUNT(DISTINCT st.id) AS "storiesCount"',
-        'COUNT(DISTINCT un.id) AS "universesCount"',
-        'COUNT(DISTINCT o.id) AS "ordersCount"',
-        'COALESCE(SUM(o.totalAmount), 0) AS "totalSpent"',
-        'u.isSandbox AS "isSandbox"',
-      ])
-      .where('u.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere("u.role = 'parent'")
-      .groupBy('u.id');
-
-    if (filters.isSandbox !== undefined) qb.andWhere('u.isSandbox = :sb', { sb: filters.isSandbox });
-    if (filters.search) qb.andWhere('(u.name ILIKE :s OR u.email ILIKE :s)', { s: `%${filters.search}%` });
-
-    qb.orderBy('u.createdAt', 'DESC');
-
-    const total = await qb.getCount();
-    if (!exportAll) qb.offset(skip).limit(limit);
-    const items = await qb.getRawMany<Record<string, unknown>>();
-
-    const sumQb = this.dataSource.createQueryBuilder(User, 'u')
-      .select([
-        'COUNT(u.id) AS "total"',
-        'COUNT(CASE WHEN u.isPremium = true THEN 1 END) AS "paying"',
-      ])
-      .where('u.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere("u.role = 'parent'");
-    if (filters.isSandbox !== undefined) sumQb.andWhere('u.isSandbox = :sb', { sb: filters.isSandbox });
-    const [sr] = await sumQb.getRawMany<Record<string, unknown>>();
-
-    const nowMonth = new Date();
-    const monthStart = new Date(nowMonth.getFullYear(), nowMonth.getMonth(), 1);
-    const newThisMonth = await this.usersRepo.count({
-      where: { createdAt: Between(monthStart, new Date()) },
-    });
-
+    const [{ n }] = await this.dataSource.query(`SELECT COUNT(*)::int AS n ${base}`, params);
+    const items = await this.dataSource.query(
+      `SELECT u.id AS "id", u.name AS "name", u.email AS "email", u."createdAt" AS "createdAt",
+              u.credits AS "creditsRemaining", u."previewCredits" AS "freeStoryLeft",
+              (SELECT COUNT(*) FROM stories st WHERE st."userId" = u.id)::int AS "storiesCount",
+              (SELECT COUNT(*) FROM universes un WHERE un."userId" = u.id)::int AS "universesCount",
+              (SELECT COUNT(*) FROM orders o WHERE o."userId" = u.id AND o."deletedAt" IS NULL AND ${COUNTED_ORDER})::int AS "ordersCount",
+              (SELECT COALESCE(SUM(o."totalAmount"), 0) FROM orders o WHERE o."userId" = u.id AND o."deletedAt" IS NULL AND ${COUNTED_ORDER})::float AS "totalSpent",
+              (u."isSandbox" OR u."isTestAccount") AS "isTest"
+         ${base} ORDER BY u."createdAt" DESC ${exportAll ? '' : `LIMIT ${limit} OFFSET ${skip}`}`,
+      params,
+    );
+    const [agg] = await this.dataSource.query(
+      `SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM credit_transactions t WHERE t."userId" = u.id AND t.reason = 'purchase' AND t."pricePaid" > 0))::int AS paying,
+              COUNT(*) FILTER (WHERE u."createdAt" >= (date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'))::int AS "thisMonth",
+              COALESCE(AVG((SELECT COUNT(*) FROM stories st WHERE st."userId" = u.id)), 0)::float AS "avgStories"
+         ${base}`,
+      params,
+    );
+    const paying = toNum(agg?.paying);
     return {
-      items, total, page, limit, totalPages: Math.ceil(total / limit) || 1,
+      items, total: n, page, limit, totalPages: Math.ceil(n / limit) || 1,
       summary: {
-        totalUsers: toNum(sr?.total),
-        payingUsers: toNum(sr?.paying),
-        freeUsers: toNum(sr?.total) - toNum(sr?.paying),
-        newUsersThisMonth: newThisMonth,
-        avgStoriesPerUser: total > 0 && items.length > 0 ? Math.round(items.reduce((s, r) => s + toNum(r.storiesCount), 0) / items.length) : 0,
+        totalUsers: n,
+        payingUsers: paying,
+        freeUsers: n - paying,
+        payingSharePct: n ? Math.round((paying / n) * 1000) / 10 : 0,
+        newUsersThisMonth: toNum(agg?.thisMonth),
+        avgStoriesPerUser: Math.round(toNum(agg?.avgStories) * 10) / 10,
       },
     };
   }
@@ -575,51 +559,43 @@ export class ReportsService {
   async getInfluencers(filters: ReportFilters, exportAll = false): Promise<PagedResult<Record<string, unknown>>> {
     const { from, to } = this.defaultDateRange(filters);
     const { page, limit, skip } = this.paginate(filters.page, filters.limit);
-
-    const qb = this.dataSource.createQueryBuilder(Influencer, 'inf')
-      .leftJoin(InfluencerCouponCode, 'icc', 'icc.influencerId = inf.id AND icc.deletedAt IS NULL')
-      .leftJoin(InfluencerCommission, 'ic', 'ic.influencerId = inf.id AND ic.deletedAt IS NULL AND ic.createdAt BETWEEN :from AND :to', { from, to })
-      .select([
-        'inf.id AS "id"',
-        'inf.name AS "influencerName"',
-        'inf.code AS "influencerCode"',
-        'inf.email AS "email"',
-        'inf.status AS "status"',
-        'inf.commissionPct AS "commissionRate"',
-        'COALESCE(MAX(icc.code), inf.code) AS "couponCode"',
-        'COUNT(DISTINCT ic.id) AS "successfulOrders"',
-        'COALESCE(SUM(ic.commissionableAmount), 0) AS "revenueGenerated"',
-        'COALESCE(SUM(ic.discountAmount), 0) AS "discountGiven"',
-        'COALESCE(SUM(ic.commissionAmount), 0) AS "commissionEarned"',
-        `COALESCE(SUM(CASE WHEN ic.status = 'paid' THEN ic.commissionAmount ELSE 0 END), 0) AS "commissionPaid"`,
-        `COALESCE(SUM(CASE WHEN ic.status != 'paid' THEN ic.commissionAmount ELSE 0 END), 0) AS "unpaidBalance"`,
-        'inf.createdAt AS "createdAt"',
-      ])
-      .where('inf.deletedAt IS NULL')
-      .groupBy('inf.id')
-      .orderBy('"revenueGenerated"', 'DESC');
-
-    if (filters.status) qb.andWhere('inf.status = :status', { status: filters.status });
-    if (filters.search) qb.andWhere('(inf.name ILIKE :s OR inf.code ILIKE :s)', { s: `%${filters.search}%` });
-
-    const total = await qb.getCount();
-    if (!exportAll) qb.offset(skip).limit(limit);
-    const items = await qb.getRawMany<Record<string, unknown>>();
-
-    const totalCommissionPayable = items.reduce((s, r) => s + toNum(r.unpaidBalance), 0);
-    const totalCommissionPaid = items.reduce((s, r) => s + toNum(r.commissionPaid), 0);
-    const totalRevenue = items.reduce((s, r) => s + toNum(r.revenueGenerated), 0);
-    const topInfluencer = items[0]?.influencerName as string ?? '—';
-
+    // Cancelled commissions (refunded / cancelled orders) are left out of every figure.
+    const params: unknown[] = [from, to];
+    const where = [`inf."deletedAt" IS NULL`];
+    if (filters.status) { params.push(filters.status); where.push(`inf.status = $${params.length}`); }
+    if (filters.search) { params.push(`%${filters.search}%`); where.push(`(inf.name ILIKE $${params.length} OR inf.code ILIKE $${params.length})`); }
+    const commJoin = `LEFT JOIN influencer_commissions ic ON ic."influencerId" = inf.id AND ic."deletedAt" IS NULL
+                        AND ic.status <> 'cancelled' AND ic."createdAt" BETWEEN $1 AND $2
+                        AND EXISTS (SELECT 1 FROM users u WHERE u.id = ic."userId" AND ${userSandboxSql('u', filters.isSandbox)})`;
+    const rows = await this.dataSource.query(
+      `SELECT inf.id AS "id", inf.name AS "influencerName", inf.code AS "influencerCode", inf.email AS "email",
+              inf.status AS "status", inf."commissionPct" AS "commissionRate",
+              COALESCE((SELECT MAX(c.code) FROM influencer_coupon_codes c WHERE c."influencerId" = inf.id AND c."deletedAt" IS NULL), inf.code) AS "couponCode",
+              COUNT(ic.id)::int AS "successfulOrders",
+              COALESCE(SUM(ic."orderTotal"), 0)::float AS "salesPaid",
+              COALESCE(SUM(ic."commissionableAmount"), 0)::float AS "salesPreGst",
+              COALESCE(SUM(ic."discountAmount"), 0)::float AS "discountGiven",
+              COALESCE(SUM(ic."commissionAmount"), 0)::float AS "commissionEarned",
+              COALESCE(SUM(CASE WHEN ic.status = 'paid' THEN ic."commissionAmount" ELSE 0 END), 0)::float AS "commissionPaid",
+              COALESCE(SUM(CASE WHEN ic.status <> 'paid' THEN ic."commissionAmount" ELSE 0 END), 0)::float AS "unpaidBalance",
+              inf."createdAt" AS "createdAt"
+         FROM influencers inf ${commJoin}
+        WHERE ${where.join(' AND ')}
+        GROUP BY inf.id ORDER BY "salesPaid" DESC`,
+      params,
+    );
+    const total = rows.length;
+    const items = exportAll ? rows : rows.slice(skip, skip + limit);
+    const sum = (k: string) => rows.reduce((t: number, r: Record<string, unknown>) => t + toNum(r[k]), 0);
     return {
       items, total, page, limit, totalPages: Math.ceil(total / limit) || 1,
       summary: {
         totalInfluencers: total,
-        activeInfluencers: items.filter(r => r.status === 'active').length,
-        revenueFromInfluencers: Math.round(totalRevenue),
-        commissionPayable: Math.round(totalCommissionPayable),
-        commissionPaid: Math.round(totalCommissionPaid),
-        topInfluencer,
+        activeInfluencers: rows.filter((r: Record<string, unknown>) => r.status === 'active').length,
+        influencerSales: Math.round(sum('salesPaid')),
+        commissionPayable: Math.round(sum('unpaidBalance')),
+        commissionPaid: Math.round(sum('commissionPaid')),
+        topInfluencer: rows.find((r: Record<string, unknown>) => toNum(r.salesPaid) > 0)?.influencerName ?? '—',
       },
     };
   }
@@ -629,59 +605,59 @@ export class ReportsService {
   async getPaymentsRefunds(filters: ReportFilters, exportAll = false): Promise<PagedResult<Record<string, unknown>>> {
     const { from, to } = this.defaultDateRange(filters);
     const { page, limit, skip } = this.paginate(filters.page, filters.limit);
+    // Credit packs are paid and refunded through Razorpay directly (credit_transactions);
+    // merchandise uses order_payment_details. Both are shown together.
+    const ledger = `
+      SELECT t.id::text AS "id",
+             (SELECT o."orderNumber" FROM orders o WHERE o."orderType" = 'credit_purchase' AND o."adminNotes" LIKE '%' || t."razorpayPaymentId" || '%' LIMIT 1) AS "orderNumber",
+             u.name AS "userName", u.email AS "userEmail",
+             CASE WHEN t.reason = 'purchase' THEN 'payment' ELSE 'refund' END AS "transactionType",
+             CASE WHEN t."razorpayPaymentId" LIKE 'pay\_%' THEN 'razorpay' ELSE 'test' END AS "paymentProvider",
+             NULL::text AS "paymentMethod",
+             t."pricePaid"::float AS "amount", 'INR' AS "currency", 'success' AS "status",
+             CASE WHEN t.reason = 'purchase' THEN t."razorpayPaymentId" ELSE t."referenceId" END AS "transactionId",
+             t."packName" AS "providerReference", t."createdAt" AS "createdAt",
+             (u."isSandbox" OR u."isTestAccount") AS "isSandbox"
+        FROM credit_transactions t JOIN users u ON u.id = t."userId"
+       WHERE t."pricePaid" > 0 AND (t.reason = 'purchase' OR t.reason = 'payment_refund')
+         AND t."createdAt" BETWEEN $1 AND $2 AND ${userSandboxSql('u', filters.isSandbox)}
+      UNION ALL
+      SELECT opd.id::text, o."orderNumber"::text, u.name::text, u.email::text,
+             CASE WHEN opd."transactionType"::text IN ('refund', 'partial_refund') THEN 'refund' ELSE opd."transactionType"::text END,
+             opd."paymentProvider"::text, opd."paymentMethod"::text, opd.amount::float, opd.currency::text, opd.status::text,
+             opd."transactionId"::text, opd."providerReference"::text, opd."createdAt", o."isSandbox"
+        FROM order_payment_details opd
+        LEFT JOIN orders o ON o.id = opd."orderId" AND o."deletedAt" IS NULL
+        LEFT JOIN users u ON u.id = o."userId"
+       WHERE opd."deletedAt" IS NULL AND opd."createdAt" BETWEEN $1 AND $2
+         ${filters.isSandbox !== undefined ? `AND o."isSandbox" = ${filters.isSandbox ? 'TRUE' : 'FALSE'}` : ''}`;
+    const params: unknown[] = [from, to];
+    const outer: string[] = ['TRUE'];
+    if (filters.status) { params.push(filters.status === 'partial_refund' ? 'refund' : filters.status); outer.push(`x."transactionType" = $${params.length}`); }
+    if (filters.paymentMethod) { params.push(filters.paymentMethod); outer.push(`x."paymentMethod" = $${params.length}`); }
+    if (filters.search) { params.push(`%${filters.search}%`); outer.push(`(x."orderNumber" ILIKE $${params.length} OR x."transactionId" ILIKE $${params.length} OR x."userName" ILIKE $${params.length} OR x."userEmail" ILIKE $${params.length})`); }
+    const base = `FROM (${ledger}) x WHERE ${outer.join(' AND ')}`;
 
-    const qb = this.dataSource.createQueryBuilder(OrderPaymentDetail, 'opd')
-      .leftJoin(Order, 'o', 'o.id = opd.orderId AND o.deletedAt IS NULL')
-      .leftJoin(User, 'u', 'u.id = o.userId')
-      .select([
-        'opd.id AS "id"',
-        'o.orderNumber AS "orderNumber"',
-        'u.name AS "userName"',
-        'u.email AS "userEmail"',
-        'opd.transactionType AS "transactionType"',
-        'opd.paymentProvider AS "paymentProvider"',
-        'opd.paymentMethod AS "paymentMethod"',
-        'opd.amount AS "amount"',
-        'opd.currency AS "currency"',
-        'opd.status AS "status"',
-        'opd.transactionId AS "transactionId"',
-        'opd.providerReference AS "providerReference"',
-        'opd.createdAt AS "createdAt"',
-        'o.isSandbox AS "isSandbox"',
-      ])
-      .where('opd.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('opd.deletedAt IS NULL');
-
-    if (filters.isSandbox !== undefined) qb.andWhere('o.isSandbox = :sb', { sb: filters.isSandbox });
-    if (filters.status) qb.andWhere('opd.transactionType = :tt', { tt: filters.status });
-    if (filters.paymentMethod) qb.andWhere('opd.paymentMethod = :pm', { pm: filters.paymentMethod });
-    if (filters.search) qb.andWhere('(o.orderNumber ILIKE :s OR opd.transactionId ILIKE :s OR u.name ILIKE :s)', { s: `%${filters.search}%` });
-
-    qb.orderBy('opd.createdAt', 'DESC');
-
-    const total = await qb.getCount();
-    if (!exportAll) qb.offset(skip).limit(limit);
-    const items = await qb.getRawMany<Record<string, unknown>>();
-
-    const sumQb = this.dataSource.createQueryBuilder(OrderPaymentDetail, 'opd')
-      .leftJoin(Order, 'o', 'o.id = opd.orderId AND o.deletedAt IS NULL')
-      .select([
-        `COALESCE(SUM(CASE WHEN opd.transactionType = 'payment' AND opd.status = 'captured' THEN opd.amount ELSE 0 END), 0) AS "totalPaid"`,
-        `COALESCE(SUM(CASE WHEN opd.transactionType IN ('refund', 'partial_refund') THEN opd.amount ELSE 0 END), 0) AS "totalRefunded"`,
-        `COUNT(CASE WHEN opd.status = 'failed' THEN 1 END) AS "failedPayments"`,
-      ])
-      .where('opd.createdAt BETWEEN :from AND :to', { from, to })
-      .andWhere('opd.deletedAt IS NULL');
-    if (filters.isSandbox !== undefined) sumQb.andWhere('o.isSandbox = :sb', { sb: filters.isSandbox });
-    const [sr] = await sumQb.getRawMany<Record<string, unknown>>();
-
+    const [sr] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS n,
+              COALESCE(SUM(CASE WHEN x."transactionType" = 'payment' AND x.status IN ('success', 'captured') THEN x.amount END), 0)::float AS paid,
+              COALESCE(SUM(CASE WHEN x."transactionType" = 'refund' AND x.status IN ('success', 'captured', 'processed') THEN x.amount END), 0)::float AS refunded,
+              COUNT(*) FILTER (WHERE x.status = 'failed')::int AS failed
+         ${base}`,
+      params,
+    );
+    const items = await this.dataSource.query(
+      `SELECT x.* ${base} ORDER BY x."createdAt" DESC ${exportAll ? '' : `LIMIT ${limit} OFFSET ${skip}`}`,
+      params,
+    );
+    const total = toNum(sr?.n);
     return {
       items, total, page, limit, totalPages: Math.ceil(total / limit) || 1,
       summary: {
-        totalPaid: toNum(sr?.totalPaid),
-        totalRefunded: toNum(sr?.totalRefunded),
-        netCollected: toNum(sr?.totalPaid) - toNum(sr?.totalRefunded),
-        failedPayments: toNum(sr?.failedPayments),
+        totalPaid: Math.round(toNum(sr?.paid)),
+        totalRefunded: Math.round(toNum(sr?.refunded)),
+        netCollected: Math.round(toNum(sr?.paid) - toNum(sr?.refunded)),
+        failedPayments: toNum(sr?.failed),
       },
     };
   }
@@ -713,6 +689,7 @@ export class ReportsService {
       ])
       .where('gj.createdAt BETWEEN :from AND :to', { from, to });
 
+    if (filters.isSandbox !== undefined) qb.andWhere('s.isSandbox = :sb', { sb: filters.isSandbox });
     if (filters.status) qb.andWhere('gj.status = :status', { status: filters.status });
     if (filters.userId) qb.andWhere('gj.userId = :uid', { uid: filters.userId });
     if (filters.search) qb.andWhere('(u.name ILIKE :s OR s.title ILIKE :s)', { s: `%${filters.search}%` });
@@ -731,7 +708,9 @@ export class ReportsService {
         `COUNT(CASE WHEN gj.status NOT IN ('completed', 'failed') THEN 1 END) AS "running"`,
         `COALESCE(AVG(EXTRACT(EPOCH FROM (gj.completedAt - gj.startedAt))), 0) AS "avgDuration"`,
       ])
+      .leftJoin(Story, 's', 's.id = gj.storyId')
       .where('gj.createdAt BETWEEN :from AND :to', { from, to });
+    if (filters.isSandbox !== undefined) sumQb.andWhere('s.isSandbox = :sb', { sb: filters.isSandbox });
     if (filters.status) sumQb.andWhere('gj.status = :status', { status: filters.status });
     const [sr] = await sumQb.getRawMany<Record<string, unknown>>();
 
@@ -756,91 +735,90 @@ export class ReportsService {
     const { from, to } = this.defaultDateRange(filters);
     const { page, limit, skip } = this.paginate(filters.page, filters.limit);
     const usdToInr = await this.getUsdToInr();
-    const sbVal = filters.isSandbox;
+    const rate = await this.gstRate();
+    const feePct = 2.36; // Razorpay ~2% + 18% GST on the fee — an estimate
+    const sb = filters.isSandbox;
+    const day = (col: string) => `to_char(${col} AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD')`;
 
-    // Separate simple queries — avoid complex CTE with generate_series
     const [revRows, aiRows, commRows, refundRows] = await Promise.all([
-      this.dataSource.query<{ day: string; revenue: string; discounts: string }[]>(
-        `SELECT DATE(created_at)::text AS day,
-                COALESCE(SUM(total_amount),0)::float AS revenue,
-                COALESCE(SUM(discount_amount),0)::float AS discounts
-         FROM orders
-         WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2
-           ${sbVal !== undefined ? `AND is_sandbox = ${sbVal}` : ''}
-         GROUP BY DATE(created_at)`,
-        [from, to],
+      this.dataSource.query(
+        `SELECT ${day('o."createdAt"')} AS day,
+                COALESCE(SUM(o."totalAmount"), 0)::float AS revenue,
+                COALESCE(SUM(CASE WHEN o."orderType" = 'credit_purchase'
+                                  THEN COALESCE(NULLIF(o."taxAmount", 0), o."totalAmount" * $3 / (100 + $3))
+                                  ELSE o."taxAmount" END), 0)::float AS gst
+           FROM orders o
+          WHERE o."deletedAt" IS NULL AND ${COUNTED_ORDER} AND o."createdAt" BETWEEN $1 AND $2
+            ${sb !== undefined ? `AND o."isSandbox" = ${sb ? 'TRUE' : 'FALSE'}` : ''}
+          GROUP BY 1`,
+        [from, to, rate],
       ),
-      this.dataSource.query<{ day: string; ai_cost: string }[]>(
-        `SELECT DATE(created_at)::text AS day,
-                COALESCE(SUM(estimated_cost_usd * $3),0)::float AS ai_cost
-         FROM ai_usage_logs
-         WHERE created_at BETWEEN $1 AND $2
-           ${sbVal !== undefined ? `AND is_sandbox = ${sbVal}` : ''}
-         GROUP BY DATE(created_at)`,
+      this.dataSource.query(
+        `SELECT ${day('"createdAt"')} AS day, COALESCE(SUM("estimatedCostUsd" * $3), 0)::float AS ai
+           FROM ai_usage_logs
+          WHERE "createdAt" BETWEEN $1 AND $2 ${sb !== undefined ? `AND "isSandbox" = ${sb ? 'TRUE' : 'FALSE'}` : ''}
+          GROUP BY 1`,
         [from, to, usdToInr],
       ),
-      this.dataSource.query<{ day: string; commission: string }[]>(
-        `SELECT DATE(created_at)::text AS day,
-                COALESCE(SUM(commission_amount),0)::float AS commission
-         FROM influencer_commissions
-         WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2
-         GROUP BY DATE(created_at)`,
+      this.dataSource.query(
+        `SELECT ${day('ic."createdAt"')} AS day, COALESCE(SUM(ic."commissionAmount"), 0)::float AS commission
+           FROM influencer_commissions ic JOIN users u ON u.id = ic."userId"
+          WHERE ic."deletedAt" IS NULL AND ic.status <> 'cancelled' AND ic."createdAt" BETWEEN $1 AND $2
+            AND ${userSandboxSql('u', sb)}
+          GROUP BY 1`,
         [from, to],
       ),
-      this.dataSource.query<{ day: string; refunds: string }[]>(
-        `SELECT DATE(created_at)::text AS day,
-                COALESCE(SUM(total_refunded_amount),0)::float AS refunds
-         FROM order_payment_summaries
-         WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2
-         GROUP BY DATE(created_at)`,
+      this.dataSource.query(
+        `SELECT ${day('t."createdAt"')} AS day, COALESCE(SUM(t."pricePaid"), 0)::float AS refunds
+           FROM credit_transactions t JOIN users u ON u.id = t."userId"
+          WHERE t.reason = 'payment_refund' AND t."createdAt" BETWEEN $1 AND $2 AND ${userSandboxSql('u', sb)}
+          GROUP BY 1`,
         [from, to],
       ),
     ]);
 
-    // Merge by day
-    const dayMap = new Map<string, { revenue: number; aiCostInr: number; influencerCommission: number; refunds: number }>();
-    const ensureDay = (d: string) => {
-      if (!dayMap.has(d)) dayMap.set(d, { revenue: 0, aiCostInr: 0, influencerCommission: 0, refunds: 0 });
-      return dayMap.get(d)!;
-    };
-    revRows.forEach(r => { ensureDay(r.day).revenue = toNum(r.revenue); });
-    aiRows.forEach(r => { ensureDay(r.day).aiCostInr = toNum(r.ai_cost); });
-    commRows.forEach(r => { ensureDay(r.day).influencerCommission = toNum(r.commission); });
-    refundRows.forEach(r => { ensureDay(r.day).refunds = toNum(r.refunds); });
+    type Day = { revenue: number; gst: number; refunds: number; ai: number; commission: number };
+    const days = new Map<string, Day>();
+    const at = (d: string) => days.get(d) ?? days.set(d, { revenue: 0, gst: 0, refunds: 0, ai: 0, commission: 0 }).get(d)!;
+    revRows.forEach((r: Record<string, unknown>) => { const d = at(String(r.day)); d.revenue = toNum(r.revenue); d.gst = toNum(r.gst); });
+    aiRows.forEach((r: Record<string, unknown>) => { at(String(r.day)).ai = toNum(r.ai); });
+    commRows.forEach((r: Record<string, unknown>) => { at(String(r.day)).commission = toNum(r.commission); });
+    refundRows.forEach((r: Record<string, unknown>) => { at(String(r.day)).refunds = toNum(r.refunds); });
 
-    const allRows = Array.from(dayMap.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([date, d]) => {
-        const profit = d.revenue - d.aiCostInr - d.influencerCommission - d.refunds;
-        return {
-          date,
-          revenue: Math.round(d.revenue * 100) / 100,
-          aiCostInr: Math.round(d.aiCostInr * 100) / 100,
-          influencerCommission: Math.round(d.influencerCommission * 100) / 100,
-          refunds: Math.round(d.refunds * 100) / 100,
-          estimatedGrossProfit: Math.round(profit * 100) / 100,
-          estimatedMarginPct: d.revenue > 0 ? Math.round((profit / d.revenue) * 100) : 0,
-        };
-      });
-
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const allRows = [...days.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([date, d]) => {
+      // Refunds give back the GST inside them too, so GST owed = GST on sales − GST on refunds.
+      const gst = d.gst - d.refunds * rate / (100 + rate);
+      const fees = d.revenue * feePct / 100;
+      const profit = d.revenue - d.refunds - gst - fees - d.ai - d.commission;
+      return {
+        date,
+        revenue: r2(d.revenue),
+        refunds: r2(d.refunds),
+        gst: r2(gst),
+        paymentFees: r2(fees),
+        aiCostInr: r2(d.ai),
+        influencerCommission: r2(d.commission),
+        estimatedGrossProfit: r2(profit),
+        estimatedMarginPct: d.revenue > 0 ? Math.round((profit / d.revenue) * 100) : 0,
+      };
+    });
     const total = allRows.length;
-    const enriched = exportAll ? allRows : allRows.slice(skip, skip + limit);
-
-    const totalRevenue = allRows.reduce((s, r) => s + r.revenue, 0);
-    const totalAiCost = allRows.reduce((s, r) => s + r.aiCostInr, 0);
-    const totalCommission = allRows.reduce((s, r) => s + r.influencerCommission, 0);
-    const totalRefunds = allRows.reduce((s, r) => s + r.refunds, 0);
-    const totalProfit = totalRevenue - totalAiCost - totalCommission - totalRefunds;
-
+    const sum = (k: keyof (typeof allRows)[number]) => allRows.reduce((t, r) => t + Number(r[k]), 0);
+    const revenue = sum('revenue');
+    const profit = sum('estimatedGrossProfit');
     return {
-      items: enriched as unknown as Record<string, unknown>[], total, page, limit, totalPages: Math.ceil(total / limit) || 1,
+      items: (exportAll ? allRows : allRows.slice(skip, skip + limit)) as unknown as Record<string, unknown>[],
+      total, page, limit, totalPages: Math.ceil(total / limit) || 1,
       summary: {
-        totalRevenue: Math.round(totalRevenue),
-        totalAiCostInr: Math.round(totalAiCost),
-        totalInfluencerCommission: Math.round(totalCommission),
-        totalRefunds: Math.round(totalRefunds),
-        estimatedGrossProfit: Math.round(totalProfit),
-        estimatedMarginPct: totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0,
+        totalRevenue: Math.round(revenue),
+        totalRefunds: Math.round(sum('refunds')),
+        gstPayable: Math.round(sum('gst')),
+        paymentFeesEst: Math.round(sum('paymentFees')),
+        totalAiCostInr: Math.round(sum('aiCostInr')),
+        totalInfluencerCommission: Math.round(sum('influencerCommission')),
+        estimatedGrossProfit: Math.round(profit),
+        estimatedMarginPct: revenue > 0 ? Math.round((profit / revenue) * 100) : 0,
       },
     };
   }

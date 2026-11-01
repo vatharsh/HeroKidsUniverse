@@ -175,7 +175,7 @@ const REPORTS: ReportDef[] = [
     columns: [
       { key: "name", label: "Name" }, { key: "email", label: "Email" },
       { key: "createdAt", label: "Signup", format: "date" }, { key: "creditsRemaining", label: "Credits", format: "number" },
-      { key: "plan", label: "Plan" }, { key: "storiesCount", label: "Stories", format: "number" },
+      { key: "freeStoryLeft", label: "Free story left", format: "number" }, { key: "storiesCount", label: "Stories", format: "number" },
       { key: "universesCount", label: "Universes", format: "number" }, { key: "ordersCount", label: "Orders", format: "number" },
       { key: "totalSpent", label: "Total Spent", format: "currency" },
     ],
@@ -192,7 +192,8 @@ const REPORTS: ReportDef[] = [
       { key: "influencerName", label: "Name" }, { key: "couponCode", label: "Coupon" },
       { key: "status", label: "Status", format: "badge", badgeColors: S },
       { key: "successfulOrders", label: "Orders", format: "number" },
-      { key: "revenueGenerated", label: "Revenue", format: "currency" },
+      { key: "salesPaid", label: "Sales (paid)", format: "currency" },
+      { key: "salesPreGst", label: "Commissionable (pre-GST)", format: "currency" },
       { key: "discountGiven", label: "Discount", format: "currency" },
       { key: "commissionRate", label: "Rate %" }, { key: "commissionEarned", label: "Earned", format: "currency" },
       { key: "commissionPaid", label: "Paid", format: "currency" }, { key: "unpaidBalance", label: "Unpaid", format: "currency" },
@@ -234,10 +235,12 @@ const REPORTS: ReportDef[] = [
     id: "profitability", label: "Profitability", shortLabel: "P&L", icon: BarChart3,
     filters: [],
     columns: [
-      { key: "date", label: "Date" }, { key: "revenue", label: "Revenue", format: "currency" },
+      { key: "date", label: "Date (IST)" }, { key: "revenue", label: "Sales", format: "currency" },
+      { key: "refunds", label: "Refunds", format: "currency" },
+      { key: "gst", label: "GST", format: "currency" },
+      { key: "paymentFees", label: "Payment fees (est.)", format: "currency" },
       { key: "aiCostInr", label: "AI Cost", format: "currency" },
       { key: "influencerCommission", label: "Commission", format: "currency" },
-      { key: "refunds", label: "Refunds", format: "currency" },
       { key: "estimatedGrossProfit", label: "Gross Profit", format: "currency" },
       { key: "estimatedMarginPct", label: "Margin %", format: "pct" },
     ],
@@ -276,17 +279,29 @@ function fmt(value: unknown, col: ColumnDef): ReactNode {
 
 // ─── Summary helpers ──────────────────────────────────────────────────────────
 
+const SUMMARY_LABELS: Record<string, string> = {
+  grossSales: "Gross sales (incl. GST)",
+  netSalesExGst: "Net sales (after refunds & GST)",
+  gstIncluded: "GST included",
+  gstPayable: "GST payable",
+  paymentFeesEst: "Payment fees (est.)",
+  influencerSales: "Sales via influencers",
+  payingSharePct: "Paying share (%)",
+};
 function fmtSummaryKey(k: string) {
-  return k.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase()).replace(/Usd$/, "(USD)").replace(/Inr$/, "(INR)").replace(/Pct$/, "(%)").trim();
+  return SUMMARY_LABELS[k] ?? k.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase()).replace(/Usd$/, "(USD)").replace(/Inr$/, "(INR)").replace(/Pct$/, "(%)").replace(/ Est$/, " (est.)").trim();
 }
 function fmtSummaryVal(k: string, v: number | string) {
   if (typeof v === "string") return v;
   const lk = k.toLowerCase();
-  if (["revenue","cost","profit","spent","refund","commission","paid","collected","discount","shipping"].some(w => lk.includes(w))) {
+  // Counts first ("paidOrders" is a number of orders, not rupees), then dollars, percentages, rupees.
+  if (/(orders|users|influencers|stories|universes|products|jobs|count|sold|images|minutes|seconds)$/.test(lk)) return Number(v).toLocaleString("en-IN");
+  if (lk.endsWith("usd")) return `$${Number(v).toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
+  if (lk.includes("pct") || lk.endsWith("rate") || lk.includes("margin")) return `${v}%`;
+  if (["revenue","cost","profit","spent","refund","commission","paid","collected","discount","shipping","sales","gst","fee","payable"].some(w => lk.includes(w))) {
     return `₹${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
   }
-  if (lk.includes("pct") || lk.includes("rate") || lk.includes("margin")) return `${v}%`;
-  return Number(v).toLocaleString();
+  return Number(v).toLocaleString("en-IN");
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
