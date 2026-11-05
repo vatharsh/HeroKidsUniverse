@@ -9,6 +9,7 @@ import { refundIssuedEmail } from '../mail/payment-receipt-email';
 import { OrderStatusHistory } from '../merchandise/order-status-history.entity';
 import { CommerceOrderStatus, CommerceOrderType, Order } from '../merchandise/orders/order.entity';
 import { User } from '../users/user.entity';
+import { CreditPacksService } from './credit-packs.service';
 import { CreditTransaction, CreditTransactionReason } from './credit-transaction.entity';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -45,6 +46,7 @@ export class PaymentRefundsService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly influencersService: InfluencersService,
+    private readonly creditPacks: CreditPacksService,
     @Optional() private readonly mail?: MailService,
   ) {}
 
@@ -216,8 +218,17 @@ export class PaymentRefundsService {
 
     const event = JSON.parse(rawBody.toString('utf8')) as {
       event: string;
-      payload?: { refund?: { entity?: { id: string; payment_id: string; amount: number; status?: string } } };
+      payload?: {
+        refund?: { entity?: { id: string; payment_id: string; amount: number; status?: string } };
+        payment?: { entity?: { id: string; order_id?: string | null; amount: number; status?: string } };
+      };
     };
+    // Paid credit packs: credit them here too, in case the parent's browser never came back after paying.
+    const payment = event.payload?.payment?.entity;
+    if (payment?.order_id && (event.event === 'payment.captured' || event.event === 'order.paid')) {
+      await this.creditPacks.creditFromWebhook(payment.order_id, payment.id, payment.amount);
+      return { ok: true };
+    }
     const refund = event.payload?.refund?.entity;
     if (refund && (event.event === 'refund.processed' || event.event === 'refund.created')) {
       await this.applyRefund(refund.payment_id, refund.id, refund.amount / 100, { source: 'webhook' });

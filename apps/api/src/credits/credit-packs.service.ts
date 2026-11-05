@@ -266,16 +266,56 @@ export class CreditPacksService {
       throw new UnauthorizedException('Invalid payment signature');
     }
 
-    const duplicate = await this.transactionsRepository.findOne({
-      where: { razorpayPaymentId },
-    });
+    return this.fulfilPayment(razorpayOrderId, razorpayPaymentId, { userId, packId });
+  }
+
+  /**
+   * Razorpay webhook `payment.captured` / `order.paid`: the server credits the purchase itself, so a parent
+   * whose browser closed (or lost signal) right after paying still gets the pack. Safe to run alongside
+   * verifyAndCredit — whichever arrives second sees the payment already processed and does nothing.
+   */
+  async creditFromWebhook(razorpayOrderId: string, razorpayPaymentId: string, amountPaise?: number): Promise<{ credited: boolean }> {
+    if (!razorpayOrderId || !razorpayPaymentId) return { credited: false };
+    const rzpOrder = await this.razorpay.orders.fetch(razorpayOrderId);
+    const notes = (rzpOrder.notes ?? {}) as Record<string, string | number | undefined>;
+    if (typeof notes.userId !== 'string' || typeof notes.packId !== 'string') {
+      this.logger.warn(`Webhook payment ${razorpayPaymentId}: order ${razorpayOrderId} is not a credit-pack order — skipped`);
+      return { credited: false };
+    }
+    if (amountPaise !== undefined && Number(amountPaise) !== Number(rzpOrder.amount)) {
+      this.logger.error(`Webhook payment ${razorpayPaymentId}: paid ${amountPaise} paise but order ${razorpayOrderId} is ${rzpOrder.amount} — NOT credited, check manually`);
+      return { credited: false };
+    }
+    const before = await this.transactionsRepository.findOne({ where: { razorpayPaymentId } });
+    if (before) return { credited: false };
+    await this.fulfilPayment(razorpayOrderId, razorpayPaymentId, { userId: notes.userId, packId: notes.packId }, rzpOrder);
+    this.logger.log(`Webhook credited payment ${razorpayPaymentId} (order ${razorpayOrderId}) to user ${notes.userId}`);
+    return { credited: true };
+  }
+
+  /** Credits one paid Razorpay order. If this payment was already credited (by the other path), returns the parent's current balances. */
+  private async fulfilPayment(
+    razorpayOrderId: string,
+    razorpayPaymentId: string,
+    expect: { userId: string; packId: string },
+    fetchedOrder?: { amount: number | string; notes?: unknown },
+  ): Promise<{ newBalance: number; characterSlotsTotal: number; avatarRefreshTokens: number }> {
+    const { userId, packId } = expect;
+    const current = async () => {
+      const u = await this.usersRepository.findOne({ where: { id: userId } });
+      if (!u) throw new NotFoundException('User not found');
+      return { newBalance: u.credits, characterSlotsTotal: u.characterSlotsTotal, avatarRefreshTokens: u.avatarRefreshTokens };
+    };
+
+    const duplicate = await this.transactionsRepository.findOne({ where: { razorpayPaymentId } });
     if (duplicate) {
-      throw new ConflictException('Payment already processed');
+      if (duplicate.userId !== userId) throw new ConflictException('Payment already processed');
+      return current();
     }
 
     // The signature only proves this payment belongs to this order — the order itself says
     // who paid, for which pack, and how much (a cheap order must not unlock a bigger pack).
-    const rzpOrder = await this.razorpay.orders.fetch(razorpayOrderId);
+    const rzpOrder = fetchedOrder ?? await this.razorpay.orders.fetch(razorpayOrderId);
     const notes = (rzpOrder.notes ?? {}) as Record<string, string | number | undefined>;
     if (notes.userId !== userId || notes.packId !== packId) {
       throw new BadRequestException('This payment does not match the selected pack');
@@ -290,7 +330,14 @@ export class CreditPacksService {
     const couponCodeId = typeof notes.couponCodeId === 'string' && notes.couponCodeId ? notes.couponCodeId : null;
 
     const source = purchaseSource(typeof notes.source === 'string' ? notes.source : undefined);
-    const result = await this.creditUser(userId, pack, total, razorpayOrderId, razorpayPaymentId, source);
+    let result;
+    try {
+      result = await this.creditUser(userId, pack, total, razorpayOrderId, razorpayPaymentId, source);
+    } catch (err) {
+      // The other path credited it a moment ago (the user row lock makes them take turns).
+      if (err instanceof ConflictException) return current();
+      throw err;
+    }
     await this.recordCreditOrder(userId, pack, { subtotal, discount, total }, couponCodeId, razorpayOrderId, razorpayPaymentId, result.user);
     return { newBalance: result.newBalance, characterSlotsTotal: result.characterSlotsTotal, avatarRefreshTokens: result.avatarRefreshTokens };
   }
